@@ -16,11 +16,11 @@ export default function Modal({
   return (
     <div
       onClick={onClose}
-      className="modal-overlay"
+      className="fixed inset-0 bg-black/60 flex justify-center items-center z-[999]"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="modal"
+        className="bg-card border border-border rounded-2xl p-6 w-[90%] max-w-sm"
       >
         {children}
       </div>

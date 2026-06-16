@@ -5,11 +5,12 @@ import Modal from "./modal";
 import { createClient } from "../utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { Button } from "./ui/button";
 
 export default function SignUpModal({
   open,
   onClose,
-  router
+  router,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,8 +29,6 @@ export default function SignUpModal({
     setLoading(true);
     setMessage("");
 
-    
-    
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -46,53 +45,60 @@ export default function SignUpModal({
       setMessage(error.message);
     } else {
       setMessage("Sign up successful!");
-      setName("")
+      setName("");
       setEmail("");
       setPassword("");
-      router.refresh() // refresh server components (navbar updates)
-      router.push('/workspace')  // optional redirect
+      router.refresh(); // refresh server components (navbar updates)
+      router.push("/workspace"); // optional redirect
     }
   };
-          
 
   return (
     <Modal open={open} onClose={onClose}>
-        <div className="screen auth-screen active">
-            <div className="auth-card">
-        <p className="eyebrow">Login</p>
-        <h2>Enter DECIDE.</h2>
+      <div className="w-full max-w-sm mx-auto flex flex-col gap-4 p-6 bg-card rounded-3xl">
+        <div>
+          <p className="text-secondary text-xs font-extrabold tracking-widest uppercase mb-3">
+            Login
+          </p>
+          <h2 className="text-2xl font-bold leading-none">Enter DECIDE.</h2>
+        </div>
 
-        <form onSubmit={handleSignUp}>
-            <input
+        <div className="flex flex-col gap-3" onSubmit={handleSignUp}>
+          <input
             placeholder="Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            style={{ display: "block", marginBottom: 10, width: "100%" }}
-            />
-
-            <input
+            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+          />
+          <input
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{ display: "block", marginBottom: 10, width: "100%" }}
-            />
-
-            <input
+            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+          />
+          <input
             placeholder="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ display: "block", marginBottom: 10, width: "100%" }}
-            />
-
-            <button className="primary-btn full" disabled={loading} type="submit">
+            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+          />
+          <Button
+            disabled={loading}
+            type="submit"
+            variant={"default"}
+            size={"full"}
+          >
             {loading ? "Creating..." : "Sign Up"}
-            </button>
-        </form>
+          </Button>
+        </div>
 
-        <p style={{ marginTop: 10 }}>{message}</p>
-        </div>
-        </div>
+        {message && (
+          <p className="text-sm text-muted-foreground text-center mt-1">
+            {message}
+          </p>
+        )}
+      </div>
     </Modal>
   );
 }

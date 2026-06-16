@@ -10,9 +10,6 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  --radius-md: var(--radius);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-lg: calc(var(--radius) * 1.4);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,46 +49,37 @@
 }
 
 :root {
---primary: #0a0a0a;
---primary-foreground: #f5f5f5;
-
---secondary: #4F7CFF;           /* blue — 30% */
---secondary-foreground: #f5f5f5;
-
---accent: #3aad5e;              /* green — 10%, use sparingly */
---accent-foreground: #0a0a0a;
-
---background: #0a0a0a;
---foreground: #f5f5f5;
-
---muted: #1a1a1a;
---muted-foreground: #888888;
-
---card: #1a1a1a;
---card-foreground: #f5f5f5;
-
---popover: #2e2e2e;
---popover-foreground: #f5f5f5;
-
---border: #3d3d3d;
---input: #2e2e2e;
---ring: #2456a4;                /* blue focus ring */
-
---destructive: #e03b3b;
---destructive-foreground: #f5f5f5;
-
---radius: 0.625rem;
-
-
+  --primary: #0a0a0a;
+  --primary-foreground: #f5f5f5;
+  --secondary: #4F7CFF;
+  --secondary-foreground: #f5f5f5;
+  --accent: #3aad5e;
+  --accent-foreground: #f5f5f5;
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --muted: #1a1a1a;
+  --muted-foreground: #888888;
+  --card: #1a1a1a;
+  --card-foreground: #f5f5f5;
+  --popover: #2e2e2e;
+  --popover-foreground: #f5f5f5;
+  --border: #3d3d3d;
+  --input: #2e2e2e;
+  --ring: #2456a4;
+  --destructive: #e03b3b;
+  --destructive-foreground: #f5f5f5;
+  --radius: 0.625rem;
 }
-
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background:
+      radial-gradient(circle at 50% -10%, rgba(79, 124, 255, .16), transparent 34%),
+      var(--background);
   }
   html {
     @apply font-sans;
