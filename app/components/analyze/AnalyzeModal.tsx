@@ -25,6 +25,7 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
         className="min-h-48 mt-2 grid place-items-center content-center gap-2 text-foreground bg-[#0d111a] border border-dashed border-border/40 rounded-2xl overflow-hidden text-center cursor-pointer"
       >
         {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={preview} alt="önizleme" className="w-full h-56 object-cover rounded-xl" />
         ) : (
           <>
@@ -40,10 +41,10 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={stage !== "loading" ? close : undefined}>
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card border border-border p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-1xl max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card border radius-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
 
             {stage === "loading" && (
-              <div className="w-full max-w-sm mx-auto mt-20 text-center p-5 bg-card border border-border rounded-3xl shadow-2xl">
+              <div className="w-full max-w-sm mx-auto text-center p-5 ">
                 <div className="w-20 h-20 mx-auto mb-6 mt-2 rounded-full bg-[radial-gradient(circle_at_35%_30%,#F8FAFC,#4F7CFF_34%,#17213B_68%)] shadow-[0_0_70px_rgba(79,124,255,0.38)] animate-pulse" />
                 <h2 className="text-2xl font-bold leading-none">Analiz ediliyor</h2>
                 <div className="grid gap-2 mt-6 text-left">
@@ -56,7 +57,7 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
             )}
 
             {stage === "error" && (
-              <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-start p-5 bg-card border border-border rounded-3xl shadow-2xl">
+              <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-start p-5">
                 <h2 className="text-xl font-bold">Sonuç bulunamadı</h2>
                 <p className="text-sm text-muted-foreground">{error}</p>
                 <p className="text-sm text-muted-foreground">Ürünün net göründüğü, iyi aydınlatılmış bir fotoğrafla tekrar deneyebilirsin.</p>
