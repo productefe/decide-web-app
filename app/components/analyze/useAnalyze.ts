@@ -39,10 +39,10 @@ export function useAnalyze(userId: string) {
         .from("product-photos")
         .getPublicUrl(fileName);
 
-      const response = await fetch("https://emavia.app.n8n.cloud/webhook/decide", {
+      const response = await fetch("/api/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_url: publicUrl, user_id: userId }),
+        body: JSON.stringify({ photo_url: publicUrl }),
       });
 
       if (!response.ok) throw new Error("Sunucuya ulaşılamadı, lütfen tekrar dene.");
