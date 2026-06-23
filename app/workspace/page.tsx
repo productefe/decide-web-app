@@ -9,7 +9,11 @@ export default async function workspace() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return <div><h1>Giriş yapmadın</h1></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <p className="text-muted-foreground">Giriş yapmadın.</p>
+      </div>
+    );
   }
 
   const { data: profile, error } = await supabase
@@ -24,23 +28,22 @@ export default async function workspace() {
     .eq("id", user.id)
     .single();
 
-  if (error) return <p>Profil yüklenemedi</p>;
+  if (error) return <p className="p-10 text-muted-foreground">Profil yüklenemedi</p>;
 
-  // Check if onboarding data is missing in user_preferences table
   const needsOnboarding = !userPreferences;
 
   return (
-    <div className="w-full max-w-6xl min-h-screen mx-auto px-10 py-4 relative">
+    <div className="w-full max-w-3xl min-h-screen mx-auto px-6 py-6 md:px-10">
       <Navbar />
-      
+
       {needsOnboarding && <OnboardingModal userId={user.id} />}
 
-      <section aria-label="Karar alanı">
-        <div className="flex flex-col py-10 gap-2">
-          <p className="text-secondary text-xs font-extrabold tracking-widest uppercase">
+      <section aria-label="Karar alanı" className="border-t border-border pt-10">
+        <div className="flex flex-col gap-3 mb-8">
+          <p className="text-xs tracking-[0.15em] uppercase text-muted-foreground">
             Karar alanı
           </p>
-          <h2 className="text-3xl font-bold leading-none">
+          <h2 className="text-3xl font-bold leading-tight tracking-wide">
             Merhaba, {profile?.full_name}
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
@@ -48,10 +51,8 @@ export default async function workspace() {
           </p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-          <div className="bg-card border border-border rounded-3xl shadow-2xl p-5">
-            <AnalyzeModal userId={user.id} />
-          </div>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <AnalyzeModal userId={user.id} />
         </div>
       </section>
     </div>

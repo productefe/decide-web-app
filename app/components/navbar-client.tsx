@@ -1,5 +1,3 @@
-// components/navbar-client.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -21,51 +19,49 @@ export default function NavbarClient({ userEmail }: Props) {
 
   const handleLogout = async () => {
     const supabase = createClient();
-
     await supabase.auth.signOut();
-
-    router.refresh(); // refresh server components (navbar updates)
-    router.push("/"); // optional redirect
+    router.refresh();
+    router.push("/");
   };
 
   return (
-    <nav>
-      <header className="h-[54px] flex items-center justify-between">
+    <nav className="border-b border-border pb-4 mb-2">
+      <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            data-go="intro"
-            aria-label="Go to intro"
-            className="bg-transparent text-foreground font-extrabold tracking-[.18em] text-[17px] p-0 border-0 cursor-pointer"
+            onClick={() => router.push("/")}
+            aria-label="Ana sayfaya git"
+            className="bg-transparent text-secondary font-bold tracking-[0.2em] text-base p-0 border-0 cursor-pointer"
           >
             DECIDE
           </button>
           {userEmail && (
-            <p className="text-sm text-muted-foreground">{userEmail}</p>
+            <p className="text-sm text-muted-foreground hidden sm:block">{userEmail}</p>
           )}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {!userEmail ? (
             <>
               <button
                 onClick={() => setShowSignup(true)}
-                className="font-bold bg-muted text-foreground min-h-[40px] px-4 rounded-xl border border-border cursor-pointer"
+                className="text-sm font-bold bg-transparent text-foreground min-h-[40px] px-4 rounded-md border border-border cursor-pointer hover:border-accent/50 transition-colors"
               >
-                Sign up
+                Kayıt Ol
               </button>
               <button
                 onClick={() => setShowLogin(true)}
-                className="font-bold bg-secondary text-secondary-foreground min-h-[40px] px-4 rounded-xl shadow-lg cursor-pointer"
+                className="text-sm font-bold bg-secondary text-secondary-foreground min-h-[40px] px-4 rounded-md cursor-pointer hover:bg-accent transition-colors"
               >
-                Sign in
+                Giriş Yap
               </button>
             </>
           ) : (
             <button
               onClick={handleLogout}
-              className="font-bold bg-destructive/20 text-destructive-foreground min-h-[40px] px-4 rounded-xl border border-destructive/40 cursor-pointer"
+              className="text-sm font-bold bg-destructive/20 text-destructive-foreground min-h-[40px] px-4 rounded-md border border-destructive/40 cursor-pointer hover:bg-destructive/30 transition-colors"
             >
-              Logout
+              Çıkış
             </button>
           )}
         </div>

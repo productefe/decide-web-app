@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Modal from "./modal";
 import { createClient } from "../utils/supabase/client";
-import { useRouter } from "next/navigation";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { Button } from "./ui/button";
+
+const inputClass =
+  "w-full min-h-[48px] bg-muted text-foreground border border-border rounded-md px-4 outline-none focus:border-accent focus:ring-2 focus:ring-accent/20";
 
 export default function SignUpModal({
   open,
@@ -44,59 +46,52 @@ export default function SignUpModal({
     if (error) {
       setMessage(error.message);
     } else {
-      setMessage("Sign up successful!");
+      setMessage("Kayıt başarılı.");
       setName("");
       setEmail("");
       setPassword("");
-      router.refresh(); // refresh server components (navbar updates)
-      router.push("/workspace"); // optional redirect
+      router.refresh();
+      router.push("/workspace");
     }
   };
 
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="w-full max-w-sm mx-auto flex flex-col gap-4 p-6 bg-card rounded-3xl">
-        <div>
-          <p className="text-secondary text-xs font-extrabold tracking-widest uppercase mb-3">
-            Login
+      <div className="flex flex-col gap-6">
+        <div className="border-b border-border pb-4">
+          <p className="text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
+            Kayıt
           </p>
-          <h2 className="text-2xl font-bold leading-none">Enter DECIDE.</h2>
+          <h2 className="text-2xl font-bold tracking-wide">Hesap oluştur.</h2>
         </div>
 
         <form className="flex flex-col gap-3" onSubmit={handleSignUp}>
           <input
-            placeholder="Name"
+            placeholder="Adın"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+            className={inputClass}
           />
           <input
-            placeholder="Email"
+            placeholder="E-posta"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+            className={inputClass}
           />
           <input
-            placeholder="Password"
+            placeholder="Şifre"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+            className={inputClass}
           />
-          <Button
-            disabled={loading}
-            type="submit"
-            variant={"default"}
-            size={"full"}
-          >
-            {loading ? "Creating..." : "Sign Up"}
+          <Button disabled={loading} type="submit" variant="default" size="full">
+            {loading ? "Oluşturuluyor..." : "Kayıt Ol"}
           </Button>
         </form>
 
         {message && (
-          <p className="text-sm text-muted-foreground text-center mt-1">
-            {message}
-          </p>
+          <p className="text-sm text-muted-foreground text-center">{message}</p>
         )}
       </div>
     </Modal>

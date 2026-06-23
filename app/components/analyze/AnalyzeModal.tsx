@@ -22,43 +22,43 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
 
       <label
         onClick={() => fileInputRef.current?.click()}
-        className="min-h-48 mt-2 grid place-items-center content-center gap-2 text-foreground bg-[#0d111a] border border-dashed border-border/40 rounded-2xl overflow-hidden text-center cursor-pointer"
+        className="min-h-44 grid place-items-center content-center gap-2 text-foreground bg-muted border border-dashed border-border rounded-lg overflow-hidden text-center cursor-pointer hover:border-accent/50 transition-colors"
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="önizleme" className="w-full h-56 object-cover rounded-xl" />
+          <img src={preview} alt="önizleme" className="w-full h-52 object-cover" />
         ) : (
           <>
-            <span>Ürün fotoğrafını yükle</span>
-            <small className="text-muted-foreground">JPG, PNG veya ekran görüntüsü</small>
+            <span className="text-secondary tracking-wide">Ürün fotoğrafını yükle</span>
+            <small className="text-muted-foreground text-sm">JPG, PNG veya ekran görüntüsü</small>
           </>
         )}
       </label>
 
-      <Button onClick={start} disabled={!selectedFile || stage === "loading"} variant="default" size="full">
+      <Button onClick={start} disabled={!selectedFile || stage === "loading"} variant="default" size="full" className="mt-4">
         Analiz Et
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={stage !== "loading" ? close : undefined}>
-          <div className="w-1xl max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card border radius-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={stage !== "loading" ? close : undefined}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-card border border-border p-6" onClick={(e) => e.stopPropagation()}>
 
             {stage === "loading" && (
-              <div className="w-full max-w-sm mx-auto text-center p-5 ">
-                <div className="w-20 h-20 mx-auto mb-6 mt-2 rounded-full bg-[radial-gradient(circle_at_35%_30%,#F8FAFC,#4F7CFF_34%,#17213B_68%)] shadow-[0_0_70px_rgba(79,124,255,0.38)] animate-pulse" />
-                <h2 className="text-2xl font-bold leading-none">Analiz ediliyor</h2>
+              <div className="w-full max-w-sm mx-auto text-center py-4">
+                <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-secondary/15 border border-secondary/40 animate-pulse" />
+                <h2 className="text-2xl font-bold tracking-wide">Analiz ediliyor</h2>
                 <div className="grid gap-2 mt-6 text-left">
                   {["Ürün okunuyor", "Mağazalar taranıyor", "Alternatifler karşılaştırılıyor"].map((s) => (
-                    <div key={s} className="px-4 py-3 text-foreground bg-white/4 border border-secondary/40 rounded-2xl">{s}</div>
+                    <div key={s} className="px-4 py-3 text-foreground bg-muted border border-border rounded-md">{s}</div>
                   ))}
-                  <div className="px-4 py-3 text-muted-foreground bg-white/4 border border-border rounded-2xl">Sonuç hazırlanıyor</div>
+                  <div className="px-4 py-3 text-muted-foreground bg-muted border border-border rounded-md">Sonuç hazırlanıyor</div>
                 </div>
               </div>
             )}
 
             {stage === "error" && (
-              <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-start p-5">
-                <h2 className="text-xl font-bold">Sonuç bulunamadı</h2>
+              <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-start py-2">
+                <h2 className="text-xl font-bold tracking-wide">Sonuç bulunamadı</h2>
                 <p className="text-sm text-muted-foreground">{error}</p>
                 <p className="text-sm text-muted-foreground">Ürünün net göründüğü, iyi aydınlatılmış bir fotoğrafla tekrar deneyebilirsin.</p>
                 <Button variant="default" onClick={analyzeAnother}>Tekrar Dene</Button>

@@ -6,6 +6,9 @@ import { createClient } from "../utils/supabase/client";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { Button } from "./ui/button";
 
+const inputClass =
+  "w-full min-h-[48px] bg-muted text-foreground border border-border rounded-md px-4 outline-none focus:border-accent focus:ring-2 focus:ring-accent/20";
+
 export default function SignInModal({
   open,
   onClose,
@@ -32,54 +35,45 @@ export default function SignInModal({
       password,
     });
 
-    console.log(supabase.auth.getUser());
-
     setLoading(false);
 
     if (error) {
       setMessage(error.message);
     } else {
-      setMessage("Sign in successful!");
+      setMessage("Giriş başarılı.");
       setEmail("");
       setPassword("");
-      router.refresh(); // refresh server components (navbar updates)
-      router.push("/workspace"); // optional redirect
+      router.refresh();
+      router.push("/workspace");
     }
   };
 
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="w-full max-w-sm mx-auto flex flex-col gap-10 p-6 bg-card rounded-3xl ">
-        <div className="flex items-center justify-between">
-          <p className="text-secondary text-xs font-extrabold tracking-widest uppercase">
-            Login
+      <div className="flex flex-col gap-6">
+        <div className="border-b border-border pb-4">
+          <p className="text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
+            Giriş
           </p>
-          <h2 className="text-secondary text-lg font-extrabold tracking-widest uppercase">
-            Enter DECIDE.
-          </h2>
+          <h2 className="text-2xl font-bold tracking-wide">DECIDE&apos;a hoş geldin.</h2>
         </div>
 
         <form onSubmit={handleSignIn} className="flex flex-col gap-3">
           <input
-            placeholder="Email"
+            placeholder="E-posta"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+            className={inputClass}
           />
           <input
-            placeholder="Password"
+            placeholder="Şifre"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full min-h-[52px] bg-muted text-foreground border border-border rounded-2xl px-4 outline-none focus:border-secondary focus:ring-4 focus:ring-secondary/10"
+            className={inputClass}
           />
-          <Button
-            disabled={loading}
-            type="submit"
-            variant={"default"}
-            size={"full"}
-          >
-            {loading ? "Authorizing..." : "Sign In"}
+          <Button disabled={loading} type="submit" variant="default" size="full">
+            {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
           </Button>
         </form>
 

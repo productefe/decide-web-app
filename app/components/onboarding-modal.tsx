@@ -18,18 +18,36 @@ const PREFERENCE_OPTIONS = [
   "Evcimen",
   "Maceracı & Doğa",
   "Lüks & Kalite",
-  "Trend & Moda"
+  "Trend & Moda",
 ];
+
+const inputClass =
+  "bg-muted text-center border border-border rounded-md px-4 py-3 text-lg focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 min-h-[48px] w-full";
+
+function StepIndicator({ step }: { step: number }) {
+  return (
+    <div className="flex justify-center gap-2 mb-6">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className={`h-0.5 w-8 rounded-full transition-colors ${
+            i <= step ? "bg-secondary" : "bg-border"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function OnboardingModal({ userId }: Props) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
-  
+
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [preferences, setPreferences] = useState<string[]>([]);
-  
+
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
@@ -44,21 +62,21 @@ export default function OnboardingModal({ userId }: Props) {
       setError("Lütfen kilonu gir.");
       return;
     }
-    
+
     setError(null);
     setStep(step + 1);
   };
 
   const togglePreference = (pref: string) => {
-    setPreferences(prev => 
-      prev.includes(pref) ? prev.filter(p => p !== pref) : [...prev, pref]
+    setPreferences((prev) =>
+      prev.includes(pref) ? prev.filter((p) => p !== pref) : [...prev, pref]
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (preferences.length === 0) {
-      setError("Lütfen en az bir zevk / tercih seçin.");
+      setError("Lütfen en az bir tercih seç.");
       return;
     }
 
@@ -66,16 +84,13 @@ export default function OnboardingModal({ userId }: Props) {
     setError(null);
 
     const supabase = createClient();
-    
-    // Save to user_preferences table
-    const { error: dbError } = await supabase
-      .from("user_preferences")
-      .upsert({
-        id: userId,
-        height,
-        weight,
-        preferences,
-      });
+
+    const { error: dbError } = await supabase.from("user_preferences").upsert({
+      id: userId,
+      height,
+      weight,
+      preferences,
+    });
 
     setLoading(false);
 
@@ -91,25 +106,27 @@ export default function OnboardingModal({ userId }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-sm bg-card border border-border rounded-3xl p-6 md:p-8 shadow-2xl relative">
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl font-bold mb-2">Seni Tanıyalım 🎯</h2>
-          <p className="text-muted-foreground text-sm">
-            Sana en uygun kararları verebilmemiz için birkaç detay paylaşmanı istiyoruz.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+      <div className="w-full max-w-sm bg-card border border-border rounded-lg p-6 md:p-8">
+        <StepIndicator step={step} />
+
+        <div className="mb-6 text-center border-b border-border pb-4">
+          <h2 className="text-2xl font-bold tracking-wide mb-2">Seni tanıyalım</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Sana en uygun önerileri verebilmemiz için birkaç detay paylaş.
           </p>
         </div>
 
         {error && (
-          <div className="bg-destructive/20 text-destructive text-sm px-4 py-3 rounded-xl mb-4 border border-destructive/30">
+          <div className="bg-destructive/20 text-destructive-foreground text-sm px-4 py-3 rounded-md mb-4 border border-destructive/30">
             {error}
           </div>
         )}
 
         {step === 0 && (
-          <form onSubmit={handleNext} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <form onSubmit={handleNext} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <label htmlFor="height" className="text-sm font-semibold text-foreground text-center">
+              <label htmlFor="height" className="text-sm font-bold text-center">
                 Boyun kaç?
               </label>
               <input
@@ -118,20 +135,20 @@ export default function OnboardingModal({ userId }: Props) {
                 placeholder="Örn: 180"
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
-                className="bg-muted text-center border border-border rounded-xl px-4 py-3 text-lg font-medium focus:outline-none focus:border-secondary min-h-[52px]"
+                className={inputClass}
                 autoFocus
               />
             </div>
-            <Button type="submit" className="w-full mt-2 font-bold min-h-[48px] rounded-xl">
+            <Button type="submit" size="full">
               İleri
             </Button>
           </form>
         )}
 
         {step === 1 && (
-          <form onSubmit={handleNext} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <form onSubmit={handleNext} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <label htmlFor="weight" className="text-sm font-semibold text-foreground text-center">
+              <label htmlFor="weight" className="text-sm font-bold text-center">
                 Kilon kaç?
               </label>
               <input
@@ -140,15 +157,15 @@ export default function OnboardingModal({ userId }: Props) {
                 placeholder="Örn: 75"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
-                className="bg-muted text-center border border-border rounded-xl px-4 py-3 text-lg font-medium focus:outline-none focus:border-secondary min-h-[52px]"
+                className={inputClass}
                 autoFocus
               />
             </div>
-            <div className="flex gap-2 mt-2">
-              <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1 min-h-[48px] rounded-xl">
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1" size="full">
                 Geri
               </Button>
-              <Button type="submit" className="flex-1 font-bold min-h-[48px] rounded-xl">
+              <Button type="submit" className="flex-1" size="full">
                 İleri
               </Button>
             </div>
@@ -156,22 +173,23 @@ export default function OnboardingModal({ userId }: Props) {
         )}
 
         {step === 2 && (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-3">
-              <label className="text-sm font-semibold text-foreground text-center">
-                Zevklerin ve önceliklerin neler? (Birden fazla seçebilirsin)
+              <label className="text-sm font-bold text-center">
+                Tarzın ve önceliklerin neler?
               </label>
-              
+              <p className="text-xs text-muted-foreground text-center">Birden fazla seçebilirsin.</p>
+
               <div className="flex flex-wrap gap-2 justify-center mt-2">
                 {PREFERENCE_OPTIONS.map((pref) => (
                   <button
                     key={pref}
                     type="button"
                     onClick={() => togglePreference(pref)}
-                    className={`px-4 py-2 text-sm font-medium rounded-xl border transition-all ${
+                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${
                       preferences.includes(pref)
                         ? "bg-secondary text-secondary-foreground border-secondary"
-                        : "bg-muted text-foreground border-border hover:border-secondary/50"
+                        : "bg-muted text-foreground border-border hover:border-accent/50"
                     }`}
                   >
                     {pref}
@@ -179,16 +197,12 @@ export default function OnboardingModal({ userId }: Props) {
                 ))}
               </div>
             </div>
-            
-            <div className="flex gap-2 mt-4">
-              <Button type="button" disabled={loading} variant="outline" onClick={() => setStep(1)} className="flex-1 min-h-[48px] rounded-xl">
+
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <Button type="button" disabled={loading} variant="outline" onClick={() => setStep(1)} className="flex-1" size="full">
                 Geri
               </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="flex-[2] font-bold bg-secondary text-secondary-foreground min-h-[48px] rounded-xl"
-              >
+              <Button type="submit" disabled={loading} className="flex-[2]" size="full">
                 {loading ? "Kaydediliyor..." : "Tamamla"}
               </Button>
             </div>
