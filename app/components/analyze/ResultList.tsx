@@ -16,7 +16,7 @@ export function ResultList({
   const slots = [
     { key: "recommended" as const, product: results.recommended },
     { key: "cheaper" as const, product: results.cheaper },
-    { key: "safer" as const, product: results.safer },
+    { key: "style" as const, product: results.style },
   ];
 
   return (

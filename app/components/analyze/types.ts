@@ -14,13 +14,13 @@ export interface Product {
 export interface Results {
   recommended: Product | null;
   cheaper: Product | null;
-  safer: Product | null;
+  style: Product | null;
 }
 
 export const SLOT_LABELS: Record<string, string> = {
   recommended: "ÖNERİLEN",
   cheaper: "DAHA UYGUN",
-  safer: "GÜVENLİ SEÇİM",
+  style: "SANA ÖZEL",
 };
 
 export function cleanStoreName(source: string): string {

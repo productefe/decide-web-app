@@ -9,6 +9,7 @@ export interface RequestContext {
 export interface UserProfile {
   budget_min?: number;
   budget_max?: number;
+  preferences?: string[];
   [key: string]: unknown;
 }
 
@@ -51,8 +52,8 @@ export interface ScoringResult {
   photo_url: string;
   recommended: ScoredProduct | null;
   cheaper: ScoredProduct | null;
-  safer: ScoredProduct | null;
-  top3: ScoredProduct[];
+  style: ScoredProduct | null;
+  pool: ScoredProduct[];
   error?: string;
 }
 
@@ -65,6 +66,27 @@ interface SerpShoppingItem {
   product_id?: string;
   serpapi_immersive_product_api?: string;
   product_link?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Style preferences -> search keywords
+// ---------------------------------------------------------------------------
+
+const STYLE_KEYWORDS: Record<string, string> = {
+  "Rahatlık & Konfor": "rahat oversize",
+  "Minimalist & Sade": "minimal sade",
+  "Gösterişli & İddialı": "iddialı şık",
+  "Teknoloji Tutkunu": "modern",
+  "Spor & Egzersiz": "spor",
+  "Evcimen": "rahat günlük",
+  "Maceracı & Doğa": "outdoor",
+  "Lüks & Kalite": "premium",
+  "Trend & Moda": "trend",
+};
+
+export function getStyleKeyword(preferences: string[] | undefined): string {
+  if (!preferences?.length) return "";
+  return STYLE_KEYWORDS[preferences[0]] || "";
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +218,7 @@ export function parseVision(visionContent: string, ctx: RequestContext): Product
 }
 
 // ---------------------------------------------------------------------------
-// Scoring Engine1 (n8n "Code" node)
+// Scoring Engine
 // ---------------------------------------------------------------------------
 
 const tier1 = ["trendyol", "hepsiburada", "amazon", "boyner", "zara", "mango",
@@ -215,27 +237,19 @@ function getPrice(item: SerpShoppingItem): number {
   return parseFloat(cleaned) || 0;
 }
 
-export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfile: ProductProfile): ScoringResult {
-  const serpResults = shoppingResults || [];
+function scoreShoppingItems(
+  shoppingResults: SerpShoppingItem[],
+  productProfile: ProductProfile,
+  styleKeyword = ""
+): ScoredProduct[] {
   const userProfile = productProfile.user_profile || {};
+  const styleWords = styleKeyword.toLowerCase().split(/\s+/).filter(Boolean);
 
-  const validResults = serpResults.filter(
+  const validResults = (shoppingResults || []).filter(
     (item) => (item.price || "").includes("₺") && getPrice(item) > 0
   );
 
-  if (validResults.length === 0) {
-    return {
-      user_id: productProfile.user_id,
-      photo_url: productProfile.photo_url,
-      recommended: null,
-      cheaper: null,
-      safer: null,
-      top3: [],
-      error: "Bu ürün için sonuç bulunamadı.",
-    };
-  }
-
-  const scoredProducts: ScoredProduct[] = validResults.slice(0, 20).map((item) => {
+  const scored = validResults.slice(0, 20).map((item) => {
     const title = (item.title || "").toLowerCase();
     const price = getPrice(item);
     const trustScore = getTrust(item.source);
@@ -246,6 +260,7 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
     if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 15;
     if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
     if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 10;
+    if (styleWords.some((w) => title.includes(w))) matchScore += 15;
     matchScore = Math.min(matchScore, 100);
 
     let forYouScore = 0;
@@ -278,46 +293,80 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
     };
   });
 
-  scoredProducts.sort((a, b) => b.recommendationScore - a.recommendationScore);
+  scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
+  return scored;
+}
+
+export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfile: ProductProfile): ScoringResult {
+  const scoredProducts = scoreShoppingItems(shoppingResults, productProfile);
+
+  if (scoredProducts.length === 0) {
+    return {
+      user_id: productProfile.user_id,
+      photo_url: productProfile.photo_url,
+      recommended: null,
+      cheaper: null,
+      style: null,
+      pool: [],
+      error: "Bu ürün için sonuç bulunamadı.",
+    };
+  }
 
   const usedStores = new Set<string>();
   const usedTitles = new Set<string>();
-  const top3: ScoredProduct[] = [];
+  const topPool: ScoredProduct[] = [];
   for (const p of scoredProducts) {
-    if (top3.length >= 3) break;
+    if (topPool.length >= 3) break;
     if (!usedStores.has(p.store) && !usedTitles.has(p.title)) {
-      top3.push(p);
+      topPool.push(p);
       usedStores.add(p.store);
       usedTitles.add(p.title);
     }
   }
   for (const p of scoredProducts) {
-    if (top3.length >= 3) break;
+    if (topPool.length >= 3) break;
     if (!usedTitles.has(p.title)) {
-      top3.push(p);
+      topPool.push(p);
       usedTitles.add(p.title);
     }
   }
 
-  const topPrice = top3[0]?.priceValue || 0;
-  const cheaper = top3.find((p, i) => i > 0 && p.priceValue > 0 && p.priceValue < topPrice) || top3[1] || null;
-  const safer =
-    top3.find((p, i) => i > 0 && p.trustScore >= 90 && p.title !== cheaper?.title) ||
-    top3.find((p, i) => i > 0 && p.title !== cheaper?.title) ||
-    null;
+  const topPrice = topPool[0]?.priceValue || 0;
+  const cheaper = topPool.find((p, i) => i > 0 && p.priceValue > 0 && p.priceValue < topPrice) || topPool[1] || null;
 
   return {
     user_id: productProfile.user_id,
     photo_url: productProfile.photo_url,
-    recommended: top3[0] || null,
+    recommended: topPool[0] || null,
     cheaper,
-    safer,
-    top3,
+    style: null,
+    pool: scoredProducts,
   };
 }
 
+export function pickStyleProduct(
+  styleSearchResults: SerpShoppingItem[],
+  productProfile: ProductProfile,
+  excludeTitles: Set<string>,
+  styleKeyword: string
+): ScoredProduct | null {
+  const scored = scoreShoppingItems(styleSearchResults, productProfile, styleKeyword);
+  return scored.find((p) => !excludeTitles.has(p.title)) || null;
+}
+
+export function pickTrustedFallback(
+  pool: ScoredProduct[],
+  excludeTitles: Set<string>
+): ScoredProduct | null {
+  return (
+    pool.find((p) => p.trustScore >= 90 && !excludeTitles.has(p.title)) ||
+    pool.find((p) => !excludeTitles.has(p.title)) ||
+    null
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Merge Links (n8n "Code" node) + Split/SerpAPI Product helpers
+// Merge Links
 // ---------------------------------------------------------------------------
 
 interface ImmersiveSeller {
@@ -373,11 +422,11 @@ export interface MergedResult {
   photo_url: string;
   recommended: EnrichedProduct | null;
   cheaper: EnrichedProduct | null;
-  safer: EnrichedProduct | null;
+  style: EnrichedProduct | null;
   top3: EnrichedProduct[];
 }
 
-const SLOTS = ["recommended", "cheaper", "safer"] as const;
+const SLOTS = ["recommended", "cheaper", "style"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredProduct }[] {
@@ -396,7 +445,7 @@ export function mergeLinks(
     photo_url: scoring.photo_url,
     recommended: null,
     cheaper: null,
-    safer: null,
+    style: null,
     top3: [],
   };
 
@@ -431,13 +480,13 @@ export function mergeLinks(
 }
 
 // ---------------------------------------------------------------------------
-// Final Output1 (n8n "Code" node)
+// Final Output
 // ---------------------------------------------------------------------------
 
 export interface Reasons {
   recommended_reason?: string;
   cheaper_reason?: string;
-  safer_reason?: string;
+  style_reason?: string;
 }
 
 export function buildResults(merged: MergedResult, reasons: Reasons): Results {
@@ -448,8 +497,8 @@ export function buildResults(merged: MergedResult, reasons: Reasons): Results {
     cheaper: merged.cheaper
       ? { ...merged.cheaper, reason: reasons.cheaper_reason || "", label: "Cheaper Option" }
       : null,
-    safer: merged.safer
-      ? { ...merged.safer, reason: reasons.safer_reason || "", label: "Safer Choice" }
+    style: merged.style
+      ? { ...merged.style, reason: reasons.style_reason || "", label: "Tarzına Uygun" }
       : null,
   };
 }

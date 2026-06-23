@@ -3,12 +3,16 @@ import { createClient } from "@/utils/supabase/server";
 import {
   parseVision,
   scoreProducts,
+  getStyleKeyword,
+  pickStyleProduct,
+  pickTrustedFallback,
   getSlots,
   mergeLinks,
   buildResults,
   type RequestContext,
   type UserProfile,
   type Reasons,
+  type ScoringResult,
 } from "./pipeline";
 
 export const runtime = "nodejs";
@@ -39,6 +43,20 @@ async function openAIContent(apiKey: string, body: unknown): Promise<string> {
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("OpenAI boş yanıt döndürdü.");
   return content;
+}
+
+async function serpShoppingSearch(query: string, apiKey: string) {
+  const serpParams = new URLSearchParams({
+    engine: "google_shopping",
+    q: query,
+    api_key: apiKey,
+    num: "30",
+    gl: "tr",
+    hl: "tr",
+  });
+  const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`);
+  const serpData = await serpRes.json();
+  return serpData?.shopping_results || [];
 }
 
 export async function POST(req: NextRequest) {
@@ -72,7 +90,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user_profile: UserProfile = body?.user_profile || {};
+    const { data: userPrefs } = await supabase
+      .from("user_preferences")
+      .select("preferences, height, weight")
+      .eq("id", user.id)
+      .single();
+
+    const user_profile: UserProfile = {
+      preferences: userPrefs?.preferences || [],
+    };
+    const styleKeyword = getStyleKeyword(userPrefs?.preferences);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
     // 1) OpenAI Vision (gpt-4o)
@@ -97,20 +124,11 @@ export async function POST(req: NextRequest) {
     // 2) Parse Vision
     const productProfile = parseVision(visionContent, ctx);
 
-    // 3) SerpAPI google_shopping
-    const serpParams = new URLSearchParams({
-      engine: "google_shopping",
-      q: productProfile.search_query,
-      api_key: SERPAPI_KEY,
-      num: "30",
-      gl: "tr",
-      hl: "tr",
-    });
-    const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`);
-    const serpData = await serpRes.json();
+    // 3) SerpAPI google_shopping (ana arama)
+    const mainResults = await serpShoppingSearch(productProfile.search_query, SERPAPI_KEY);
 
     // 4) Scoring Engine
-    const scoring = scoreProducts(serpData?.shopping_results || [], productProfile);
+    const scoring = scoreProducts(mainResults, productProfile);
 
     // 5) Hata Var mı? -> erken dön
     if (scoring.error) {
@@ -119,14 +137,31 @@ export async function POST(req: NextRequest) {
         photo_url: scoring.photo_url,
         recommended: null,
         cheaper: null,
-        safer: null,
+        style: null,
         top3: [],
         error: scoring.error,
       });
     }
 
-    // 6) Split Top3 + SerpAPI Product (immersive) — her slot için satıcı linki
-    const slots = getSlots(scoring);
+    // 6) Stil araması + Sana Özel slot
+    const excludeTitles = new Set(
+      [scoring.recommended?.title, scoring.cheaper?.title].filter(Boolean) as string[]
+    );
+
+    let styleProduct = null;
+    if (styleKeyword) {
+      const styleQuery = `${productProfile.search_query} ${styleKeyword}`.trim();
+      const styleResults = await serpShoppingSearch(styleQuery, SERPAPI_KEY);
+      styleProduct = pickStyleProduct(styleResults, productProfile, excludeTitles, styleKeyword);
+    }
+    if (!styleProduct) {
+      styleProduct = pickTrustedFallback(scoring.pool, excludeTitles);
+    }
+
+    const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
+
+    // 7) Split slots + SerpAPI Product (immersive)
+    const slots = getSlots(finalScoring);
     const immersiveResponses = await Promise.all(
       slots.map(async ({ product }) => {
         if (!product.serpapi_immersive_product_api) return null;
@@ -141,11 +176,11 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // 7) Merge Links
-    const merged = mergeLinks(scoring, slots, immersiveResponses, AFFILIATE_TAG);
+    // 8) Merge Links
+    const merged = mergeLinks(finalScoring, slots, immersiveResponses, AFFILIATE_TAG);
 
-    // 8) OpenAI Explanation (gpt-4o-mini)
-    const explanationText = `Sen bir moda danışmanısın. Aşağıdaki her ürün için, etiketine neden uygun olduğunu açıklayan TÜRKÇE, samimi, 1 cümlelik açıklama yaz. Ürün adını ve fiyatını cümlede kullan. SADECE geçerli JSON döndür, markdown yok:\n{"recommended_reason": "", "cheaper_reason": "", "safer_reason": ""}\n\nRecommended (en iyi eşleşme): ${merged.recommended?.title} — ${merged.recommended?.price} (${merged.recommended?.source})\nCheaper (daha uygun fiyat): ${merged.cheaper?.title} — ${merged.cheaper?.price} (${merged.cheaper?.source})\nSafer (güvenilir mağaza): ${merged.safer?.title} — ${merged.safer?.price} (${merged.safer?.source})`;
+    // 9) OpenAI Explanation (gpt-4o-mini)
+    const explanationText = `Sen bir moda danışmanısın. Aşağıdaki her ürün için, etiketine neden uygun olduğunu açıklayan TÜRKÇE, samimi, 1 cümlelik açıklama yaz. Ürün adını ve fiyatını cümlede kullan. SADECE geçerli JSON döndür, markdown yok:\n{"recommended_reason": "", "cheaper_reason": "", "style_reason": ""}\n\nRecommended (en iyi eşleşme): ${merged.recommended?.title} — ${merged.recommended?.price} (${merged.recommended?.source})\nCheaper (daha uygun fiyat): ${merged.cheaper?.title} — ${merged.cheaper?.price} (${merged.cheaper?.source})\nSana Özel (tarzına uygun): ${merged.style?.title} — ${merged.style?.price} (${merged.style?.source})`;
 
     let reasons: Reasons = {};
     try {
@@ -159,10 +194,10 @@ export async function POST(req: NextRequest) {
       reasons = {};
     }
 
-    // 9) Final Output
+    // 10) Final Output
     const results = buildResults(merged, reasons);
 
-    // 10) Supabase search_history insert (hata cevabı bloklamaz)
+    // 11) Supabase search_history insert (hata cevabı bloklamaz)
     const { error: insertError } = await supabase.from("search_history").insert({
       user_id: user.id,
       photo_url,
@@ -172,7 +207,7 @@ export async function POST(req: NextRequest) {
       console.error("search_history insert error:", insertError.message);
     }
 
-    // 11) Respond
+    // 12) Respond
     return NextResponse.json({ user_id: user.id, photo_url, results });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
