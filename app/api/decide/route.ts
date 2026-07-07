@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import {
   parseVision,
   scoreProducts,
+  buildSearchQueries,
   getStyleKeyword,
   pickStyleProduct,
   pickTrustedFallback,
@@ -11,9 +12,11 @@ import {
   buildResults,
   type RequestContext,
   type UserProfile,
+  type ProductProfile,
   type Reasons,
   type ScoringResult,
 } from "./pipeline";
+import { getVisionImageDataUrl } from "./vision-image";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -45,10 +48,27 @@ async function openAIContent(apiKey: string, body: unknown): Promise<string> {
   return content;
 }
 
-async function serpShoppingSearch(query: string, apiKey: string) {
+interface SerpShoppingItem {
+  title?: string;
+  price?: string;
+  extracted_price?: number;
+  source?: string;
+  thumbnail?: string;
+  product_id?: string;
+  serpapi_immersive_product_api?: string;
+  product_link?: string;
+}
+
+async function serpShoppingSearch(
+  query: string,
+  apiKey: string
+): Promise<SerpShoppingItem[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
   const serpParams = new URLSearchParams({
     engine: "google_shopping",
-    q: query,
+    q: trimmed,
     api_key: apiKey,
     num: "30",
     gl: "tr",
@@ -56,7 +76,35 @@ async function serpShoppingSearch(query: string, apiKey: string) {
   });
   const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`);
   const serpData = await serpRes.json();
+
+  if (serpData?.error) {
+    console.warn("SerpAPI:", trimmed, "→", serpData.error);
+    return [];
+  }
+
   return serpData?.shopping_results || [];
+}
+
+async function searchWithFallback(
+  productProfile: ProductProfile,
+  apiKey: string
+): Promise<{ scoring: ScoringResult; queryUsed: string }> {
+  const queries = buildSearchQueries(productProfile);
+  let lastResults: SerpShoppingItem[] = [];
+
+  for (const query of queries) {
+    const results = await serpShoppingSearch(query, apiKey);
+    if (results.length === 0) continue;
+
+    lastResults = results;
+    const scoring = scoreProducts(results, productProfile);
+    if (!scoring.error) {
+      console.log("SerpAPI matched:", query, `(${results.length} results)`);
+      return { scoring, queryUsed: query };
+    }
+  }
+
+  return { scoring: scoreProducts(lastResults, productProfile), queryUsed: queries[0] || "" };
 }
 
 export async function POST(req: NextRequest) {
@@ -83,6 +131,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const photo_url: string | undefined = body?.photo_url;
+    const storage_path: string | undefined = body?.storage_path;
     if (!photo_url) {
       return NextResponse.json(
         { error: "Fotoğraf bulunamadı." },
@@ -102,6 +151,8 @@ export async function POST(req: NextRequest) {
     const styleKeyword = getStyleKeyword(userPrefs?.preferences);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
+    const visionImageUrl = await getVisionImageDataUrl(photo_url, supabase, storage_path);
+
     // 1) OpenAI Vision (gpt-4o)
     const visionContent = await openAIContent(OPENAI_API_KEY, {
       model: "gpt-4o",
@@ -109,7 +160,7 @@ export async function POST(req: NextRequest) {
         {
           role: "user",
           content: [
-            { type: "image_url", image_url: { url: photo_url } },
+            { type: "image_url", image_url: { url: visionImageUrl } },
             {
               type: "text",
               text:
@@ -124,13 +175,10 @@ export async function POST(req: NextRequest) {
     // 2) Parse Vision
     const productProfile = parseVision(visionContent, ctx);
 
-    // 3) SerpAPI google_shopping (ana arama)
-    const mainResults = await serpShoppingSearch(productProfile.search_query, SERPAPI_KEY);
+    // 3) SerpAPI google_shopping (ana arama + fallback)
+    const { scoring, queryUsed } = await searchWithFallback(productProfile, SERPAPI_KEY);
 
-    // 4) Scoring Engine
-    const scoring = scoreProducts(mainResults, productProfile);
-
-    // 5) Hata Var mı? -> erken dön
+    // 4) Hata Var mı? -> erken dön
     if (scoring.error) {
       return NextResponse.json({
         user_id: scoring.user_id,
@@ -150,7 +198,7 @@ export async function POST(req: NextRequest) {
 
     let styleProduct = null;
     if (styleKeyword) {
-      const styleQuery = `${productProfile.search_query} ${styleKeyword}`.trim();
+      const styleQuery = `${queryUsed} ${styleKeyword}`.trim();
       const styleResults = await serpShoppingSearch(styleQuery, SERPAPI_KEY);
       styleProduct = pickStyleProduct(styleResults, productProfile, excludeTitles, styleKeyword);
     }

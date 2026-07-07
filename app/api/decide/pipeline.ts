@@ -237,6 +237,33 @@ function getPrice(item: SerpShoppingItem): number {
   return parseFloat(cleaned) || 0;
 }
 
+export function isValidShoppingItem(item: SerpShoppingItem): boolean {
+  if (getPrice(item) <= 0) return false;
+  const priceStr = item.price || "";
+  if (priceStr.includes("₺") || /\bTL\b/i.test(priceStr) || /\bTRY\b/i.test(priceStr)) return true;
+  return typeof item.extracted_price === "number" && item.extracted_price > 0;
+}
+
+/** Most specific → broadest; deduplicated. */
+export function buildSearchQueries(productProfile: ProductProfile): string[] {
+  const { gender_tr, color_tr, category_tr, search_query, fallback_query } = productProfile;
+  const candidates = [
+    search_query,
+    fallback_query,
+    [gender_tr, category_tr].filter(Boolean).join(" "),
+    [color_tr, category_tr].filter(Boolean).join(" "),
+    category_tr,
+  ];
+  const seen = new Set<string>();
+  return candidates
+    .map((q) => q.trim().replace(/\s+/g, " "))
+    .filter((q) => {
+      if (!q || seen.has(q)) return false;
+      seen.add(q);
+      return true;
+    });
+}
+
 function scoreShoppingItems(
   shoppingResults: SerpShoppingItem[],
   productProfile: ProductProfile,
@@ -245,9 +272,7 @@ function scoreShoppingItems(
   const userProfile = productProfile.user_profile || {};
   const styleWords = styleKeyword.toLowerCase().split(/\s+/).filter(Boolean);
 
-  const validResults = (shoppingResults || []).filter(
-    (item) => (item.price || "").includes("₺") && getPrice(item) > 0
-  );
+  const validResults = (shoppingResults || []).filter(isValidShoppingItem);
 
   const scored = validResults.slice(0, 20).map((item) => {
     const title = (item.title || "").toLowerCase();

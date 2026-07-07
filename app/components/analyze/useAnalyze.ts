@@ -53,13 +53,15 @@ export function useAnalyze(userId: string) {
       const response = await fetch("/api/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_url: publicUrl }),
+        body: JSON.stringify({ photo_url: publicUrl, storage_path: fileName }),
       });
 
-      if (!response.ok) throw new Error("Sunucuya ulaşılamadı, lütfen tekrar dene.");
-
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       const item = Array.isArray(data) ? data[0] : data;
+
+      if (!response.ok) {
+        throw new Error(item?.error || "Sunucuya ulaşılamadı, lütfen tekrar dene.");
+      }
 
       if (item?.error) throw new Error(item.error);
 
