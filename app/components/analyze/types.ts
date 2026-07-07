@@ -18,9 +18,9 @@ export interface Results {
 }
 
 export const SLOT_LABELS: Record<string, string> = {
-  recommended: "ÖNERİLEN",
-  cheaper: "DAHA UYGUN",
-  style: "SANA ÖZEL",
+  recommended: "Önerilen",
+  cheaper: "Daha uygun",
+  style: "Sana özel",
 };
 
 export function cleanStoreName(source: string): string {

@@ -16,18 +16,18 @@ export function LandingActions() {
       <div className="flex flex-wrap gap-3 mt-10">
         <Button
           size="lg"
-          className="min-h-[48px] px-8"
-          onClick={() => setShowLogin(true)}
+          className="min-h-[48px] px-8 shadow-sm"
+          onClick={() => setShowSignup(true)}
         >
-          Giriş Yap
+          Ücretsiz başla
         </Button>
         <Button
           variant="outline"
           size="lg"
           className="min-h-[48px] px-8"
-          onClick={() => setShowSignup(true)}
+          onClick={() => setShowLogin(true)}
         >
-          Kayıt Ol
+          Zaten hesabım var
         </Button>
       </div>
 
@@ -38,6 +38,10 @@ export function LandingActions() {
           setShowLogin(false);
         }}
         router={router}
+        onSwitchToLogin={() => {
+          setShowSignup(false);
+          setShowLogin(true);
+        }}
       />
       <SignInModal
         open={showLogin}
@@ -46,6 +50,10 @@ export function LandingActions() {
           setShowLogin(false);
         }}
         router={router}
+        onSwitchToSignup={() => {
+          setShowLogin(false);
+          setShowSignup(true);
+        }}
       />
     </>
   );

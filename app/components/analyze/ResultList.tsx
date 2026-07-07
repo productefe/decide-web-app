@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Results, SLOT_LABELS, cleanStoreName } from "./types";
 
@@ -21,52 +22,58 @@ export function ResultList({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
-        <p className="text-xs tracking-[0.15em] uppercase text-muted-foreground">
-          Sonuçlar
-        </p>
+      <div className="flex items-center justify-between mb-5 pb-4 border-b border-border gap-3">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Sonuçların</p>
+          <p className="text-xs text-muted-foreground mt-0.5">3 alternatif hazır</p>
+        </div>
         {preview && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Aradığın ürün</span>
-            <img src={preview} alt="aradığın ürün" className="w-12 h-12 object-cover rounded-md border border-border" />
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground">Aradığın</span>
+            <img src={preview} alt="Aradığın ürün" className="size-12 object-cover rounded-xl border border-border shadow-sm" />
           </div>
         )}
       </div>
 
-      <div className="flex flex-col">
-        {slots.filter((s) => s.product).map(({ key, product }, index) =>
+      <div className="flex flex-col gap-4">
+        {slots.filter((s) => s.product).map(({ key, product }) =>
           product && (
-            <div
+            <article
               key={key}
-              className={`flex flex-col sm:flex-row gap-4 py-6 ${
-                index > 0 ? "border-t border-border" : ""
-              }`}
+              className="rounded-2xl border border-border bg-muted/30 p-4 shadow-sm"
             >
-              <div className="flex sm:flex-[2] justify-center sm:justify-start">
+              <div className="flex flex-col sm:flex-row gap-4">
                 {product.image && (
-                  <img src={product.image} alt={product.title} width={140} height={140} className="object-cover rounded-md border border-border" />
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    width={120}
+                    height={120}
+                    className="mx-auto sm:mx-0 size-28 sm:size-[7.5rem] object-cover rounded-xl border border-border shrink-0"
+                  />
                 )}
+                <div className="flex-1 min-w-0 flex flex-col gap-2">
+                  <span className="inline-flex w-fit rounded-full bg-secondary/10 px-2.5 py-0.5 text-xs font-semibold text-secondary">
+                    {SLOT_LABELS[key]}
+                  </span>
+                  <p className="text-sm leading-relaxed text-foreground">{product.reason}</p>
+                  <p className="text-xl font-semibold text-secondary">{product.price}</p>
+                  <a href={product.link} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+                    <Button variant="default" size="full" className="sm:w-auto sm:min-w-[140px] gap-2">
+                      {cleanStoreName(product.source)}
+                      <ExternalLink className="size-4" aria-hidden />
+                    </Button>
+                  </a>
+                </div>
               </div>
-              <div className="flex sm:flex-[3] flex-col justify-center gap-1">
-                <p className="text-sm tracking-[0.12em] uppercase text-secondary font-bold">
-                  {SLOT_LABELS[key]}
-                </p>
-                <p className="text-sm leading-relaxed">{product.reason}</p>
-              </div>
-              <div className="flex sm:flex-[1] flex-row sm:flex-col justify-between sm:justify-center items-center gap-2">
-                <p className="font-bold text-secondary">{product.price}</p>
-                <a href={product.link} target="_blank" rel="noopener noreferrer">
-                  <Button variant="secondary" size="sm">{cleanStoreName(product.source)}</Button>
-                </a>
-              </div>
-            </div>
+            </article>
           )
         )}
+      </div>
 
-        <div className="flex justify-between pt-6 border-t border-border">
-          <Button variant="outline" onClick={close}>Kapat</Button>
-          <Button variant="default" onClick={analyzeAnother}>Yeni Analiz</Button>
-        </div>
+      <div className="flex flex-col-reverse sm:flex-row justify-between gap-3 pt-6 mt-2 border-t border-border">
+        <Button variant="outline" onClick={close} className="min-h-[44px]">Kapat</Button>
+        <Button variant="default" onClick={analyzeAnother} className="min-h-[44px]">Yeni analiz</Button>
       </div>
     </div>
   );

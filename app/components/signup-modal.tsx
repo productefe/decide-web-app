@@ -5,18 +5,18 @@ import Modal from "./modal";
 import { createClient } from "../utils/supabase/client";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { Button } from "./ui/button";
-
-const inputClass =
-  "w-full min-h-[48px] bg-muted text-foreground border border-border rounded-md px-4 outline-none focus:border-accent focus:ring-2 focus:ring-accent/20";
+import { inputClass } from "@/lib/input-styles";
 
 export default function SignUpModal({
   open,
   onClose,
   router,
+  onSwitchToLogin,
 }: {
   open: boolean;
   onClose: () => void;
   router: AppRouterInstance;
+  onSwitchToLogin?: () => void;
 }) {
   const supabase = createClient();
 
@@ -46,10 +46,10 @@ export default function SignUpModal({
     if (error) {
       setMessage(error.message);
     } else {
-      setMessage("Kayıt başarılı.");
       setName("");
       setEmail("");
       setPassword("");
+      onClose();
       router.refresh();
       router.push("/workspace");
     }
@@ -57,23 +57,24 @@ export default function SignUpModal({
 
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="flex flex-col gap-6">
-        <div className="border-b border-border pb-4">
-          <p className="text-xs tracking-[0.15em] uppercase text-muted-foreground mb-2">
-            Kayıt
-          </p>
-          <h2 className="text-2xl font-bold tracking-wide">Hesap oluştur.</h2>
+      <div className="flex flex-col gap-5">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground">Hemen başla</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Ücretsiz hesap oluştur, ilk aramana birkaç saniye kaldı.</p>
         </div>
 
         <form className="flex flex-col gap-3" onSubmit={handleSignUp}>
           <input
             placeholder="Adın"
+            autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
           />
           <input
             placeholder="E-posta"
+            type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className={inputClass}
@@ -81,17 +82,27 @@ export default function SignUpModal({
           <input
             placeholder="Şifre"
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
           />
           <Button disabled={loading} type="submit" variant="default" size="full">
-            {loading ? "Oluşturuluyor..." : "Kayıt Ol"}
+            {loading ? "Hesap oluşturuluyor..." : "Kayıt ol"}
           </Button>
         </form>
 
         {message && (
-          <p className="text-sm text-muted-foreground text-center">{message}</p>
+          <p className="text-sm text-destructive text-center">{message}</p>
+        )}
+
+        {onSwitchToLogin && (
+          <p className="text-sm text-center text-muted-foreground">
+            Zaten hesabın var mı?{" "}
+            <button type="button" onClick={onSwitchToLogin} className="font-semibold text-secondary underline-offset-2 hover:underline">
+              Giriş yap
+            </button>
+          </p>
         )}
       </div>
     </Modal>

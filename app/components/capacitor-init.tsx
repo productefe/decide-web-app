@@ -11,7 +11,7 @@ export function CapacitorInit() {
 
         const { StatusBar, Style } = await import("@capacitor/status-bar");
         await StatusBar.setStyle({ style: Style.Light });
-        await StatusBar.setBackgroundColor({ color: "#F5F0E6" });
+        await StatusBar.setBackgroundColor({ color: "#F7F2E8" });
 
         const { SplashScreen } = await import("@capacitor/splash-screen");
         await SplashScreen.hide();
