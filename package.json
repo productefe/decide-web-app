@@ -8,9 +8,18 @@
     "start": "next start",
     "lint": "eslint",
     "clean": "rm -rf .next",
-    "clean-win": "rmdir /s /q .next"
+    "clean-win": "rmdir /s /q .next",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/camera": "^8.2.0",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
     "class-variance-authority": "^0.7.1",

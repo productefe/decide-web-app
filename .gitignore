@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# capacitor / xcode
+ios/App/App/public
+ios/DerivedData
+*.xcuserstate
+*.xcuserdata
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

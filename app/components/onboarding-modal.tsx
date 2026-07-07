@@ -106,7 +106,7 @@ export default function OnboardingModal({ userId }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm bg-card border border-border rounded-lg p-6 md:p-8">
         <StepIndicator step={step} />
 

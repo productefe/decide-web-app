@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { pickProductPhoto } from "@/lib/pick-photo";
 import { Stage, Results } from "./types";
 
 export function useAnalyze(userId: string) {
@@ -18,6 +19,16 @@ export function useAnalyze(userId: string) {
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const openPhotoPicker = async () => {
+    const native = await pickProductPhoto();
+    if (native) {
+      setSelectedFile(native.file);
+      setPreview(native.preview);
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   const start = async () => {
@@ -81,6 +92,6 @@ export function useAnalyze(userId: string) {
 
   return {
     open, stage, preview, results, error, fileInputRef,
-    selectedFile, handleFileChange, start, close, analyzeAnother,
+    selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
   };
 }

@@ -11,18 +11,25 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
   const mounted = useIsMounted();
   const {
     open, stage, preview, results, error, fileInputRef,
-    selectedFile, handleFileChange, start, close, analyzeAnother,
+    selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
   } = useAnalyze(userId);
 
   if (!mounted) return null;
 
   return (
     <>
-      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} hidden />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        hidden
+      />
 
       <label
-        onClick={() => fileInputRef.current?.click()}
-        className="min-h-44 grid place-items-center content-center gap-2 text-foreground bg-muted border border-dashed border-border rounded-lg overflow-hidden text-center cursor-pointer hover:border-accent/50 transition-colors"
+        onClick={() => openPhotoPicker()}
+        className="min-h-[11rem] grid place-items-center content-center gap-2 text-foreground bg-muted border border-dashed border-border rounded-lg overflow-hidden text-center cursor-pointer hover:border-accent/50 transition-colors touch-manipulation py-6"
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -40,8 +47,8 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={stage !== "loading" ? close : undefined}>
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-card border border-border p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={stage !== "loading" ? close : undefined}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-card border border-border p-6 overscroll-contain" onClick={(e) => e.stopPropagation()}>
 
             {stage === "loading" && (
               <div className="w-full max-w-sm mx-auto text-center py-4">
