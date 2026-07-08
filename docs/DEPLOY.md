@@ -29,12 +29,21 @@ Authentication → URL Configuration:
 - **Site URL:** `https://decide-web-app-nine.vercel.app`
 - **Redirect URLs:** `https://decide-web-app-nine.vercel.app/**`
 
-## 5. Canli test checklist
+## 5. Supabase migrations
+
+SQL Editor'da bir kez calistir (henuz yapilmadiysa):
+
+- [`supabase/migrations/20250622183000_add_gender_to_user_preferences.sql`](../supabase/migrations/20250622183000_add_gender_to_user_preferences.sql) — `gender` kolonu
+- [`supabase/migrations/20250707200000_search_history_and_rls.sql`](../supabase/migrations/20250707200000_search_history_and_rls.sql) — `search_history` tablosu + RLS
+
+## 6. Canli test checklist
 
 - [x] Landing aciliyor
 - [x] Kayit / giris calisiyor
 - [x] Onboarding kaydediliyor
 - [x] Foto yukleme + analiz 3 sonuc donuyor
+- [x] Alt tab bar (Yukle / Gecmis / Profil)
+- [x] Gizlilik politikasi: `/privacy`
 - [ ] Magaza linkleri aciliyor
 
 ---

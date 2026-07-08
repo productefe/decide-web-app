@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar"
 import { LandingActions } from "./components/landing-actions"
 import { createClient } from "./utils/supabase/server"
+import Link from "next/link"
 import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
 import "./globals.css"
 
@@ -180,9 +181,17 @@ export default async function Home() {
       <footer className="border-t border-border bg-gradient-to-r from-card via-card to-secondary/5 w-full">
         <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <span className="font-semibold text-secondary text-lg tracking-tight">DECIDE</span>
-          <p className="text-sm sm:text-base font-semibold text-foreground text-center sm:text-right">
-            Doğru karar, doğru kıyafet
-          </p>
+          <div className="flex flex-col sm:items-end gap-1">
+            <p className="text-sm sm:text-base font-semibold text-foreground text-center sm:text-right">
+              Doğru karar, doğru kıyafet
+            </p>
+            <Link
+              href="/privacy"
+              className="text-xs text-muted-foreground hover:text-secondary transition-colors text-center sm:text-right"
+            >
+              Gizlilik Politikası
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
