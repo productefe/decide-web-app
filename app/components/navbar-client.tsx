@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import SignUpModal from "./signup-modal";
 import SignInModal from "./signin-modal";
 import { Button } from "./ui/button";
@@ -19,6 +20,8 @@ export default function NavbarClient({ userEmail }: Props) {
   const [showSignup, setShowSignup] = useState(false);
 
   const router = useRouter();
+  const pathname = usePathname();
+  const onProfile = pathname === "/profile";
 
   const handleLogout = async () => {
     const { createClient } = await import("@/utils/supabase/client");
@@ -31,14 +34,28 @@ export default function NavbarClient({ userEmail }: Props) {
   return (
     <nav className="border-b border-border pb-4 mb-2">
       <header className="flex items-center justify-between gap-3">
-        <button
-          onClick={() => router.push(userEmail ? "/workspace" : "/")}
-          aria-label="Ana sayfaya git"
-          className="flex items-center gap-2 bg-transparent border-0 cursor-pointer p-0 min-h-[44px]"
-        >
-          <span className="size-2 rounded-full bg-secondary shrink-0" aria-hidden />
-          <span className="font-semibold text-lg text-secondary tracking-tight">DECIDE</span>
-        </button>
+        <div className="flex items-center gap-3 min-h-[44px]">
+          <button
+            onClick={() => router.push(userEmail ? "/workspace" : "/")}
+            aria-label="Ana sayfaya git"
+            className="flex items-center gap-2 bg-transparent border-0 cursor-pointer p-0"
+          >
+            <span className="size-2 rounded-full bg-secondary shrink-0" aria-hidden />
+            <span className="font-semibold text-lg text-secondary tracking-tight">DECIDE</span>
+          </button>
+          {userEmail && (
+            <Link
+              href="/profile"
+              className={`text-sm font-medium min-h-[44px] inline-flex items-center px-2 rounded-lg transition-colors ${
+                onProfile
+                  ? "text-secondary bg-secondary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
+              }`}
+            >
+              Profil
+            </Link>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           {!userEmail ? (

@@ -4,7 +4,7 @@ import "./globals.css";
 import { CapacitorInit } from "@/components/capacitor-init";
 
 export const metadata: Metadata = {
-  title: "DECIDE — Fotoğrafla Ürün Bul",
+  title: "DECIDE · Fotoğrafla Ürün Bul",
   description: "Beğendiğin ürünün fotoğrafını yükle, Türk mağazalarından sana en uygun 3 alternatifi anında bul.",
   appleWebApp: {
     capable: true,

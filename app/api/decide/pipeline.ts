@@ -89,6 +89,36 @@ export function getStyleKeyword(preferences: string[] | undefined): string {
   return STYLE_KEYWORDS[preferences[0]] || "";
 }
 
+/** Override vision gender with user-stated gender and rebuild search queries. */
+export function applyUserGender(
+  profile: ProductProfile,
+  gender: string | null | undefined
+): ProductProfile {
+  if (gender !== "men" && gender !== "women") return profile;
+
+  const gender_tr = gender === "women" ? "kadın" : "erkek";
+
+  const search_query = [gender_tr, profile.color_tr, profile.collar_tr, profile.pattern_tr, profile.category_tr]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  const fallback_query = [gender_tr, profile.color_tr, profile.category_tr]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  return {
+    ...profile,
+    gender,
+    gender_tr,
+    search_query,
+    fallback_query,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Parse Vision1 (n8n "Code" node)
 // ---------------------------------------------------------------------------

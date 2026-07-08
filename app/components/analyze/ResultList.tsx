@@ -3,14 +3,39 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Results, SLOT_LABELS, cleanStoreName } from "./types";
 
+function ReasonText({
+  reason,
+  loading,
+}: {
+  reason: string;
+  loading: boolean;
+}) {
+  if (loading && !reason) {
+    return (
+      <div className="min-h-[2.75rem] flex flex-col justify-center gap-2" aria-hidden>
+        <div className="h-3.5 bg-muted rounded-md animate-pulse w-full" />
+        <div className="h-3.5 bg-muted rounded-md animate-pulse w-[85%]" />
+      </div>
+    );
+  }
+
+  return (
+    <p className="min-h-[2.75rem] text-sm leading-relaxed text-foreground">
+      {reason || "\u00A0"}
+    </p>
+  );
+}
+
 export function ResultList({
   results,
   preview,
+  reasonsLoading,
   close,
   analyzeAnother,
 }: {
   results: Results;
   preview: string | null;
+  reasonsLoading?: boolean;
   close: () => void;
   analyzeAnother: () => void;
 }) {
@@ -36,11 +61,17 @@ export function ResultList({
       </div>
 
       <div className="flex flex-col gap-4">
-        {slots.filter((s) => s.product).map(({ key, product }) =>
+        {slots.filter((s) => s.product).map(({ key, product }, i) =>
           product && (
             <article
               key={key}
-              className="rounded-2xl border border-border bg-muted/30 p-4 shadow-sm"
+              className={`rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md ${
+                i === 0
+                  ? "border-secondary/35 bg-gradient-to-br from-card to-secondary/5"
+                  : i === 2
+                    ? "border-accent/25 bg-gradient-to-br from-card to-accent/5"
+                    : "border-border bg-muted/30"
+              }`}
             >
               <div className="flex flex-col sm:flex-row gap-4">
                 {product.image && (
@@ -56,7 +87,7 @@ export function ResultList({
                   <span className="inline-flex w-fit rounded-full bg-secondary/10 px-2.5 py-0.5 text-xs font-semibold text-secondary">
                     {SLOT_LABELS[key]}
                   </span>
-                  <p className="text-sm leading-relaxed text-foreground">{product.reason}</p>
+                  <ReasonText reason={product.reason} loading={!!reasonsLoading} />
                   <p className="text-xl font-semibold text-secondary">{product.price}</p>
                   <a href={product.link} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
                     <Button variant="default" size="full" className="sm:w-auto sm:min-w-[140px] gap-2">

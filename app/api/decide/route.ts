@@ -5,6 +5,7 @@ import {
   scoreProducts,
   buildSearchQueries,
   getStyleKeyword,
+  applyUserGender,
   pickStyleProduct,
   pickTrustedFallback,
   getSlots,
@@ -13,7 +14,6 @@ import {
   type RequestContext,
   type UserProfile,
   type ProductProfile,
-  type Reasons,
   type ScoringResult,
 } from "./pipeline";
 import { getVisionImageDataUrl } from "./vision-image";
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
 
     const { data: userPrefs } = await supabase
       .from("user_preferences")
-      .select("preferences, height, weight")
+      .select("preferences, height, weight, gender")
       .eq("id", user.id)
       .single();
 
@@ -173,7 +173,10 @@ export async function POST(req: NextRequest) {
     });
 
     // 2) Parse Vision
-    const productProfile = parseVision(visionContent, ctx);
+    let productProfile = parseVision(visionContent, ctx);
+    if (userPrefs?.gender) {
+      productProfile = applyUserGender(productProfile, userPrefs.gender);
+    }
 
     // 3) SerpAPI google_shopping (ana arama + fallback)
     const { scoring, queryUsed } = await searchWithFallback(productProfile, SERPAPI_KEY);
@@ -227,23 +230,8 @@ export async function POST(req: NextRequest) {
     // 8) Merge Links
     const merged = mergeLinks(finalScoring, slots, immersiveResponses, AFFILIATE_TAG);
 
-    // 9) OpenAI Explanation (gpt-4o-mini)
-    const explanationText = `Sen bir moda danışmanısın. Aşağıdaki her ürün için, etiketine neden uygun olduğunu açıklayan TÜRKÇE, samimi, 1 cümlelik açıklama yaz. Ürün adını ve fiyatını cümlede kullan. SADECE geçerli JSON döndür, markdown yok:\n{"recommended_reason": "", "cheaper_reason": "", "style_reason": ""}\n\nRecommended (en iyi eşleşme): ${merged.recommended?.title} — ${merged.recommended?.price} (${merged.recommended?.source})\nCheaper (daha uygun fiyat): ${merged.cheaper?.title} — ${merged.cheaper?.price} (${merged.cheaper?.source})\nSana Özel (tarzına uygun): ${merged.style?.title} — ${merged.style?.price} (${merged.style?.source})`;
-
-    let reasons: Reasons = {};
-    try {
-      const explanationContent = await openAIContent(OPENAI_API_KEY, {
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: explanationText }],
-        max_tokens: 300,
-      });
-      reasons = JSON.parse(explanationContent.replace(/```json|```/g, "").trim());
-    } catch {
-      reasons = {};
-    }
-
-    // 10) Final Output
-    const results = buildResults(merged, reasons);
+    // 9) Final Output (açıklamalar istemci tarafında /api/decide/explain ile gelir)
+    const results = buildResults(merged, {});
 
     // 11) Supabase search_history insert (hata cevabı bloklamaz)
     const { error: insertError } = await supabase.from("search_history").insert({
