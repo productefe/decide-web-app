@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar"
 import { LandingActions } from "./components/landing-actions"
 import { createClient } from "./utils/supabase/server"
+import { isPermanentUser } from "./lib/auth-user"
 import Link from "next/link"
 import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
 import "./globals.css"
@@ -106,7 +107,7 @@ export default async function Home() {
               })}
             </div>
 
-            <LandingActions isLoggedIn={!!user} />
+            <LandingActions isLoggedIn={isPermanentUser(user)} />
           </div>
 
           <div className="lg:col-span-5 relative flex flex-col gap-3 lg:border-l lg:border-border lg:pl-12">

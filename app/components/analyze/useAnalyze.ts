@@ -35,7 +35,13 @@ function applyReasons(results: Results, reasons: Partial<ExplainReasons>): Resul
   };
 }
 
-export function useAnalyze(userId: string) {
+import { markGuestAnalysisUsed, saveGuestResultsLocal } from "@/lib/guest";
+
+export function useAnalyze(
+  userId: string,
+  options?: { guestMode?: boolean; onAnalysisComplete?: () => void }
+) {
+  const guestMode = options?.guestMode ?? false;
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -46,7 +52,7 @@ export function useAnalyze(userId: string) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const explainAbortRef = useRef<AbortController | null>(null);
 
-  const fetchReasons = async (parsedPieces: PieceResult[]) => {
+  const fetchReasons = async (parsedPieces: PieceResult[], photoUrl?: string) => {
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -73,21 +79,22 @@ export function useAnalyze(userId: string) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || controller.signal.aborted) return;
 
+      let updatedPieces = parsedPieces;
       if (parsedPieces.length > 1 && Array.isArray(data.pieces)) {
-        setPieces((prev) =>
-          prev
-            ? prev.map((piece, i) => ({
-                ...piece,
-                results: applyReasons(piece.results, data.pieces[i] || {}),
-              }))
-            : prev
-        );
+        updatedPieces = parsedPieces.map((piece, i) => ({
+          ...piece,
+          results: applyReasons(piece.results, data.pieces[i] || {}),
+        }));
+        setPieces(updatedPieces);
       } else if (data.reasons) {
-        setPieces((prev) =>
-          prev?.length
-            ? [{ ...prev[0], results: applyReasons(prev[0].results, data.reasons) }, ...prev.slice(1)]
-            : prev
-        );
+        updatedPieces = [
+          { ...parsedPieces[0], results: applyReasons(parsedPieces[0].results, data.reasons) },
+          ...parsedPieces.slice(1),
+        ];
+        setPieces(updatedPieces);
+      }
+      if (guestMode && photoUrl) {
+        saveGuestResultsLocal({ photo_url: photoUrl, pieces: updatedPieces });
       }
     } catch {
       // Açıklama gelmezse ürünler yine görünür
@@ -167,7 +174,11 @@ export function useAnalyze(userId: string) {
 
       setPieces(parsedPieces);
       setStage("result");
-      void fetchReasons(parsedPieces);
+      if (guestMode) {
+        markGuestAnalysisUsed();
+        saveGuestResultsLocal({ photo_url: publicUrl, pieces: parsedPieces });
+      }
+      void fetchReasons(parsedPieces, guestMode ? publicUrl : undefined);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Bir hata oluştu";
       setError(message);
@@ -176,12 +187,17 @@ export function useAnalyze(userId: string) {
   };
 
   const close = () => {
+    const completedGuestAnalysis =
+      guestMode && stage === "result" && pieces !== null && pieces.length > 0;
     explainAbortRef.current?.abort();
     setOpen(false);
     setStage("idle");
     setPieces(null);
     setReasonsLoading(false);
     setError(null);
+    if (completedGuestAnalysis) {
+      options?.onAnalysisComplete?.();
+    }
   };
 
   const analyzeAnother = () => {

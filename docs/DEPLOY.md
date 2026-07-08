@@ -29,6 +29,8 @@ Authentication → URL Configuration:
 - **Site URL:** `https://decide-web-app-nine.vercel.app`
 - **Redirect URLs:** `https://decide-web-app-nine.vercel.app/**`
 
+**Misafir modu:** Authentication → Providers → **Anonymous sign-ins** → Enable (Dashboard'da bir kez aç).
+
 ## 5. Supabase migrations
 
 SQL Editor'da bir kez calistir (henuz yapilmadiysa):

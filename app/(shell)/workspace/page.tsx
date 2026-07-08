@@ -29,7 +29,14 @@ export default async function WorkspacePage() {
   }
 
   const needsOnboarding = !isPreferencesComplete(userPreferences);
-  const firstName = profile?.full_name?.split(" ")[0] || "sen";
+  const metaName =
+    typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name
+      : "";
+  const firstName =
+    profile?.full_name?.split(" ")[0] ||
+    metaName.split(" ")[0] ||
+    "sen";
 
   return (
     <div className="relative overflow-x-hidden">

@@ -5,11 +5,38 @@ import { useRouter } from "next/navigation";
 import SignUpModal from "./signup-modal";
 import SignInModal from "./signin-modal";
 import { Button } from "./ui/button";
+import { createClient } from "@/utils/supabase/client";
+import { isPermanentUser } from "@/lib/auth-user";
 
 export function LandingActions({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const router = useRouter();
+
+  const startGuestMode = async () => {
+    setGuestLoading(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (isPermanentUser(user)) {
+        router.push("/workspace");
+        return;
+      }
+
+      if (!user) {
+        const { error } = await supabase.auth.signInAnonymously();
+        if (error) return;
+      }
+
+      router.push("/guest");
+    } finally {
+      setGuestLoading(false);
+    }
+  };
 
   return (
     <>
@@ -23,23 +50,14 @@ export function LandingActions({ isLoggedIn }: { isLoggedIn: boolean }) {
             Yükle!
           </Button>
         ) : (
-          <>
-            <Button
-              size="lg"
-              className="min-h-[48px] px-8 shadow-sm"
-              onClick={() => setShowSignup(true)}
-            >
-              Ücretsiz başla
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="min-h-[48px] px-8"
-              onClick={() => setShowLogin(true)}
-            >
-              Zaten hesabım var
-            </Button>
-          </>
+          <Button
+            size="lg"
+            className="min-h-[48px] px-8 shadow-sm"
+            onClick={startGuestMode}
+            disabled={guestLoading}
+          >
+            {guestLoading ? "Açılıyor..." : "Misafir Modu"}
+          </Button>
         )}
       </div>
 

@@ -12,12 +12,22 @@ const useIsMounted = () =>
 export const PHOTO_DISCLAIMER =
   "Kombin fotoğrafında parçalar ayrı ayrı analiz edilir; tek parça fotoğrafında o parça aranır.";
 
-export default function AnalyzeModal({ userId }: { userId: string }) {
+export default function AnalyzeModal({
+  userId,
+  guestMode = false,
+  onSignup,
+  onAnalysisComplete,
+}: {
+  userId: string;
+  guestMode?: boolean;
+  onSignup?: () => void;
+  onAnalysisComplete?: () => void;
+}) {
   const mounted = useIsMounted();
   const {
     open, stage, preview, pieces, reasonsLoading, fileInputRef,
     selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
-  } = useAnalyze(userId);
+  } = useAnalyze(userId, { guestMode, onAnalysisComplete });
 
   if (!mounted) return null;
 
@@ -114,9 +124,11 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
                 pieces={pieces}
                 preview={preview}
                 userId={userId}
+                guestMode={guestMode}
+                onSignup={onSignup}
                 reasonsLoading={reasonsLoading}
                 close={close}
-                analyzeAnother={analyzeAnother}
+                analyzeAnother={guestMode ? close : analyzeAnother}
               />
             )}
           </div>

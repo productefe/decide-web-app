@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { isAnonymousUser } from "@/lib/auth-user";
 import AppHeader from "@/components/app-header";
 import AppBottomNav from "@/components/app-bottom-nav";
 
@@ -15,6 +16,10 @@ export default async function AppShellLayout({
 
   if (!user) {
     redirect("/");
+  }
+
+  if (isAnonymousUser(user)) {
+    redirect("/guest");
   }
 
   return (

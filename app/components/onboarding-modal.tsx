@@ -11,9 +11,12 @@ import {
   type UserGender,
   type UserSize,
 } from "@/lib/preferences";
+import { saveGuestPrefsLocal } from "@/lib/guest";
 
 type Props = {
   userId: string;
+  redirectPath?: string;
+  onComplete?: () => void;
 };
 
 const STEPS = ["Beden", "Cinsiyet", "Tarz"];
@@ -42,7 +45,7 @@ function toggleSize(selected: UserSize[], size: UserSize): UserSize[] {
   return selected.includes(size) ? selected.filter((s) => s !== size) : [...selected, size];
 }
 
-export default function OnboardingModal({ userId }: Props) {
+export default function OnboardingModal({ userId, redirectPath, onComplete }: Props) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
@@ -96,8 +99,14 @@ export default function OnboardingModal({ userId }: Props) {
       return;
     }
 
+    saveGuestPrefsLocal({ sizes, gender: gender as UserGender, preferences: [style] });
     setOpen(false);
-    router.refresh();
+    onComplete?.();
+    if (redirectPath) {
+      router.push(redirectPath);
+    } else {
+      router.refresh();
+    }
   };
 
   if (!open) return null;

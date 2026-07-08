@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseSizes } from "@/lib/preferences";
+import { isAnonymousUser } from "@/lib/auth-user";
 import { createClient } from "@/utils/supabase/server";
 import {
   parseVisionOutfit,
@@ -263,13 +264,15 @@ export async function POST(req: NextRequest) {
     const stored: StoredResults = { pieces: pieceResults };
     const firstResults = pieceResults[0].results;
 
-    const { error: insertError } = await supabase.from("search_history").insert({
-      user_id: user.id,
-      photo_url,
-      results: stored,
-    });
-    if (insertError) {
-      console.error("search_history insert error:", insertError.message);
+    if (!isAnonymousUser(user)) {
+      const { error: insertError } = await supabase.from("search_history").insert({
+        user_id: user.id,
+        photo_url,
+        results: stored,
+      });
+      if (insertError) {
+        console.error("search_history insert error:", insertError.message);
+      }
     }
 
     return NextResponse.json({

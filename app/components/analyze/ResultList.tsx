@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SavedProductHeart } from "@/components/saved-product-heart";
+import { GuestHeartUpsell } from "@/components/guest-heart-upsell";
 import { Results, SLOT_LABELS, cleanStoreName, type PieceResult, type Product } from "./types";
 
 function ReasonText({
@@ -35,6 +36,8 @@ function ProductCard({
   product,
   pieceLabel,
   userId,
+  guestMode,
+  onSignup,
   reasonsLoading,
   highlight,
 }: {
@@ -42,6 +45,8 @@ function ProductCard({
   product: Product;
   pieceLabel?: string;
   userId: string;
+  guestMode?: boolean;
+  onSignup?: () => void;
   reasonsLoading?: boolean;
   highlight: "primary" | "default" | "accent";
 }) {
@@ -72,19 +77,23 @@ function ProductCard({
             <span className="inline-flex w-fit rounded-full bg-secondary/10 px-2.5 py-0.5 text-xs font-semibold text-secondary">
               {SLOT_LABELS[slotKey]}
             </span>
-            <SavedProductHeart
-              userId={userId}
-              product={{
-                title: product.title,
-                price: product.price,
-                source: product.source,
-                image: product.image,
-                link: product.link,
-                store: product.store,
-                piece_label: pieceLabel,
-                slot: slotKey,
-              }}
-            />
+            {guestMode && onSignup ? (
+              <GuestHeartUpsell onSignup={onSignup} />
+            ) : (
+              <SavedProductHeart
+                userId={userId}
+                product={{
+                  title: product.title,
+                  price: product.price,
+                  source: product.source,
+                  image: product.image,
+                  link: product.link,
+                  store: product.store,
+                  piece_label: pieceLabel,
+                  slot: slotKey,
+                }}
+              />
+            )}
           </div>
           <ReasonText reason={product.reason} loading={!!reasonsLoading} />
           <p className="text-xl font-semibold text-secondary">{product.price}</p>
@@ -106,11 +115,15 @@ function PieceProductCards({
   results,
   pieceLabel,
   userId,
+  guestMode,
+  onSignup,
   reasonsLoading,
 }: {
   results: Results;
   pieceLabel?: string;
   userId: string;
+  guestMode?: boolean;
+  onSignup?: () => void;
   reasonsLoading?: boolean;
 }) {
   const slots: Array<{
@@ -135,6 +148,8 @@ function PieceProductCards({
               product={product}
               pieceLabel={pieceLabel}
               userId={userId}
+              guestMode={guestMode}
+              onSignup={onSignup}
               reasonsLoading={reasonsLoading}
               highlight={highlight}
             />
@@ -148,6 +163,8 @@ export function ResultList({
   pieces,
   preview,
   userId,
+  guestMode = false,
+  onSignup,
   reasonsLoading,
   close,
   analyzeAnother,
@@ -155,6 +172,8 @@ export function ResultList({
   pieces: PieceResult[];
   preview: string | null;
   userId: string;
+  guestMode?: boolean;
+  onSignup?: () => void;
   reasonsLoading?: boolean;
   close: () => void;
   analyzeAnother: () => void;
@@ -240,6 +259,8 @@ export function ResultList({
                 results={piece.results}
                 pieceLabel={piece.label}
                 userId={userId}
+                guestMode={guestMode}
+                onSignup={onSignup}
                 reasonsLoading={reasonsLoading}
               />
             </div>
@@ -250,6 +271,8 @@ export function ResultList({
           results={pieces[0].results}
           pieceLabel={pieces[0].label}
           userId={userId}
+          guestMode={guestMode}
+          onSignup={onSignup}
           reasonsLoading={reasonsLoading}
         />
       )}
@@ -267,9 +290,22 @@ export function ResultList({
         </div>
       )}
 
+      {guestMode && onSignup && (
+        <div className="mt-6 rounded-xl border border-secondary/25 bg-secondary/5 p-4 text-center">
+          <p className="text-sm text-foreground leading-relaxed">
+            Bunu hesabınıza kaydetmek için şu an üye olun.
+          </p>
+          <Button variant="default" size="full" className="mt-3 min-h-[44px]" onClick={onSignup}>
+            Kayıt ol
+          </Button>
+        </div>
+      )}
+
       <div className="flex flex-col-reverse sm:flex-row justify-between gap-3 pt-6 mt-2 border-t border-border">
         <Button variant="outline" onClick={close} className="min-h-[44px]">Kapat</Button>
-        <Button variant="default" onClick={analyzeAnother} className="min-h-[44px]">Yeni analiz</Button>
+        {!guestMode && (
+          <Button variant="default" onClick={analyzeAnother} className="min-h-[44px]">Yeni analiz</Button>
+        )}
       </div>
     </div>
   );

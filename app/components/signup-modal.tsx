@@ -6,6 +6,7 @@ import { createClient } from "../utils/supabase/client";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { Button } from "./ui/button";
 import { inputClass } from "@/lib/input-styles";
+import { mergeGuestSessionToDb } from "@/lib/guest";
 
 export default function SignUpModal({
   open,
@@ -31,15 +32,39 @@ export default function SignUpModal({
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name,
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    let error: { message: string } | null = null;
+    let savedGuestResults = false;
+    const wasAnonymous = user?.is_anonymous ?? false;
+
+    if (user?.is_anonymous) {
+      const result = await supabase.auth.updateUser({
+        email,
+        password,
+        data: { full_name: name },
+      });
+      error = result.error;
+      if (!error) {
+        savedGuestResults = await mergeGuestSessionToDb(user.id, name);
+      }
+    } else {
+      const result = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
         },
-      },
-    });
+      });
+      error = result.error;
+      if (!error && result.data.user) {
+        savedGuestResults = await mergeGuestSessionToDb(result.data.user.id, name);
+      }
+    }
 
     setLoading(false);
 
@@ -51,7 +76,7 @@ export default function SignUpModal({
       setPassword("");
       onClose();
       router.refresh();
-      router.push("/workspace");
+      router.push(wasAnonymous && savedGuestResults ? "/history" : "/workspace");
     }
   };
 

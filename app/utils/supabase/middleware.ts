@@ -1,8 +1,11 @@
+import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { isAnonymousUser } from "@/lib/auth-user";
 
-export async function middleware(req: NextRequest) {
-  let res = NextResponse.next();
+const SHELL_ROUTES = ["/workspace", "/history", "/favorites", "/profile"];
+
+export async function updateSession(req: NextRequest) {
+  let res = NextResponse.next({ request: req });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,8 +16,8 @@ export async function middleware(req: NextRequest) {
           return req.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            res.cookies.set(name, value);
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
           });
         },
       },
@@ -25,12 +28,26 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isWorkspace = req.nextUrl.pathname.startsWith("/workspace");
+  const pathname = req.nextUrl.pathname;
+  const isShell = SHELL_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
+  const isGuestRoute = pathname === "/guest" || pathname.startsWith("/guest/");
 
-  // 🚫 If not logged in and trying to access workspace → redirect
-  if (!user && isWorkspace) {
+  if (isShell) {
+    if (!user) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+    if (isAnonymousUser(user)) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/guest";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (isGuestRoute && user && !isAnonymousUser(user)) {
     const url = req.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/workspace";
     return NextResponse.redirect(url);
   }
 
