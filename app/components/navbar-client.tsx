@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import SignUpModal from "./signup-modal";
 import SignInModal from "./signin-modal";
 import { Button } from "./ui/button";
@@ -20,8 +20,6 @@ export default function NavbarClient({ userEmail }: Props) {
   const [showSignup, setShowSignup] = useState(false);
 
   const router = useRouter();
-  const pathname = usePathname();
-  const onProfile = pathname === "/profile";
 
   const handleLogout = async () => {
     const { createClient } = await import("@/utils/supabase/client");
@@ -45,14 +43,10 @@ export default function NavbarClient({ userEmail }: Props) {
           </button>
           {userEmail && (
             <Link
-              href="/profile"
-              className={`text-sm font-medium min-h-[44px] inline-flex items-center px-2 rounded-lg transition-colors ${
-                onProfile
-                  ? "text-secondary bg-secondary/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
-              }`}
+              href="/workspace"
+              className="text-sm font-medium min-h-[44px] inline-flex items-center px-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
             >
-              Profil
+              Uygulama
             </Link>
           )}
         </div>

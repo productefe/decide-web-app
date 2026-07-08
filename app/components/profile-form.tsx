@@ -25,6 +25,7 @@ export default function ProfileForm({ userId, initial }: Props) {
   const [style, setStyle] = useState(initial.preferences?.[0] ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +36,7 @@ export default function ProfileForm({ userId, initial }: Props) {
 
     setLoading(true);
     setError(null);
+    setSaved(false);
 
     const supabase = createClient();
     const { error: dbError } = await supabase.from("user_preferences").upsert({
@@ -52,7 +54,8 @@ export default function ProfileForm({ userId, initial }: Props) {
       return;
     }
 
-    router.push("/workspace");
+    setSaved(true);
+    router.refresh();
   };
 
   return (
@@ -60,6 +63,11 @@ export default function ProfileForm({ userId, initial }: Props) {
       {error && (
         <div className="bg-destructive/15 text-destructive text-sm px-4 py-3 rounded-xl border border-destructive/25">
           {error}
+        </div>
+      )}
+      {saved && (
+        <div className="bg-secondary/15 text-secondary text-sm px-4 py-3 rounded-xl border border-secondary/25">
+          Tercihlerin kaydedildi.
         </div>
       )}
       <div className="grid sm:grid-cols-2 gap-4">

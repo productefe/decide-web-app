@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
     const { error: insertError } = await supabase.from("search_history").insert({
       user_id: user.id,
       photo_url,
-      results: JSON.stringify(results),
+      results,
     });
     if (insertError) {
       console.error("search_history insert error:", insertError.message);
