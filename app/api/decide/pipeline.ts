@@ -190,7 +190,12 @@ interface VisionProduct {
 
 export function parseVision(visionContent: string, ctx: RequestContext): ProductProfile {
   const clean = visionContent.replace(/```json|```/g, "").trim();
-  const product: VisionProduct = JSON.parse(clean);
+  let product: VisionProduct;
+  try {
+    product = JSON.parse(clean);
+  } catch {
+    throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
+  }
 
   const rawColor = (product.colors || [])[0] || "";
   const rawCategory = (product.category || "").toLowerCase();

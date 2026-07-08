@@ -107,6 +107,13 @@ async function searchWithFallback(
   return { scoring: scoreProducts(lastResults, productProfile), queryUsed: queries[0] || "" };
 }
 
+function toUserFacingError(message: string): string {
+  if (/JSON|Unexpected token|SyntaxError|parse/i.test(message)) {
+    return "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.";
+  }
+  return message;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -246,8 +253,9 @@ export async function POST(req: NextRequest) {
     // 12) Respond
     return NextResponse.json({ user_id: user.id, photo_url, results });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Bir hata oluştu";
-    console.error("/api/decide error:", message);
+    const raw = err instanceof Error ? err.message : "Bir hata oluştu";
+    const message = toUserFacingError(raw);
+    console.error("/api/decide error:", raw);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

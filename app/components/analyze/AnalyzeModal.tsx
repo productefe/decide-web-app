@@ -15,7 +15,7 @@ export const PHOTO_DISCLAIMER =
 export default function AnalyzeModal({ userId }: { userId: string }) {
   const mounted = useIsMounted();
   const {
-    open, stage, preview, results, reasonsLoading, error, fileInputRef,
+    open, stage, preview, results, reasonsLoading, fileInputRef,
     selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
   } = useAnalyze(userId);
 
@@ -99,7 +99,6 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
             {stage === "error" && (
               <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-start py-2">
                 <h2 className="text-xl font-semibold text-foreground">Sonuç bulamadık</h2>
-                <p className="text-sm text-muted-foreground">{error}</p>
                 <p className="text-sm text-muted-foreground">Net, iyi aydınlatılmış bir ürün fotoğrafıyla tekrar dene.</p>
                 <Button variant="default" onClick={analyzeAnother}>Tekrar dene</Button>
               </div>
