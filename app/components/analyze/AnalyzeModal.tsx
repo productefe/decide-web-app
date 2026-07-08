@@ -10,12 +10,12 @@ const useIsMounted = () =>
   useSyncExternalStore(() => () => {}, () => true, () => false);
 
 export const PHOTO_DISCLAIMER =
-  "Ayrıca unutma, fotoğrafta en baskın parça ne ise o analizlenecektir.";
+  "Kombin fotoğrafında parçalar ayrı ayrı analiz edilir; tek parça fotoğrafında o parça aranır.";
 
 export default function AnalyzeModal({ userId }: { userId: string }) {
   const mounted = useIsMounted();
   const {
-    open, stage, preview, results, reasonsLoading, fileInputRef,
+    open, stage, preview, pieces, reasonsLoading, fileInputRef,
     selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
   } = useAnalyze(userId);
 
@@ -85,10 +85,15 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 pb-0 sm:pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={stage !== "loading" ? close : undefined}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pb-0 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            aria-label="Kapat"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={stage !== "loading" ? close : undefined}
+          />
           <div
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-card border border-border sm:shadow-xl p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] overscroll-contain"
-            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-card border border-border sm:shadow-xl p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] overscroll-contain"
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden />
 
@@ -104,10 +109,11 @@ export default function AnalyzeModal({ userId }: { userId: string }) {
               </div>
             )}
 
-            {stage === "result" && results && (
+            {stage === "result" && pieces && (
               <ResultList
-                results={results}
+                pieces={pieces}
                 preview={preview}
+                userId={userId}
                 reasonsLoading={reasonsLoading}
                 close={close}
                 analyzeAnother={analyzeAnother}

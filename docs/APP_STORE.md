@@ -24,7 +24,7 @@ Kod tarafi (Capacitor + `/privacy`) hazir. Asagidaki adimlar senin panel/Apple t
 ### TestFlight test listesi
 
 - [ ] Kayit / giris
-- [ ] Onboarding (boy, kilo, cinsiyet, tek tarz)
+- [ ] Onboarding (beden, cinsiyet, tek tarz)
 - [ ] Alt tab bar: Yükle / Geçmiş / Profil
 - [ ] Kamera veya galeriden foto
 - [ ] Analiz sonucu (3 kart + aciklama skeleton)
@@ -53,7 +53,7 @@ App Store Connect → App Privacy → Start. Asagidaki cevaplar DECIDE icin rehb
 | **Email Address** (Contact Info) | Evet | App Functionality (hesap) | Evet | Hayir |
 | **Photos** (User Content) | Evet | App Functionality (urun analizi) | Evet | Hayir |
 | **Product Interaction** (Usage Data) | Evet | App Functionality (arama gecmisi) | Evet | Hayir |
-| **Other User Content** (profil: boy/kilo/tarz) | Evet | App Functionality (kisisellestirme) | Evet | Hayir |
+| **Other User Content** (profil: beden/cinsiyet/tarz) | Evet | App Functionality (kisisellestirme) | Evet | Hayir |
 
 **Third-party SDK notlari (formda sorulursa):**
 

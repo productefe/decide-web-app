@@ -1,7 +1,15 @@
+"use client";
+
 import { useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { pickProductPhoto } from "@/lib/pick-photo";
-import { Stage, Results } from "./types";
+import { Stage, Results, PieceResult } from "./types";
+
+type ExplainReasons = {
+  recommended_reason?: string;
+  cheaper_reason?: string;
+  style_reason?: string;
+};
 
 function toExplainPayload(results: Results) {
   const pick = (p: Results["recommended"]) =>
@@ -13,7 +21,7 @@ function toExplainPayload(results: Results) {
   };
 }
 
-function applyReasons(results: Results, reasons: Record<string, string | undefined>): Results {
+function applyReasons(results: Results, reasons: Partial<ExplainReasons>): Results {
   return {
     recommended: results.recommended
       ? { ...results.recommended, reason: reasons.recommended_reason || results.recommended.reason }
@@ -32,31 +40,54 @@ export function useAnalyze(userId: string) {
   const [stage, setStage] = useState<Stage>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [results, setResults] = useState<Results | null>(null);
+  const [pieces, setPieces] = useState<PieceResult[] | null>(null);
   const [reasonsLoading, setReasonsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const explainAbortRef = useRef<AbortController | null>(null);
 
-  const fetchReasons = async (parsed: Results) => {
+  const fetchReasons = async (parsedPieces: PieceResult[]) => {
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
 
     setReasonsLoading(true);
     try {
+      const body =
+        parsedPieces.length > 1
+          ? {
+              pieces: parsedPieces.map((p) => ({
+                label: p.label,
+                ...toExplainPayload(p.results),
+              })),
+            }
+          : toExplainPayload(parsedPieces[0].results);
+
       const response = await fetch("/api/decide/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toExplainPayload(parsed)),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok || controller.signal.aborted) return;
 
-      if (data.reasons) {
-        setResults((prev) => (prev ? applyReasons(prev, data.reasons) : prev));
+      if (parsedPieces.length > 1 && Array.isArray(data.pieces)) {
+        setPieces((prev) =>
+          prev
+            ? prev.map((piece, i) => ({
+                ...piece,
+                results: applyReasons(piece.results, data.pieces[i] || {}),
+              }))
+            : prev
+        );
+      } else if (data.reasons) {
+        setPieces((prev) =>
+          prev?.length
+            ? [{ ...prev[0], results: applyReasons(prev[0].results, data.reasons) }, ...prev.slice(1)]
+            : prev
+        );
       }
     } catch {
       // Açıklama gelmezse ürünler yine görünür
@@ -122,13 +153,21 @@ export function useAnalyze(userId: string) {
 
       if (item?.error) throw new Error(item.error);
 
-      const res = item?.results;
-      if (!res) throw new Error("Sonuç alınamadı, lütfen tekrar dene.");
+      let parsedPieces: PieceResult[] = [];
+      if (Array.isArray(item?.pieces) && item.pieces.length > 0) {
+        parsedPieces = item.pieces;
+      } else if (item?.results) {
+        const res: Results = typeof item.results === "string" ? JSON.parse(item.results) : item.results;
+        parsedPieces = [{ label: "Parça", category_tr: "", results: res }];
+      }
 
-      const parsed: Results = typeof res === "string" ? JSON.parse(res) : res;
-      setResults(parsed);
+      if (parsedPieces.length === 0) {
+        throw new Error("Sonuç alınamadı, lütfen tekrar dene.");
+      }
+
+      setPieces(parsedPieces);
       setStage("result");
-      void fetchReasons(parsed);
+      void fetchReasons(parsedPieces);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Bir hata oluştu";
       setError(message);
@@ -140,7 +179,7 @@ export function useAnalyze(userId: string) {
     explainAbortRef.current?.abort();
     setOpen(false);
     setStage("idle");
-    setResults(null);
+    setPieces(null);
     setReasonsLoading(false);
     setError(null);
   };
@@ -153,7 +192,7 @@ export function useAnalyze(userId: string) {
   };
 
   return {
-    open, stage, preview, results, reasonsLoading, error, fileInputRef,
+    open, stage, preview, pieces, reasonsLoading, error, fileInputRef,
     selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
   };
 }

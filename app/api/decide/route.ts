@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseSizes } from "@/lib/preferences";
 import { createClient } from "@/utils/supabase/server";
 import {
-  parseVision,
+  parseVisionOutfit,
   scoreProducts,
   buildSearchQueries,
   getStyleKeyword,
@@ -17,6 +18,7 @@ import {
   type ScoringResult,
 } from "./pipeline";
 import { getVisionImageDataUrl } from "./vision-image";
+import type { PieceResult, StoredResults } from "@/components/analyze/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -24,9 +26,23 @@ export const maxDuration = 60;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const SERPAPI_URL = "https://serpapi.com/search";
 
+const VISION_OUTFIT_PROMPT =
+  'Analyze this fashion image. Identify distinct clothing items the person is wearing (max 4: top, bottom, shoes, outerwear). Skip small accessories unless prominent. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Turkish label like Tişört/Pantolon/Ayakkabı/Ceket","category":"exact type like t-shirt/jeans/sneaker/hoodie/jacket","colors":["primary color"],"fit":"slim/regular/oversized/loose","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nIf only one item is visible, return one item in the array.';
+
 interface OpenAIChatResponse {
   choices?: { message?: { content?: string } }[];
   error?: { message?: string };
+}
+
+interface SerpShoppingItem {
+  title?: string;
+  price?: string;
+  extracted_price?: number;
+  source?: string;
+  thumbnail?: string;
+  product_id?: string;
+  serpapi_immersive_product_api?: string;
+  product_link?: string;
 }
 
 async function openAIContent(apiKey: string, body: unknown): Promise<string> {
@@ -46,17 +62,6 @@ async function openAIContent(apiKey: string, body: unknown): Promise<string> {
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("OpenAI boş yanıt döndürdü.");
   return content;
-}
-
-interface SerpShoppingItem {
-  title?: string;
-  price?: string;
-  extracted_price?: number;
-  source?: string;
-  thumbnail?: string;
-  product_id?: string;
-  serpapi_immersive_product_api?: string;
-  product_link?: string;
 }
 
 async function serpShoppingSearch(
@@ -107,6 +112,55 @@ async function searchWithFallback(
   return { scoring: scoreProducts(lastResults, productProfile), queryUsed: queries[0] || "" };
 }
 
+async function processPiece(
+  productProfile: ProductProfile,
+  styleKeyword: string,
+  serpKey: string,
+  affiliateTag: string
+): Promise<PieceResult | null> {
+  const { scoring, queryUsed } = await searchWithFallback(productProfile, serpKey);
+  if (scoring.error) return null;
+
+  const excludeTitles = new Set(
+    [scoring.recommended?.title, scoring.cheaper?.title].filter(Boolean) as string[]
+  );
+
+  let styleProduct = null;
+  if (styleKeyword) {
+    const styleQuery = `${queryUsed} ${styleKeyword}`.trim();
+    const styleResults = await serpShoppingSearch(styleQuery, serpKey);
+    styleProduct = pickStyleProduct(styleResults, productProfile, excludeTitles, styleKeyword);
+  }
+  if (!styleProduct) {
+    styleProduct = pickTrustedFallback(scoring.pool, excludeTitles);
+  }
+
+  const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
+  const slots = getSlots(finalScoring);
+  const immersiveResponses = await Promise.all(
+    slots.map(async ({ product }) => {
+      if (!product.serpapi_immersive_product_api) return null;
+      try {
+        const url = `${product.serpapi_immersive_product_api}&api_key=${serpKey}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const merged = mergeLinks(finalScoring, slots, immersiveResponses, affiliateTag);
+  const results = buildResults(merged, {});
+
+  return {
+    label: productProfile.category_tr || productProfile.category || "Parça",
+    category_tr: productProfile.category_tr,
+    results,
+  };
+}
+
 function toUserFacingError(message: string): string {
   if (/JSON|Unexpected token|SyntaxError|parse/i.test(message)) {
     return "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.";
@@ -148,19 +202,21 @@ export async function POST(req: NextRequest) {
 
     const { data: userPrefs } = await supabase
       .from("user_preferences")
-      .select("preferences, height, weight, gender")
+      .select("preferences, gender, sizes")
       .eq("id", user.id)
       .single();
 
+    const sizes = parseSizes(userPrefs?.sizes);
+
     const user_profile: UserProfile = {
       preferences: userPrefs?.preferences || [],
+      sizes,
     };
     const styleKeyword = getStyleKeyword(userPrefs?.preferences);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
     const visionImageUrl = await getVisionImageDataUrl(photo_url, supabase, storage_path);
 
-    // 1) OpenAI Vision (gpt-4o)
     const visionContent = await openAIContent(OPENAI_API_KEY, {
       model: "gpt-4o",
       messages: [
@@ -168,90 +224,60 @@ export async function POST(req: NextRequest) {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: visionImageUrl } },
-            {
-              type: "text",
-              text:
-                'Analyze this fashion product image. Return ONLY valid JSON, no markdown, no explanation:\n{"category": "exact product type like t-shirt/chinos/running shoe/hoodie/dress/jeans/sneaker", "colors": ["primary color"], "fit": "slim/regular/oversized/loose", "collar": "crew neck/v-neck/polo/turtleneck/none", "pattern": "plain/striped/floral/graphic/logo/checkered/none", "has_logo": false, "style_tags": ["casual"], "gender": "men/women/unisex"}',
-            },
+            { type: "text", text: VISION_OUTFIT_PROMPT },
           ],
         },
       ],
-      max_tokens: 500,
+      max_tokens: 800,
     });
 
-    // 2) Parse Vision
-    let productProfile = parseVision(visionContent, ctx);
-    if (userPrefs?.gender) {
-      productProfile = applyUserGender(productProfile, userPrefs.gender);
-    }
+    const visionPieces = parseVisionOutfit(visionContent, ctx);
+    const profiles = visionPieces.map(({ label, profile }) => {
+      let p = profile;
+      if (userPrefs?.gender) {
+        p = applyUserGender(p, userPrefs.gender);
+      }
+      return { label, profile: p };
+    });
 
-    // 3) SerpAPI google_shopping (ana arama + fallback)
-    const { scoring, queryUsed } = await searchWithFallback(productProfile, SERPAPI_KEY);
+    const pieceResults = (
+      await Promise.all(
+        profiles.map(({ label, profile }) =>
+          processPiece(profile, styleKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
+            piece ? { ...piece, label } : null
+          )
+        )
+      )
+    ).filter((p): p is PieceResult => p !== null);
 
-    // 4) Hata Var mı? -> erken dön
-    if (scoring.error) {
+    if (pieceResults.length === 0) {
       return NextResponse.json({
-        user_id: scoring.user_id,
-        photo_url: scoring.photo_url,
-        recommended: null,
-        cheaper: null,
-        style: null,
-        top3: [],
-        error: scoring.error,
+        user_id: user.id,
+        photo_url,
+        pieces: [],
+        results: null,
+        error: "Bu fotoğraf için sonuç bulunamadı.",
       });
     }
 
-    // 6) Stil araması + Sana Özel slot
-    const excludeTitles = new Set(
-      [scoring.recommended?.title, scoring.cheaper?.title].filter(Boolean) as string[]
-    );
+    const stored: StoredResults = { pieces: pieceResults };
+    const firstResults = pieceResults[0].results;
 
-    let styleProduct = null;
-    if (styleKeyword) {
-      const styleQuery = `${queryUsed} ${styleKeyword}`.trim();
-      const styleResults = await serpShoppingSearch(styleQuery, SERPAPI_KEY);
-      styleProduct = pickStyleProduct(styleResults, productProfile, excludeTitles, styleKeyword);
-    }
-    if (!styleProduct) {
-      styleProduct = pickTrustedFallback(scoring.pool, excludeTitles);
-    }
-
-    const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
-
-    // 7) Split slots + SerpAPI Product (immersive)
-    const slots = getSlots(finalScoring);
-    const immersiveResponses = await Promise.all(
-      slots.map(async ({ product }) => {
-        if (!product.serpapi_immersive_product_api) return null;
-        try {
-          const url = `${product.serpapi_immersive_product_api}&api_key=${SERPAPI_KEY}`;
-          const res = await fetch(url);
-          if (!res.ok) return null;
-          return await res.json();
-        } catch {
-          return null;
-        }
-      })
-    );
-
-    // 8) Merge Links
-    const merged = mergeLinks(finalScoring, slots, immersiveResponses, AFFILIATE_TAG);
-
-    // 9) Final Output (açıklamalar istemci tarafında /api/decide/explain ile gelir)
-    const results = buildResults(merged, {});
-
-    // 11) Supabase search_history insert (hata cevabı bloklamaz)
     const { error: insertError } = await supabase.from("search_history").insert({
       user_id: user.id,
       photo_url,
-      results,
+      results: stored,
     });
     if (insertError) {
       console.error("search_history insert error:", insertError.message);
     }
 
-    // 12) Respond
-    return NextResponse.json({ user_id: user.id, photo_url, results });
+    return NextResponse.json({
+      user_id: user.id,
+      photo_url,
+      pieces: pieceResults,
+      results: firstResults,
+    });
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : "Bir hata oluştu";
     const message = toUserFacingError(raw);

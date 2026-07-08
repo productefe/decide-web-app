@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
 import { createClient } from "@/utils/supabase/client";
-import { inputClass } from "@/lib/input-styles";
 import {
   GENDER_OPTIONS,
   PREFERENCE_OPTIONS,
+  SIZE_OPTIONS,
+  parseSizes,
   type UserGender,
   type UserPreferencesRow,
+  type UserSize,
 } from "@/lib/preferences";
 
 type Props = {
@@ -17,10 +19,13 @@ type Props = {
   initial: UserPreferencesRow;
 };
 
+function toggleSize(selected: UserSize[], size: UserSize): UserSize[] {
+  return selected.includes(size) ? selected.filter((s) => s !== size) : [...selected, size];
+}
+
 export default function ProfileForm({ userId, initial }: Props) {
   const router = useRouter();
-  const [height, setHeight] = useState(initial.height ?? "");
-  const [weight, setWeight] = useState(initial.weight ?? "");
+  const [sizes, setSizes] = useState<UserSize[]>(parseSizes(initial.sizes) as UserSize[]);
   const [gender, setGender] = useState<UserGender | "">(initial.gender ?? "");
   const [style, setStyle] = useState(initial.preferences?.[0] ?? "");
   const [loading, setLoading] = useState(false);
@@ -29,7 +34,7 @@ export default function ProfileForm({ userId, initial }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!height || !weight || !gender || !style) {
+    if (!sizes.length || !gender || !style) {
       setError("Tüm alanları doldur.");
       return;
     }
@@ -41,8 +46,7 @@ export default function ProfileForm({ userId, initial }: Props) {
     const supabase = createClient();
     const { error: dbError } = await supabase.from("user_preferences").upsert({
       id: userId,
-      height,
-      weight,
+      sizes,
       gender,
       preferences: [style],
     });
@@ -70,32 +74,25 @@ export default function ProfileForm({ userId, initial }: Props) {
           Tercihlerin kaydedildi.
         </div>
       )}
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="flex flex-col gap-2">
-          <label htmlFor="profile-height" className="text-sm font-medium text-foreground">
-            Boy (cm)
-          </label>
-          <input
-            id="profile-height"
-            type="number"
-            placeholder="Örn: 180"
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="profile-weight" className="text-sm font-medium text-foreground">
-            Kilo (kg)
-          </label>
-          <input
-            id="profile-weight"
-            type="number"
-            placeholder="Örn: 75"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            className={inputClass}
-          />
+
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium text-foreground">Bedenlerin</span>
+        <p className="text-xs text-muted-foreground">Hangi bedenlerde ürün görmek istersin? Birden fazla seçebilirsin.</p>
+        <div className="flex flex-wrap gap-2">
+          {SIZE_OPTIONS.map((size) => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => setSizes((prev) => toggleSize(prev, size))}
+              className={`min-h-[44px] min-w-[52px] px-3 py-2 text-sm rounded-xl border transition-all ${
+                sizes.includes(size)
+                  ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
+                  : "bg-muted text-foreground border-border hover:border-accent/50"
+              }`}
+            >
+              {size}
+            </button>
+          ))}
         </div>
       </div>
 

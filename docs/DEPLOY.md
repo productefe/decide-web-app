@@ -35,6 +35,8 @@ SQL Editor'da bir kez calistir (henuz yapilmadiysa):
 
 - [`supabase/migrations/20250622183000_add_gender_to_user_preferences.sql`](../supabase/migrations/20250622183000_add_gender_to_user_preferences.sql) — `gender` kolonu
 - [`supabase/migrations/20250707200000_search_history_and_rls.sql`](../supabase/migrations/20250707200000_search_history_and_rls.sql) — `search_history` tablosu + RLS
+- [`supabase/migrations/20250708120000_add_sizes_to_user_preferences.sql`](../supabase/migrations/20250708120000_add_sizes_to_user_preferences.sql) — `sizes` kolonu (beden tercihleri)
+- [`supabase/migrations/20250708180000_saved_products.sql`](../supabase/migrations/20250708180000_saved_products.sql) — `saved_products` tablosu (beğendiklerin)
 
 ## 6. Canli test checklist
 

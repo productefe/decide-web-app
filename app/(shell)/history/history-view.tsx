@@ -1,13 +1,66 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import { History } from "lucide-react";
+import { ExternalLink, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cleanStoreName } from "@/components/analyze/types";
 import {
   formatHistoryDate,
-  parseHistoryResults,
+  getHistoryPieces,
   SLOT_LABELS,
   type SearchHistoryRow,
 } from "@/lib/search-history";
+
+function HistoryPieceBlock({
+  label,
+  results,
+}: {
+  label: string;
+  results: ReturnType<typeof getHistoryPieces>[0]["results"];
+}) {
+  const slots = [
+    { key: "recommended" as const, product: results.recommended },
+    { key: "cheaper" as const, product: results.cheaper },
+    { key: "style" as const, product: results.style },
+  ].filter((s) => s.product);
+
+  if (slots.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs font-semibold text-foreground">{label}</p>
+      {slots.map(({ key, product }) =>
+        product ? (
+          <div key={key} className="flex gap-3 items-start pl-2 border-l-2 border-secondary/20">
+            {product.image && (
+              <img
+                src={product.image}
+                alt=""
+                className="size-12 rounded-lg object-cover border border-border shrink-0"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold text-secondary">
+                {SLOT_LABELS[key]}
+              </span>
+              <p className="text-sm text-foreground line-clamp-2 leading-snug mt-0.5">
+                {product.title}
+              </p>
+              <p className="text-sm font-semibold text-secondary mt-1">{product.price}</p>
+              {product.link && (
+                <a href={product.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
+                  <Button variant="outline" size="full" className="h-9 text-xs gap-1.5 px-3">
+                    {cleanStoreName(product.source)}
+                    <ExternalLink className="size-3.5" aria-hidden />
+                  </Button>
+                </a>
+              )}
+            </div>
+          </div>
+        ) : null
+      )}
+    </div>
+  );
+}
 
 export default function HistoryPage({
   items,
@@ -43,12 +96,8 @@ export default function HistoryPage({
 
       <div className="flex flex-col gap-4">
         {items.map((item) => {
-          const results = parseHistoryResults(item.results);
-          const slots = [
-            { key: "recommended" as const, product: results?.recommended },
-            { key: "cheaper" as const, product: results?.cheaper },
-            { key: "style" as const, product: results?.style },
-          ].filter((s) => s.product);
+          const pieces = getHistoryPieces(item.results);
+          const isOutfit = pieces.length > 1;
 
           return (
             <article
@@ -64,40 +113,27 @@ export default function HistoryPage({
                   />
                 )}
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-secondary">Aradığın</p>
+                  <p className="text-xs font-medium text-secondary">
+                    {isOutfit ? `Kombin · ${pieces.length} parça` : "Aradığın"}
+                  </p>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {formatHistoryDate(item.created_at)}
                   </p>
                 </div>
               </div>
 
-              {slots.length > 0 ? (
-                <div className="pt-4 flex flex-col gap-3">
+              {pieces.length > 0 ? (
+                <div className="pt-4 flex flex-col gap-4">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Önerilenler
                   </p>
-                  {slots.map(({ key, product }) =>
-                    product ? (
-                      <div key={key} className="flex gap-3 items-start">
-                        {product.image && (
-                          <img
-                            src={product.image}
-                            alt=""
-                            className="size-12 rounded-lg object-cover border border-border shrink-0"
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[11px] font-semibold text-secondary">
-                            {SLOT_LABELS[key]}
-                          </span>
-                          <p className="text-sm text-foreground line-clamp-2 leading-snug mt-0.5">
-                            {product.title}
-                          </p>
-                          <p className="text-sm font-semibold text-secondary mt-1">{product.price}</p>
-                        </div>
-                      </div>
-                    ) : null
-                  )}
+                  {pieces.map((piece, i) => (
+                    <HistoryPieceBlock
+                      key={`${piece.label}-${i}`}
+                      label={piece.label}
+                      results={piece.results}
+                    />
+                  ))}
                 </div>
               ) : (
                 <p className="pt-4 text-sm text-muted-foreground">Sonuç kaydı bulunamadı.</p>

@@ -10,6 +10,7 @@ export interface UserProfile {
   budget_min?: number;
   budget_max?: number;
   preferences?: string[];
+  sizes?: string[];
   [key: string]: unknown;
 }
 
@@ -119,6 +120,25 @@ export function applyUserGender(
   };
 }
 
+/** Check if product title mentions one of the user's preferred sizes (soft match). */
+export function titleMatchesUserSize(title: string, sizes: string[]): boolean {
+  if (!sizes.length) return false;
+  const ordered = [...sizes].sort((a, b) => b.length - a.length);
+  for (const size of ordered) {
+    const escaped = size.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = size.length <= 2
+      ? new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, "i")
+      : new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)|${escaped}`, "i");
+    if (pattern.test(title)) return true;
+  }
+  return false;
+}
+
+export function getSizeMatchBoost(title: string, sizes: string[] | undefined): number {
+  if (!sizes?.length) return 0;
+  return titleMatchesUserSize(title, sizes) ? 15 : 0;
+}
+
 // ---------------------------------------------------------------------------
 // Parse Vision1 (n8n "Code" node)
 // ---------------------------------------------------------------------------
@@ -178,6 +198,7 @@ const collarCategories = ["t-shirt", "tshirt", "shirt", "polo", "hoodie", "sweat
 const detailCategories = ["t-shirt", "tshirt", "shirt", "hoodie", "sweatshirt", "jacket", "bomber jacket", "sweater"];
 
 interface VisionProduct {
+  label?: string;
   category?: string;
   colors?: string[];
   fit?: string;
@@ -188,15 +209,7 @@ interface VisionProduct {
   gender?: string;
 }
 
-export function parseVision(visionContent: string, ctx: RequestContext): ProductProfile {
-  const clean = visionContent.replace(/```json|```/g, "").trim();
-  let product: VisionProduct;
-  try {
-    product = JSON.parse(clean);
-  } catch {
-    throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
-  }
-
+function visionProductToProfile(product: VisionProduct, ctx: RequestContext): ProductProfile {
   const rawColor = (product.colors || [])[0] || "";
   const rawCategory = (product.category || "").toLowerCase();
   const rawCollar = (product.collar || "").toLowerCase();
@@ -252,6 +265,46 @@ export function parseVision(visionContent: string, ctx: RequestContext): Product
   };
 }
 
+export interface VisionPiece {
+  label: string;
+  profile: ProductProfile;
+}
+
+const MAX_OUTFIT_PIECES = 4;
+
+export function parseVisionOutfit(visionContent: string, ctx: RequestContext): VisionPiece[] {
+  const clean = visionContent.replace(/```json|```/g, "").trim();
+  let parsed: { items?: VisionProduct[] } & VisionProduct;
+  try {
+    parsed = JSON.parse(clean);
+  } catch {
+    throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
+  }
+
+  let items: VisionProduct[];
+  if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+    items = parsed.items.slice(0, MAX_OUTFIT_PIECES);
+  } else if (parsed.category) {
+    items = [parsed];
+  } else {
+    throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
+  }
+
+  return items.map((item) => {
+    const profile = visionProductToProfile(item, ctx);
+    const label =
+      item.label?.trim() ||
+      profile.category_tr ||
+      item.category ||
+      "Parça";
+    return { label, profile };
+  });
+}
+
+export function parseVision(visionContent: string, ctx: RequestContext): ProductProfile {
+  return parseVisionOutfit(visionContent, ctx)[0].profile;
+}
+
 // ---------------------------------------------------------------------------
 // Scoring Engine
 // ---------------------------------------------------------------------------
@@ -279,10 +332,18 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
   return typeof item.extracted_price === "number" && item.extracted_price > 0;
 }
 
-/** Most specific → broadest; deduplicated. */
+/** Most specific → broadest; deduplicated. Optional size prepended as extra candidate only. */
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
   const { gender_tr, color_tr, category_tr, search_query, fallback_query } = productProfile;
+  const sizes = productProfile.user_profile?.sizes || [];
+  const firstSize = sizes[0];
+
+  const sizeQuery = firstSize
+    ? [search_query, firstSize].filter(Boolean).join(" ").trim()
+    : "";
+
   const candidates = [
+    sizeQuery,
     search_query,
     fallback_query,
     [gender_tr, category_tr].filter(Boolean).join(" "),
@@ -321,6 +382,7 @@ function scoreShoppingItems(
     if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
     if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 10;
     if (styleWords.some((w) => title.includes(w))) matchScore += 15;
+    matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     matchScore = Math.min(matchScore, 100);
 
     let forYouScore = 0;

@@ -42,7 +42,7 @@ export default function PrivacyPage() {
               adresi ve şifre (Supabase Auth ile saklanır).
             </li>
             <li>
-              <strong className="text-foreground">Profil tercihleri:</strong> Boy, kilo, cinsiyet ve tarz
+              <strong className="text-foreground">Profil tercihleri:</strong> Beden, cinsiyet ve tarz
               seçimlerin (uygulama deneyimini kişiselleştirmek için).
             </li>
             <li>

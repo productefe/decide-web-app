@@ -4,18 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
 import { createClient } from "@/utils/supabase/client";
-import { inputClass } from "@/lib/input-styles";
 import {
   GENDER_OPTIONS,
   PREFERENCE_OPTIONS,
+  SIZE_OPTIONS,
   type UserGender,
+  type UserSize,
 } from "@/lib/preferences";
 
 type Props = {
   userId: string;
 };
 
-const STEPS = ["Boy", "Kilo", "Cinsiyet", "Tarz"];
+const STEPS = ["Beden", "Cinsiyet", "Tarz"];
 
 function StepIndicator({ step }: { step: number }) {
   const progress = ((step + 1) / STEPS.length) * 100;
@@ -37,13 +38,16 @@ function StepIndicator({ step }: { step: number }) {
   );
 }
 
+function toggleSize(selected: UserSize[], size: UserSize): UserSize[] {
+  return selected.includes(size) ? selected.filter((s) => s !== size) : [...selected, size];
+}
+
 export default function OnboardingModal({ userId }: Props) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
 
-  const [height, setHeight] = useState("");
-  const [weight, setWeight] = useState("");
+  const [sizes, setSizes] = useState<UserSize[]>([]);
   const [gender, setGender] = useState<UserGender | "">("");
   const [style, setStyle] = useState("");
 
@@ -53,15 +57,11 @@ export default function OnboardingModal({ userId }: Props) {
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
-    if (step === 0 && !height) {
-      setError("Boyunu yazmayı unutma.");
+    if (step === 0 && sizes.length === 0) {
+      setError("En az bir beden seç.");
       return;
     }
-    if (step === 1 && !weight) {
-      setError("Kilonu yazmayı unutma.");
-      return;
-    }
-    if (step === 2 && !gender) {
+    if (step === 1 && !gender) {
       setError("Cinsiyet seçmeyi unutma.");
       return;
     }
@@ -84,8 +84,7 @@ export default function OnboardingModal({ userId }: Props) {
 
     const { error: dbError } = await supabase.from("user_preferences").upsert({
       id: userId,
-      height,
-      weight,
+      sizes,
       gender,
       preferences: [style],
     });
@@ -112,11 +111,8 @@ export default function OnboardingModal({ userId }: Props) {
 
         <div className="mb-6 text-center">
           <h2 className="text-2xl font-semibold text-foreground mb-2">
-            Sana özel öneriler için 4 kısa soru
+            Sana özel öneriler için 3 kısa soru
           </h2>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Bir dakikadan kısa sürer, sonra aramaya hazırsın.
-          </p>
         </div>
 
         {error && (
@@ -127,19 +123,27 @@ export default function OnboardingModal({ userId }: Props) {
 
         {step === 0 && (
           <form onSubmit={handleNext} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="height" className="text-sm font-medium text-center text-foreground">
-                Boyun kaç cm?
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-medium text-center text-foreground">
+                Hangi bedenlerde ürün görmek istersin?
               </label>
-              <input
-                id="height"
-                type="number"
-                placeholder="Örn: 180"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                className={inputClass + " text-center"}
-                autoFocus
-              />
+              <p className="text-xs text-muted-foreground text-center">Birden fazla seçebilirsin.</p>
+              <div className="flex flex-wrap gap-2 justify-center mt-1">
+                {SIZE_OPTIONS.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setSizes((prev) => toggleSize(prev, size))}
+                    className={`min-h-[44px] min-w-[52px] px-3 py-2 text-sm rounded-xl border transition-all ${
+                      sizes.includes(size)
+                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
+                        : "bg-muted text-foreground border-border hover:border-accent/50"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
             </div>
             <Button type="submit" size="full">
               Devam et
@@ -148,33 +152,6 @@ export default function OnboardingModal({ userId }: Props) {
         )}
 
         {step === 1 && (
-          <form onSubmit={handleNext} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="weight" className="text-sm font-medium text-center text-foreground">
-                Kilon kaç kg?
-              </label>
-              <input
-                id="weight"
-                type="number"
-                placeholder="Örn: 75"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                className={inputClass + " text-center"}
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1" size="full">
-                Geri
-              </Button>
-              <Button type="submit" className="flex-1" size="full">
-                Devam et
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {step === 2 && (
           <form onSubmit={handleNext} className="flex flex-col gap-5">
             <div className="flex flex-col gap-3">
               <label className="text-sm font-medium text-center text-foreground">Cinsiyet</label>
@@ -196,7 +173,7 @@ export default function OnboardingModal({ userId }: Props) {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setStep(1)} className="flex-1" size="full">
+              <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1" size="full">
                 Geri
               </Button>
               <Button type="submit" className="flex-1" size="full">
@@ -206,7 +183,7 @@ export default function OnboardingModal({ userId }: Props) {
           </form>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-3">
               <label className="text-sm font-medium text-center text-foreground">Tarzın nasıl?</label>
@@ -235,7 +212,7 @@ export default function OnboardingModal({ userId }: Props) {
                 type="button"
                 disabled={loading}
                 variant="outline"
-                onClick={() => setStep(2)}
+                onClick={() => setStep(1)}
                 className="flex-1"
                 size="full"
               >

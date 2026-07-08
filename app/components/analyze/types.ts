@@ -17,6 +17,15 @@ export interface Results {
   style: Product | null;
 }
 
+export interface PieceResult {
+  label: string;
+  category_tr: string;
+  results: Results;
+}
+
+/** Stored in search_history — supports legacy flat Results or outfit pieces. */
+export type StoredResults = Results | { pieces: PieceResult[] };
+
 export const SLOT_LABELS: Record<string, string> = {
   recommended: "Önerilen",
   cheaper: "Daha uygun",
@@ -27,4 +36,14 @@ export function cleanStoreName(source: string): string {
   if (!source) return "Mağaza";
   const first = source.split(/[-–]/)[0].trim();
   return first.length > 20 ? first.slice(0, 20) + "…" : first;
+}
+
+export function isOutfitResults(stored: StoredResults | null): stored is { pieces: PieceResult[] } {
+  return Boolean(stored && "pieces" in stored && Array.isArray(stored.pieces));
+}
+
+export function normalizeToPieces(stored: StoredResults | null): PieceResult[] {
+  if (!stored) return [];
+  if (isOutfitResults(stored)) return stored.pieces;
+  return [{ label: "Parça", category_tr: "", results: stored }];
 }

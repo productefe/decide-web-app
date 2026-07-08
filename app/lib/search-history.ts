@@ -1,23 +1,28 @@
-import type { Results } from "@/components/analyze/types";
+import type { StoredResults, PieceResult } from "@/components/analyze/types";
+import { normalizeToPieces, isOutfitResults } from "@/components/analyze/types";
 import { SLOT_LABELS } from "@/components/analyze/types";
 
 export type SearchHistoryRow = {
   id: string;
   photo_url: string;
-  results: string | Results | null;
+  results: string | StoredResults | null;
   created_at: string;
 };
 
-export function parseHistoryResults(raw: string | Results | null): Results | null {
+export function parseHistoryResults(raw: string | StoredResults | null): StoredResults | null {
   if (!raw) return null;
   if (typeof raw === "string") {
     try {
-      return JSON.parse(raw) as Results;
+      return JSON.parse(raw) as StoredResults;
     } catch {
       return null;
     }
   }
   return raw;
+}
+
+export function getHistoryPieces(raw: string | StoredResults | null): PieceResult[] {
+  return normalizeToPieces(parseHistoryResults(raw));
 }
 
 export function formatHistoryDate(iso: string): string {
@@ -30,4 +35,4 @@ export function formatHistoryDate(iso: string): string {
   }).format(new Date(iso));
 }
 
-export { SLOT_LABELS };
+export { SLOT_LABELS, isOutfitResults };

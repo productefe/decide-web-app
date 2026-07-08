@@ -12,7 +12,7 @@ export default async function ProfilePage() {
 
   const { data: userPreferences } = await supabase
     .from("user_preferences")
-    .select("id, height, weight, gender, preferences")
+    .select("id, sizes, gender, preferences")
     .eq("id", user.id)
     .single();
 
@@ -22,7 +22,7 @@ export default async function ProfilePage() {
         <p className="text-sm font-medium text-muted-foreground">Hesabın</p>
         <h1 className="text-3xl font-semibold text-foreground mt-1">Profil</h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Boy, kilo, cinsiyet ve tarzını buradan güncelleyebilirsin.
+          Beden, cinsiyet ve tarzını buradan güncelleyebilirsin.
         </p>
       </div>
 
@@ -31,8 +31,7 @@ export default async function ProfilePage() {
           userId={user.id}
           initial={{
             id: user.id,
-            height: userPreferences?.height ?? null,
-            weight: userPreferences?.weight ?? null,
+            sizes: (userPreferences?.sizes as string[] | null) ?? null,
             gender: (userPreferences?.gender as "men" | "women" | null) ?? null,
             preferences: (userPreferences?.preferences as string[] | null) ?? null,
           }}

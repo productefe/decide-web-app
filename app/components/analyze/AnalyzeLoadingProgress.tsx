@@ -121,7 +121,7 @@ export function AnalyzeLoadingProgress({ steps }: Props) {
 }
 
 export const DEFAULT_LOADING_STEPS: Step[] = [
-  { label: "Fotoğrafına bakıyoruz", icon: Eye },
+  { label: "Parçalar bulunuyor", icon: Eye },
   { label: "Mağazaları tarıyoruz", icon: Search },
   { label: "En iyi eşleşmeleri seçiyoruz", icon: Star },
   { label: "Sonuçları hazırlıyoruz", icon: Sparkles },

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Upload, History, UserRound } from "lucide-react";
+import { Upload, History, Heart, UserRound } from "lucide-react";
 
 const TABS = [
   { href: "/workspace", label: "Yükle!", icon: Upload },
   { href: "/history", label: "Geçmiş", icon: History },
+  { href: "/favorites", label: "Beğendiklerin", icon: Heart },
   { href: "/profile", label: "Profil", icon: UserRound },
 ] as const;
 
@@ -38,7 +39,7 @@ export default function AppBottomNav() {
               >
                 <Icon className="size-5" strokeWidth={active ? 2.25 : 2} aria-hidden />
               </span>
-              <span className={`text-[11px] leading-none ${active ? "font-semibold" : "font-medium"}`}>
+              <span className={`text-[10px] leading-none ${active ? "font-semibold" : "font-medium"}`}>
                 {label}
               </span>
             </Link>
