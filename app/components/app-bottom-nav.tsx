@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Upload, History, Heart, UserRound } from "lucide-react";
 
@@ -14,8 +15,13 @@ const TABS = [
 export default function AppBottomNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    TABS.forEach(({ href }) => {
+      router.prefetch(href);
+    });
+  }, [router]);
 
   useEffect(() => {
     if (pendingPath && pathname === pendingPath) {
@@ -24,15 +30,6 @@ export default function AppBottomNav() {
   }, [pathname, pendingPath]);
 
   const activePath = pendingPath ?? pathname;
-
-  const navigate = (href: string) => {
-    if (activePath === href) return;
-
-    setPendingPath(href);
-    startTransition(() => {
-      router.push(href);
-    });
-  };
 
   return (
     <nav
@@ -43,17 +40,21 @@ export default function AppBottomNav() {
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = activePath === href;
           return (
-            <button
+            <Link
               key={href}
-              type="button"
-              onClick={() => navigate(href)}
-              disabled={isPending && pendingPath === href}
+              href={href}
+              prefetch
+              scroll={false}
+              onTouchStart={() => router.prefetch(href)}
+              onClick={() => {
+                if (activePath !== href) setPendingPath(href);
+              }}
               aria-current={active ? "page" : undefined}
               className={`flex flex-1 flex-col items-center justify-center gap-1 min-h-[44px] rounded-xl mx-0.5 transition-all duration-200 animate-press ${
                 active
                   ? "text-secondary"
                   : "text-muted-foreground hover:text-foreground"
-              } ${isPending && pendingPath === href ? "opacity-80" : ""}`}
+              } ${pendingPath === href && pathname !== href ? "opacity-80" : ""}`}
             >
               <span
                 className={`flex size-9 items-center justify-center rounded-xl transition-all duration-150 ${
@@ -65,7 +66,7 @@ export default function AppBottomNav() {
               <span className={`text-[10px] leading-none ${active ? "font-semibold" : "font-medium"}`}>
                 {label}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>
