@@ -1,5 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecideLogo } from "@/components/decide-logo";
@@ -97,57 +98,60 @@ export default function AnalyzeModal({
         </p>
       </div>
 
-      {open ? (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            aria-label="Kapat"
-            className="absolute inset-0 touch-none bg-black/60 backdrop-blur-sm"
-            onClick={stage !== "loading" ? close : undefined}
-          />
-          <div
-            className={`fixed bottom-0 inset-x-0 z-10 mx-auto w-full max-w-2xl rounded-t-2xl border-t border-border bg-card shadow-xl animate-fade-in-up ${
-              stage === "result" ? "flex max-h-[100dvh] flex-col overflow-hidden" : ""
-            }`}
-            style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-          >
-            <div className="mx-auto mb-4 mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
+      {open && mounted
+        ? createPortal(
+            <div className="fixed inset-0 z-[100]">
+              <button
+                type="button"
+                aria-label="Kapat"
+                className="absolute inset-0 touch-none bg-black/60 backdrop-blur-sm"
+                onClick={stage !== "loading" ? close : undefined}
+              />
+              <div
+                className={`fixed bottom-0 inset-x-0 z-10 mx-auto w-full max-w-2xl rounded-t-2xl border-t border-border bg-card shadow-xl animate-fade-in-up ${
+                  stage === "result" ? "flex max-h-[92dvh] flex-col overflow-hidden" : ""
+                }`}
+                style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+              >
+                <div className="mx-auto mb-4 mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
 
-            {stage === "loading" ? (
-              <div className="px-6 pb-4">
-                <AnalyzeLoadingProgress steps={DEFAULT_LOADING_STEPS} />
-              </div>
-            ) : null}
+                {stage === "loading" ? (
+                  <div className="px-6 pb-4">
+                    <AnalyzeLoadingProgress steps={DEFAULT_LOADING_STEPS} />
+                  </div>
+                ) : null}
 
-            {stage === "error" ? (
-              <div className="mx-auto flex w-full max-w-sm flex-col items-start gap-4 px-6 pb-4 py-2">
-                <h2 className="text-xl font-semibold text-foreground">Sonuç bulamadık</h2>
-                <p className="text-sm text-muted-foreground">
-                  {error || "Net, iyi aydınlatılmış bir ürün fotoğrafıyla tekrar dene."}
-                </p>
-                <Button variant="default" onClick={analyzeAnother} className="min-h-[48px]">
-                  Tekrar dene
-                </Button>
-              </div>
-            ) : null}
+                {stage === "error" ? (
+                  <div className="mx-auto flex w-full max-w-sm flex-col items-start gap-4 px-6 pb-4 py-2">
+                    <h2 className="text-xl font-semibold text-foreground">Sonuç bulamadık</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {error || "Net, iyi aydınlatılmış bir ürün fotoğrafıyla tekrar dene."}
+                    </p>
+                    <Button variant="default" onClick={analyzeAnother} className="min-h-[48px]">
+                      Tekrar dene
+                    </Button>
+                  </div>
+                ) : null}
 
-            {stage === "result" && pieces ? (
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-4">
-                <ResultList
-                  pieces={pieces}
-                  preview={preview}
-                  userId={userId}
-                  guestMode={guestMode}
-                  onSignup={onSignup}
-                  reasonsLoading={reasonsLoading}
-                  close={close}
-                  analyzeAnother={guestMode ? close : analyzeAnother}
-                />
+                {stage === "result" && pieces ? (
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-4">
+                    <ResultList
+                      pieces={pieces}
+                      preview={preview}
+                      userId={userId}
+                      guestMode={guestMode}
+                      onSignup={onSignup}
+                      reasonsLoading={reasonsLoading}
+                      close={close}
+                      analyzeAnother={guestMode ? close : analyzeAnother}
+                    />
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }

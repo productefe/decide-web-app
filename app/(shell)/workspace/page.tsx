@@ -43,7 +43,7 @@ export default async function WorkspacePage() {
 
       <section
         aria-label="Karar alanı"
-        className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] top-[calc(3.5rem+env(safe-area-inset-top))] z-0 mx-auto flex w-full max-w-lg flex-col px-5"
+        className="flex min-h-[calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col"
       >
         <header className="shrink-0">
           <h1 className="text-3xl font-semibold leading-tight text-foreground">
