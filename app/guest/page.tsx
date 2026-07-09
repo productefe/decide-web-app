@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { isAnonymousUser } from "@/lib/auth-user";
 import { isPreferencesComplete } from "@/lib/preferences";
 import OnboardingModal from "@/components/onboarding-modal";
 import AnalyzeModal from "@/components/analyze/AnalyzeModal";
 import SignUpModal from "@/components/signup-modal";
+import { UploadScreenLayout } from "@/components/upload-screen-layout";
 import { Button } from "@/components/ui/button";
 import { isGuestAnalysisUsed } from "@/lib/guest";
 
@@ -62,73 +62,72 @@ export default function GuestPage() {
   }, [router]);
 
   if (loading || !userId) {
-    return <p className="text-muted-foreground text-sm py-8">Hazırlanıyor...</p>;
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">Hazırlanıyor...</p>
+      </div>
+    );
   }
 
   return (
     <>
-      {needsOnboarding && (
+      {needsOnboarding ? (
         <OnboardingModal
           userId={userId}
           redirectPath="/guest"
           onComplete={() => setNeedsOnboarding(false)}
         />
-      )}
+      ) : null}
 
-      <section aria-label="Misafir modu">
-        <p className="inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-sm font-semibold text-secondary shadow-sm">
-          Misafir modu
-        </p>
-
-        <h1 className="mt-5 text-3xl font-semibold text-foreground leading-tight">
-          İlk aramanı dene
-        </h1>
-        <p className="mt-3 text-base text-muted-foreground leading-relaxed">
-          Fotoğrafını yükle, sana en uygun üç alternatifi bulalım.
-        </p>
-
-        <div className="mt-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm text-foreground leading-relaxed">
-          <p>
-            Bu misafir modudur: analiz geçmişi inceleme, ürün beğenme, profil değiştirme gibi özellikler için şimdi kayıt olun.
+      <UploadScreenLayout
+        badge={
+          <p className="inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-3 py-1 text-xs font-semibold text-secondary shadow-sm">
+            Misafir modu
           </p>
-          <Button size="full" className="mt-3 min-h-[44px]" onClick={() => setShowSignup(true)}>
-            Kayıt ol
-          </Button>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-secondary/20 bg-card/90 p-5 shadow-sm ring-1 ring-secondary/10">
-          <div className="flex items-center gap-2 mb-5 pb-4 border-b border-border">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
-              <Upload className="size-4" aria-hidden />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Fotoğraf yükle</p>
-              <p className="text-xs text-muted-foreground">Tek fotoğraf yeter</p>
-            </div>
+        }
+        title={
+          <h1 className="mt-3 text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+            İlk aramanı dene
+          </h1>
+        }
+        description="Fotoğrafını yükle, sana en uygun üç alternatifi bulalım."
+        notice={
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-xs leading-relaxed text-foreground sm:text-sm">
+            <p>
+              Misafir modu: geçmiş, beğeni ve profil için{" "}
+              <button
+                type="button"
+                className="font-semibold text-secondary underline underline-offset-2"
+                onClick={() => setShowSignup(true)}
+              >
+                kayıt ol
+              </button>
+              .
+            </p>
           </div>
-
-          {analysisUsed ? (
-            <div className="rounded-xl border border-border bg-muted/40 p-4 text-center">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Misafir analiz hakkını kullandın. Sonuçlarını kaydetmek ve daha fazla arama yapmak için üye ol.
-              </p>
-              <Button size="full" className="mt-4 min-h-[44px]" onClick={() => setShowSignup(true)}>
-                Kayıt ol
-              </Button>
-              <Link href="/" className="block mt-3 text-xs text-muted-foreground hover:text-secondary">
-                Ana sayfaya dön
-              </Link>
-            </div>
-          ) : (
-            <AnalyzeModal
-              userId={userId}
-              guestMode
-              onSignup={() => setShowSignup(true)}
-              onAnalysisComplete={() => setAnalysisUsed(true)}
-            />
-          )}
-        </div>
-      </section>
+        }
+      >
+        {analysisUsed ? (
+          <div className="rounded-xl border border-border bg-muted/40 p-4 text-center">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Misafir analiz hakkını kullandın. Sonuçlarını kaydetmek için üye ol.
+            </p>
+            <Button size="full" className="mt-3 min-h-[44px]" onClick={() => setShowSignup(true)}>
+              Kayıt ol
+            </Button>
+            <Link href="/" className="mt-2 block text-xs text-muted-foreground hover:text-secondary">
+              Ana sayfaya dön
+            </Link>
+          </div>
+        ) : (
+          <AnalyzeModal
+            userId={userId}
+            guestMode
+            onSignup={() => setShowSignup(true)}
+            onAnalysisComplete={() => setAnalysisUsed(true)}
+          />
+        )}
+      </UploadScreenLayout>
 
       <SignUpModal
         open={showSignup}

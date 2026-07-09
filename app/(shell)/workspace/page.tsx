@@ -1,8 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
 import AnalyzeModal from "@/components/analyze/AnalyzeModal";
 import OnboardingModal from "@/components/onboarding-modal";
+import { UploadScreenLayout } from "@/components/upload-screen-layout";
 import { isPreferencesComplete } from "@/lib/preferences";
-import { Upload } from "lucide-react";
 
 export default async function WorkspacePage() {
   const supabase = await createClient();
@@ -39,31 +39,19 @@ export default async function WorkspacePage() {
     "sen";
 
   return (
-    <div className="relative overflow-x-hidden">
-      {needsOnboarding && <OnboardingModal userId={user.id} />}
+    <>
+      {needsOnboarding ? <OnboardingModal userId={user.id} /> : null}
 
-      <section aria-label="Karar alanı" className="relative animate-fade-in-up">
-        <h1 className="text-3xl font-semibold leading-tight text-foreground">
-          Selam,{" "}
-          <span className="text-secondary">{firstName}</span>
-        </h1>
-        <p className="mt-3 text-base text-muted-foreground leading-relaxed">
-          Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım.
-        </p>
-
-        <div className="mt-6 rounded-2xl border border-secondary/20 bg-card/90 p-5 shadow-sm ring-1 ring-secondary/10">
-          <div className="flex items-center gap-2 mb-5 pb-4 border-b border-border">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
-              <Upload className="size-4" aria-hidden />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Fotoğraf yükle</p>
-              <p className="text-xs text-muted-foreground">Tek fotoğraf yeter</p>
-            </div>
-          </div>
-          <AnalyzeModal userId={user.id} />
-        </div>
-      </section>
-    </div>
+      <UploadScreenLayout
+        title={
+          <h1 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+            Selam, <span className="text-secondary">{firstName}</span>
+          </h1>
+        }
+        description="Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım."
+      >
+        <AnalyzeModal userId={user.id} />
+      </UploadScreenLayout>
+    </>
   );
 }

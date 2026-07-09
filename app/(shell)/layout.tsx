@@ -23,10 +23,10 @@ export default async function AppShellLayout({
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto w-full">
-      <main className="flex-1 px-5 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
-        <DecideLogo className="h-6 w-auto mb-4" />
-        {children}
+    <div className="mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain px-5 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(4.25rem+env(safe-area-inset-bottom))]">
+        <DecideLogo className="mb-3 h-6 w-auto shrink-0" />
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       </main>
       <AppBottomNav />
     </div>

@@ -112,11 +112,12 @@ export function useAnalyze(
     const validationError = validateImageFile(file);
     if (validationError) {
       setError(validationError);
-      setStage("error");
-      setOpen(true);
+      setStage("idle");
+      setOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
+    setError(null);
     setSelectedFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target?.result as string);
@@ -129,10 +130,11 @@ export function useAnalyze(
       const validationError = validateImageFile(native.file);
       if (validationError) {
         setError(validationError);
-        setStage("error");
-        setOpen(true);
+        setStage("idle");
+        setOpen(false);
         return;
       }
+      setError(null);
       setSelectedFile(native.file);
       setPreview(native.preview);
       return;
@@ -145,9 +147,9 @@ export function useAnalyze(
 
     const validationError = validateImageFile(selectedFile);
     if (validationError) {
-      setOpen(true);
       setError(validationError);
-      setStage("error");
+      setStage("idle");
+      setOpen(false);
       return;
     }
 

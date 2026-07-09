@@ -35,22 +35,18 @@ export function AnalyzeLoadingProgress({ steps }: Props) {
   const dashOffset = circumference * (1 - progress);
 
   return (
-    <div className="relative w-full max-w-sm mx-auto text-center py-2">
+    <div className="relative mx-auto w-full max-w-sm py-1 text-center">
       <div
-        className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 h-32 w-32 rounded-full bg-secondary/15 blur-3xl"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute top-24 -right-2 h-20 w-20 rounded-full bg-accent/10 blur-2xl"
+        className="pointer-events-none absolute -top-2 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full bg-secondary/15 blur-3xl"
         aria-hidden
       />
 
-      <p className="relative inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-xs font-semibold text-secondary shadow-sm mb-5">
-        <span className="size-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
+      <p className="relative mb-4 inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-xs font-semibold text-secondary shadow-sm">
+        <span className="size-1.5 animate-pulse rounded-full bg-secondary" aria-hidden />
         Analiz sürüyor
       </p>
 
-      <div className="relative mx-auto mb-5 size-[4.5rem]" aria-hidden>
+      <div className="relative mx-auto mb-4 size-16" aria-hidden>
         <svg width={size} height={size} className="block rotate-[-90deg] mx-auto">
           <circle
             cx={size / 2}
@@ -81,17 +77,17 @@ export function AnalyzeLoadingProgress({ steps }: Props) {
         </span>
       </div>
 
-      <h2 className="relative text-xl font-semibold text-foreground">Bakıyoruz...</h2>
-      <p className="relative text-sm text-muted-foreground mt-1">Bu birkaç saniye sürebilir</p>
+      <h2 className="relative text-lg font-semibold text-foreground sm:text-xl">Bakıyoruz...</h2>
+      <p className="relative mt-1 text-sm text-muted-foreground">Bu birkaç saniye sürebilir</p>
 
-      <div className="relative grid gap-2 mt-6 text-left">
+      <div className="relative mt-4 grid gap-1.5 text-left">
         {steps.map(({ label, icon: Icon }, i) => {
           const done = i < completedCount;
           const active = i === completedCount && !isComplete;
           return (
             <div
               key={label}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm transition-all duration-500 ${
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-all duration-500 ${
                 done
                   ? "bg-secondary/15 border-secondary/40 text-secondary font-medium shadow-sm"
                   : active
