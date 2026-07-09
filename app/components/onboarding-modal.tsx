@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
@@ -22,17 +23,20 @@ type Props = {
 
 const STEPS = ["Beden", "Cinsiyet", "Tarz"];
 
+const useIsMounted = () =>
+  useSyncExternalStore(() => () => {}, () => true, () => false);
+
 function StepIndicator({ step }: { step: number }) {
   const progress = ((step + 1) / STEPS.length) * 100;
   return (
-    <div className="mb-6">
-      <div className="flex justify-between text-xs font-medium text-muted-foreground mb-2">
+    <div className="mb-6 shrink-0">
+      <div className="mb-2 flex justify-between text-xs font-medium text-muted-foreground">
         <span>
           Adım {step + 1} / {STEPS.length}
         </span>
         <span>{STEPS[step]}</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-secondary transition-all duration-300"
           style={{ width: `${progress}%` }}
@@ -58,6 +62,7 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const mounted = useIsMounted();
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,82 +117,89 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
 
   useBodyScrollLock(open);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in sm:items-center sm:p-4">
-      <div
-        className="w-full max-h-[92dvh] overflow-y-auto overscroll-contain animate-fade-in-up rounded-t-2xl border border-border border-b-0 bg-card p-6 pt-5 shadow-xl sm:max-w-sm sm:rounded-2xl sm:border-b md:p-8"
-        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
-      >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden />
-
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-card animate-fade-in"
+      style={{
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+      }}
+    >
+      <div className="mx-auto flex h-full w-full max-w-lg flex-col px-5">
         <StepIndicator step={step} />
 
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl font-semibold text-foreground mb-2">
+        <div className="mb-6 shrink-0 text-center">
+          <h2 className="text-2xl font-semibold text-foreground">
             Sana özel öneriler için 3 kısa soru
           </h2>
         </div>
 
         {error && (
-          <div className="bg-destructive/15 text-destructive text-sm px-4 py-3 rounded-xl mb-4 border border-destructive/25">
+          <div className="mb-4 shrink-0 rounded-xl border border-destructive/25 bg-destructive/15 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
         {step === 0 && (
-          <form onSubmit={handleNext} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-3">
-              <label className="text-sm font-medium text-center text-foreground">
-                Hangi bedenlerde ürün görmek istersin?
-              </label>
-              <p className="text-xs text-muted-foreground text-center">Birden fazla seçebilirsin.</p>
-              <div className="flex flex-wrap gap-2 justify-center mt-1">
-                {SIZE_OPTIONS.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => setSizes((prev) => toggleSize(prev, size))}
-                    className={`min-h-[44px] min-w-[52px] px-3 py-2 text-sm rounded-xl border transition-all ${
-                      sizes.includes(size)
-                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
-                        : "bg-muted text-foreground border-border hover:border-accent/50"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+          <form onSubmit={handleNext} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col justify-center gap-5 overflow-y-auto overscroll-contain">
+              <div className="flex flex-col gap-3">
+                <label className="text-center text-sm font-medium text-foreground">
+                  Hangi bedenlerde ürün görmek istersin?
+                </label>
+                <p className="text-center text-xs text-muted-foreground">Birden fazla seçebilirsin.</p>
+                <div className="mt-1 flex flex-wrap justify-center gap-2">
+                  {SIZE_OPTIONS.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setSizes((prev) => toggleSize(prev, size))}
+                      className={`min-h-[44px] min-w-[52px] rounded-xl border px-3 py-2 text-sm transition-all ${
+                        sizes.includes(size)
+                          ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
+                          : "border-border bg-muted text-foreground hover:border-accent/50"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <Button type="submit" size="full">
-              Devam et
-            </Button>
+            <div className="shrink-0 pt-4">
+              <Button type="submit" size="full">
+                Devam et
+              </Button>
+            </div>
           </form>
         )}
 
         {step === 1 && (
-          <form onSubmit={handleNext} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-3">
-              <label className="text-sm font-medium text-center text-foreground">Cinsiyet</label>
-              <div className="flex gap-2">
-                {GENDER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setGender(opt.value)}
-                    className={`flex-1 min-h-[48px] rounded-xl border text-sm font-medium transition-all ${
-                      gender === opt.value
-                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
-                        : "bg-muted text-foreground border-border hover:border-accent/50"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+          <form onSubmit={handleNext} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col justify-center gap-5 overflow-y-auto overscroll-contain">
+              <div className="flex flex-col gap-3">
+                <label className="text-center text-sm font-medium text-foreground">Cinsiyet</label>
+                <div className="flex gap-2">
+                  {GENDER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setGender(opt.value)}
+                      className={`min-h-[48px] flex-1 rounded-xl border text-sm font-medium transition-all ${
+                        gender === opt.value
+                          ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
+                          : "border-border bg-muted text-foreground hover:border-accent/50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1" size="full">
                 Geri
               </Button>
@@ -199,30 +211,32 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
         )}
 
         {step === 2 && (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-3">
-              <label className="text-sm font-medium text-center text-foreground">Tarzın nasıl?</label>
-              <p className="text-xs text-muted-foreground text-center">Bir tane seç.</p>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col justify-center gap-5 overflow-y-auto overscroll-contain">
+              <div className="flex flex-col gap-3">
+                <label className="text-center text-sm font-medium text-foreground">Tarzın nasıl?</label>
+                <p className="text-center text-xs text-muted-foreground">Bir tane seç.</p>
 
-              <div className="flex flex-wrap gap-2 justify-center mt-1">
-                {PREFERENCE_OPTIONS.map((pref) => (
-                  <button
-                    key={pref}
-                    type="button"
-                    onClick={() => setStyle(pref)}
-                    className={`min-h-[44px] px-3 py-2 text-sm rounded-xl border transition-all ${
-                      style === pref
-                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
-                        : "bg-muted text-foreground border-border hover:border-accent/50"
-                    }`}
-                  >
-                    {pref}
-                  </button>
-                ))}
+                <div className="mt-1 flex flex-wrap justify-center gap-2">
+                  {PREFERENCE_OPTIONS.map((pref) => (
+                    <button
+                      key={pref}
+                      type="button"
+                      onClick={() => setStyle(pref)}
+                      className={`min-h-[44px] rounded-xl border px-3 py-2 text-sm transition-all ${
+                        style === pref
+                          ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
+                          : "border-border bg-muted text-foreground hover:border-accent/50"
+                      }`}
+                    >
+                      {pref}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-border">
+            <div className="flex shrink-0 gap-2 border-t border-border pt-4">
               <Button
                 type="button"
                 disabled={loading}
@@ -240,6 +254,7 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
