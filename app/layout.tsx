@@ -34,9 +34,7 @@ export default function RootLayout({
     <html lang="tr" className={`h-full ${GeistSans.variable}`}>
       <body className={`min-h-full flex flex-col safe-area-padding ${GeistSans.className}`}>
         <CapacitorInit />
-        <div id="app-root" className="flex min-h-full flex-1 flex-col">
-          {children}
-        </div>
+        {children}
       </body>
     </html>
   );
