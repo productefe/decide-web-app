@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { DecideLogo } from "@/components/decide-logo";
 
 export const metadata: Metadata = {
   title: "Gizlilik Politikası · DECIDE",
@@ -19,8 +20,8 @@ export default function PrivacyPage() {
       </Link>
 
       <header className="mt-8 mb-8">
-        <p className="text-sm text-muted-foreground">DECIDE</p>
-        <h1 className="mt-1 text-3xl font-semibold text-foreground">Gizlilik Politikası</h1>
+        <DecideLogo className="h-6 w-auto" />
+        <h1 className="mt-3 text-3xl font-semibold text-foreground">Gizlilik Politikası</h1>
         <p className="mt-2 text-sm text-muted-foreground">Son güncelleme: {LAST_UPDATED}</p>
       </header>
 

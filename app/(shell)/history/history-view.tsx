@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ExternalLink, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SavedProductHeart } from "@/components/saved-product-heart";
 import { cleanStoreName } from "@/components/analyze/types";
 import {
   formatHistoryDate,
@@ -13,9 +14,11 @@ import {
 function HistoryPieceBlock({
   label,
   results,
+  userId,
 }: {
   label: string;
   results: ReturnType<typeof getHistoryPieces>[0]["results"];
+  userId: string;
 }) {
   const slots = [
     { key: "recommended" as const, product: results.recommended },
@@ -39,9 +42,27 @@ function HistoryPieceBlock({
               />
             )}
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold text-secondary">
-                {SLOT_LABELS[key]}
-              </span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[11px] font-semibold text-secondary">
+                  {SLOT_LABELS[key]}
+                </span>
+                {product.link && (
+                  <SavedProductHeart
+                    userId={userId}
+                    product={{
+                      title: product.title,
+                      price: product.price,
+                      source: product.source,
+                      image: product.image,
+                      link: product.link,
+                      store: product.store,
+                      piece_label: label,
+                      slot: key,
+                    }}
+                    className="size-9"
+                  />
+                )}
+              </div>
               <p className="text-sm text-foreground line-clamp-2 leading-snug mt-0.5">
                 {product.title}
               </p>
@@ -63,8 +84,10 @@ function HistoryPieceBlock({
 }
 
 export default function HistoryPage({
+  userId,
   items,
 }: {
+  userId: string;
   items: SearchHistoryRow[];
 }) {
   if (items.length === 0) {
@@ -87,8 +110,7 @@ export default function HistoryPage({
   return (
     <section aria-label="Geçmiş aramalar">
       <div className="mb-6">
-        <p className="text-sm font-medium text-muted-foreground">Arşivin</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">Geçmiş aramalar</h1>
+        <h1 className="text-3xl font-semibold text-foreground">Geçmiş aramalar</h1>
         <p className="text-sm text-muted-foreground mt-2">
           {items.length} arama kaydı
         </p>
@@ -132,6 +154,7 @@ export default function HistoryPage({
                       key={`${piece.label}-${i}`}
                       label={piece.label}
                       results={piece.results}
+                      userId={userId}
                     />
                   ))}
                 </div>

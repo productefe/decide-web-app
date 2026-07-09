@@ -52,12 +52,7 @@ export default async function WorkspacePage() {
       {needsOnboarding && <OnboardingModal userId={user.id} />}
 
       <section aria-label="Karar alanı" className="relative">
-        <p className="inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-sm font-semibold text-secondary shadow-sm">
-          <span className="size-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
-          Karar alanın
-        </p>
-
-        <h1 className="mt-5 text-3xl font-semibold leading-tight text-foreground">
+        <h1 className="text-3xl font-semibold leading-tight text-foreground">
           Selam,{" "}
           <span className="text-secondary underline decoration-secondary/30 decoration-[3px] underline-offset-[5px]">
             {firstName}

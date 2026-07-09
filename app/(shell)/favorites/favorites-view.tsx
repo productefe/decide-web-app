@@ -83,8 +83,7 @@ export default function FavoritesView({ userId }: { userId: string }) {
   return (
     <section aria-label="Beğendiklerin">
       <div className="mb-6">
-        <p className="text-sm font-medium text-muted-foreground">Kaydettiklerin</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">Beğendiklerin</h1>
+        <h1 className="text-3xl font-semibold text-foreground">Beğendiklerin</h1>
         <p className="text-sm text-muted-foreground mt-2">{items.length} ürün</p>
       </div>
 

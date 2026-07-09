@@ -19,8 +19,7 @@ export default async function ProfilePage() {
   return (
     <section aria-label="Profil">
       <div className="mb-6">
-        <p className="text-sm font-medium text-muted-foreground">Hesabın</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">Profil</h1>
+        <h1 className="text-3xl font-semibold text-foreground">Profil</h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
           Beden, cinsiyet ve tarzını buradan güncelleyebilirsin.
         </p>

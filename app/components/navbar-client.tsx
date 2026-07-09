@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import SignUpModal from "./signup-modal";
 import SignInModal from "./signin-modal";
 import { Button } from "./ui/button";
+import { DecideLogo } from "./decide-logo";
 
 function displayName(email: string): string {
   return email.split("@")[0] || email;
@@ -36,10 +37,9 @@ export default function NavbarClient({ userEmail }: Props) {
           <button
             onClick={() => router.push(userEmail ? "/workspace" : "/")}
             aria-label="Ana sayfaya git"
-            className="flex items-center gap-2 bg-transparent border-0 cursor-pointer p-0"
+            className="flex items-center bg-transparent border-0 cursor-pointer p-0"
           >
-            <span className="size-2 rounded-full bg-secondary shrink-0" aria-hidden />
-            <span className="font-semibold text-lg text-secondary tracking-tight">DECIDE</span>
+            <DecideLogo className="h-7 w-auto" />
           </button>
           {userEmail && (
             <Link

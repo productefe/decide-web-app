@@ -1,7 +1,8 @@
 "use client";
 import { useSyncExternalStore } from "react";
-import { ImagePlus, Sparkles } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DecideLogo } from "@/components/decide-logo";
 import { useAnalyze } from "./useAnalyze";
 import { ResultList } from "./ResultList";
 import { AnalyzeLoadingProgress, DEFAULT_LOADING_STEPS } from "./AnalyzeLoadingProgress";
@@ -83,10 +84,10 @@ export default function AnalyzeModal({
           disabled={!selectedFile || stage === "loading"}
           variant="default"
           size="full"
-          className="relative mt-4 min-h-[48px] shadow-sm gap-2"
+          className="relative mt-4 min-h-[48px] shadow-sm"
+          aria-label="Analiz et"
         >
-          <Sparkles className="size-4" aria-hidden />
-          Analiz et
+          <DecideLogo light className="h-5 w-auto mx-auto" />
         </Button>
 
         <p className="relative mt-4 text-xs text-muted-foreground leading-relaxed rounded-xl border border-secondary/20 bg-gradient-to-r from-secondary/5 to-accent/5 px-4 py-3">

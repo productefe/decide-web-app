@@ -4,6 +4,7 @@ import { createClient } from "./utils/supabase/server"
 import { isPermanentUser } from "./lib/auth-user"
 import Link from "next/link"
 import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
+import { DecideLogo } from "./components/decide-logo"
 import "./globals.css"
 
 const STEPS = [
@@ -181,7 +182,7 @@ export default async function Home() {
 
       <footer className="border-t border-border bg-gradient-to-r from-card via-card to-secondary/5 w-full">
         <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span className="font-semibold text-secondary text-lg tracking-tight">DECIDE</span>
+          <DecideLogo className="h-7 w-auto" />
           <div className="flex flex-col sm:items-end gap-1">
             <p className="text-sm sm:text-base font-semibold text-foreground text-center sm:text-right">
               Doğru karar, doğru kıyafet

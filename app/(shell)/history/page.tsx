@@ -17,5 +17,5 @@ export default async function HistoryPage() {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  return <HistoryView items={(rows ?? []) as SearchHistoryRow[]} />;
+  return <HistoryView userId={user.id} items={(rows ?? []) as SearchHistoryRow[]} />;
 }
