@@ -43,14 +43,14 @@ export default async function WorkspacePage() {
 
       <section
         aria-label="Karar alanı"
-        className="relative flex min-h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in-up"
+        className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] top-[calc(3.5rem+env(safe-area-inset-top))] z-0 mx-auto flex w-full max-w-lg flex-col px-5"
       >
         <header className="shrink-0">
           <h1 className="text-3xl font-semibold leading-tight text-foreground">
             Selam, <span className="text-secondary">{firstName}</span>
           </h1>
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-            Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım.
+            Fotoğrafını yükle, sana en uygun üç alternatifi bulalım.
           </p>
         </header>
 
