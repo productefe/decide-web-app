@@ -3,20 +3,26 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ExternalLink, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { cleanStoreName } from "@/components/analyze/types";
 import { formatSavedDate, type SavedProductRow } from "@/lib/saved-products";
 
-export default function FavoritesView({ userId }: { userId: string }) {
-  const pathname = usePathname();
-  const [items, setItems] = useState<SavedProductRow[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function FavoritesView({
+  userId,
+  initialItems,
+}: {
+  userId: string;
+  initialItems: SavedProductRow[];
+}) {
+  const [items, setItems] = useState(initialItems);
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  const refreshItems = useCallback(async () => {
     const supabase = createClient();
     const { data } = await supabase
       .from("saved_products")
@@ -25,18 +31,13 @@ export default function FavoritesView({ userId }: { userId: string }) {
       .order("created_at", { ascending: false })
       .limit(100);
     setItems((data ?? []) as SavedProductRow[]);
-    setLoading(false);
   }, [userId]);
 
   useEffect(() => {
-    void loadItems();
-  }, [loadItems, pathname]);
-
-  useEffect(() => {
-    const onChange = () => void loadItems();
+    const onChange = () => void refreshItems();
     window.addEventListener("decide:saved-product-changed", onChange);
     return () => window.removeEventListener("decide:saved-product-changed", onChange);
-  }, [loadItems]);
+  }, [refreshItems]);
 
   async function remove(id: string) {
     const supabase = createClient();
@@ -48,19 +49,6 @@ export default function FavoritesView({ userId }: { userId: string }) {
     if (!error) {
       setItems((prev) => prev.filter((item) => item.id !== id));
     }
-  }
-
-  if (loading) {
-    return (
-      <section aria-label="Beğendiklerin" className="py-12">
-        <div className="h-8 w-40 bg-muted rounded-lg animate-pulse mb-4" />
-        <div className="flex flex-col gap-4">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-28 rounded-2xl bg-muted animate-pulse" />
-          ))}
-        </div>
-      </section>
-    );
   }
 
   if (items.length === 0) {
