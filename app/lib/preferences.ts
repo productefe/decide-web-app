@@ -8,7 +8,6 @@ export const PREFERENCE_OPTIONS = [
   "Gösterişli & İddialı",
   "Teknoloji Tutkunu",
   "Spor & Egzersiz",
-  "Evcimen",
   "Maceracı & Doğa",
   "Lüks & Kalite",
   "Trend & Moda",

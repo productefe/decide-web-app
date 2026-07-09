@@ -40,23 +40,12 @@ export default async function WorkspacePage() {
 
   return (
     <div className="relative overflow-x-hidden">
-      <div
-        className="pointer-events-none absolute -top-4 -left-8 h-40 w-40 rounded-full bg-secondary/10 blur-3xl"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute top-24 -right-4 h-28 w-28 rounded-full bg-accent/10 blur-3xl"
-        aria-hidden
-      />
-
       {needsOnboarding && <OnboardingModal userId={user.id} />}
 
-      <section aria-label="Karar alanı" className="relative">
+      <section aria-label="Karar alanı" className="relative animate-fade-in-up">
         <h1 className="text-3xl font-semibold leading-tight text-foreground">
           Selam,{" "}
-          <span className="text-secondary underline decoration-secondary/30 decoration-[3px] underline-offset-[5px]">
-            {firstName}
-          </span>
+          <span className="text-secondary">{firstName}</span>
         </h1>
         <p className="mt-3 text-base text-muted-foreground leading-relaxed">
           Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım.

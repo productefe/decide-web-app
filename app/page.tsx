@@ -2,6 +2,7 @@ import Navbar from "./components/Navbar"
 import { LandingActions } from "./components/landing-actions"
 import { createClient } from "./utils/supabase/server"
 import { isPermanentUser } from "./lib/auth-user"
+import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
 import { DecideLogo } from "./components/decide-logo"
@@ -42,6 +43,10 @@ export default async function Home() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (isPermanentUser(user)) {
+    redirect("/workspace");
+  }
 
   return (
     <div className="min-h-screen flex flex-col w-full overflow-x-hidden">

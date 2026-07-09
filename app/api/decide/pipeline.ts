@@ -79,7 +79,6 @@ const STYLE_KEYWORDS: Record<string, string> = {
   "Gösterişli & İddialı": "iddialı şık",
   "Teknoloji Tutkunu": "modern",
   "Spor & Egzersiz": "spor",
-  "Evcimen": "rahat günlük",
   "Maceracı & Doğa": "outdoor",
   "Lüks & Kalite": "premium",
   "Trend & Moda": "trend",

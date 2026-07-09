@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isAnonymousUser } from "@/lib/auth-user";
+import { isAnonymousUser, isPermanentUser } from "@/lib/auth-user";
 
 const SHELL_ROUTES = ["/workspace", "/history", "/favorites", "/profile"];
 
@@ -29,8 +29,15 @@ export async function updateSession(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = req.nextUrl.pathname;
+  const isHome = pathname === "/";
   const isShell = SHELL_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
   const isGuestRoute = pathname === "/guest" || pathname.startsWith("/guest/");
+
+  if (isHome && isPermanentUser(user)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/workspace";
+    return NextResponse.redirect(url);
+  }
 
   if (isShell) {
     if (!user) {

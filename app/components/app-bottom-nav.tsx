@@ -26,7 +26,7 @@ export default function AppBottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-1 flex-col items-center justify-center gap-1 min-h-[44px] rounded-xl mx-0.5 transition-colors ${
+              className={`flex flex-1 flex-col items-center justify-center gap-1 min-h-[44px] rounded-xl mx-0.5 transition-all duration-200 animate-press ${
                 active
                   ? "text-secondary"
                   : "text-muted-foreground hover:text-foreground"

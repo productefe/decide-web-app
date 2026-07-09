@@ -112,8 +112,8 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div className="w-full max-w-sm bg-card border border-border rounded-t-2xl sm:rounded-2xl p-6 md:p-8 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-fade-in">
+      <div className="w-full sm:max-w-sm bg-card border border-border border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl p-6 md:p-8 pt-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-xl max-h-[92vh] overflow-y-auto overscroll-contain animate-fade-in-up">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden />
 
         <StepIndicator step={step} />

@@ -204,7 +204,7 @@ export function ResultList({
   const activePiece = pieces[activeIndex];
 
   return (
-    <div>
+    <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-5 pb-4 border-b border-border gap-3">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Sonuçların</p>
@@ -254,7 +254,7 @@ export function ResultList({
           style={{ scrollbarWidth: "none" }}
         >
           {pieces.map((piece, i) => (
-            <div key={`${piece.label}-${i}`} className="w-full shrink-0 snap-center">
+            <div key={`${piece.label}-${i}`} className="w-full shrink-0 snap-center animate-fade-in">
               <PieceProductCards
                 results={piece.results}
                 pieceLabel={piece.label}

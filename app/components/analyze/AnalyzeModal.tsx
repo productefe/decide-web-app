@@ -11,7 +11,7 @@ const useIsMounted = () =>
   useSyncExternalStore(() => () => {}, () => true, () => false);
 
 export const PHOTO_DISCLAIMER =
-  "Kombin fotoğrafında parçalar ayrı ayrı analiz edilir; tek parça fotoğrafında o parça aranır.";
+  "Kombin fotoğrafında parçalar ayrı ayrı analiz edilir.";
 
 export default function AnalyzeModal({
   userId,
@@ -43,19 +43,10 @@ export default function AnalyzeModal({
         hidden
       />
 
-      <div className="relative">
-        <div
-          className="pointer-events-none absolute -top-6 -left-4 h-28 w-28 rounded-full bg-secondary/10 blur-2xl"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-4 -right-2 h-24 w-24 rounded-full bg-accent/10 blur-2xl"
-          aria-hidden
-        />
-
+      <div>
         <label
           onClick={() => openPhotoPicker()}
-          className={`relative min-h-[13rem] grid place-items-center content-center gap-3 text-foreground rounded-2xl overflow-hidden text-center cursor-pointer touch-manipulation py-8 px-4 transition-all ${
+          className={`relative min-h-[13rem] grid place-items-center content-center gap-3 text-foreground rounded-2xl overflow-hidden text-center cursor-pointer touch-manipulation py-8 px-4 transition-all duration-300 animate-press ${
             preview
               ? "border-2 border-secondary/30 bg-gradient-to-br from-card to-secondary/[0.04] shadow-sm ring-1 ring-secondary/10"
               : "border-2 border-dashed border-secondary/25 bg-gradient-to-br from-muted/90 to-secondary/[0.06] hover:border-secondary/45 hover:shadow-md hover:-translate-y-0.5"
