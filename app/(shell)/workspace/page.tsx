@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import AnalyzeModal from "@/components/analyze/AnalyzeModal";
 import OnboardingModal from "@/components/onboarding-modal";
-import { UploadScreenLayout } from "@/components/upload-screen-layout";
 import { isPreferencesComplete } from "@/lib/preferences";
 
 export default async function WorkspacePage() {
@@ -42,16 +41,23 @@ export default async function WorkspacePage() {
     <>
       {needsOnboarding ? <OnboardingModal userId={user.id} /> : null}
 
-      <UploadScreenLayout
-        title={
-          <h1 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+      <section
+        aria-label="Karar alanı"
+        className="relative flex min-h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in-up"
+      >
+        <header className="shrink-0">
+          <h1 className="text-3xl font-semibold leading-tight text-foreground">
             Selam, <span className="text-secondary">{firstName}</span>
           </h1>
-        }
-        description="Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım."
-      >
-        <AnalyzeModal userId={user.id} />
-      </UploadScreenLayout>
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+            Beğendiğin kıyafetin fotoğrafını yükle, sana en uygun 3 seçeneği bulalım.
+          </p>
+        </header>
+
+        <div className="mt-4 flex min-h-0 flex-1 flex-col">
+          <AnalyzeModal userId={user.id} />
+        </div>
+      </section>
     </>
   );
 }

@@ -81,7 +81,7 @@ export default function SignUpModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} scrollable>
+    <Modal open={open} onClose={onClose}>
       <div className="flex flex-col gap-5">
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Hemen başla</h2>

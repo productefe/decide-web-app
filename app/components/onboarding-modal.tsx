@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
-import { BottomSheet } from "./bottom-sheet";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { createClient } from "@/utils/supabase/client";
 import {
   GENDER_OPTIONS,
@@ -25,14 +25,14 @@ const STEPS = ["Beden", "Cinsiyet", "Tarz"];
 function StepIndicator({ step }: { step: number }) {
   const progress = ((step + 1) / STEPS.length) * 100;
   return (
-    <div className="mb-4 shrink-0">
-      <div className="mb-2 flex justify-between text-xs font-medium text-muted-foreground">
+    <div className="mb-6">
+      <div className="flex justify-between text-xs font-medium text-muted-foreground mb-2">
         <span>
           Adım {step + 1} / {STEPS.length}
         </span>
         <span>{STEPS[step]}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
         <div
           className="h-full rounded-full bg-secondary transition-all duration-300"
           style={{ width: `${progress}%` }}
@@ -110,127 +110,136 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
     }
   };
 
+  useBodyScrollLock(open);
+
   if (!open) return null;
 
   return (
-    <BottomSheet open={open}>
-      <StepIndicator step={step} />
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in sm:items-center sm:p-4">
+      <div
+        className="w-full max-h-[92dvh] overflow-y-auto overscroll-contain animate-fade-in-up rounded-t-2xl border border-border border-b-0 bg-card p-6 pt-5 shadow-xl sm:max-w-sm sm:rounded-2xl sm:border-b md:p-8"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden />
 
-      <div className="mb-4 text-center">
-        <h2 className="text-xl font-semibold text-foreground sm:text-2xl">
-          Sana özel öneriler için 3 kısa soru
-        </h2>
-      </div>
+        <StepIndicator step={step} />
 
-      {error ? (
-        <div className="mb-4 rounded-xl border border-destructive/25 bg-destructive/15 px-4 py-3 text-sm text-destructive">
-          {error}
+        <div className="mb-6 text-center">
+          <h2 className="text-2xl font-semibold text-foreground mb-2">
+            Sana özel öneriler için 3 kısa soru
+          </h2>
         </div>
-      ) : null}
 
-      {step === 0 ? (
-        <form onSubmit={handleNext} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-center text-sm font-medium text-foreground">
-              Hangi bedenlerde ürün görmek istersin?
-            </label>
-            <p className="text-center text-xs text-muted-foreground">Birden fazla seçebilirsin.</p>
-            <div className="mt-1 flex flex-wrap justify-center gap-2">
-              {SIZE_OPTIONS.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => setSizes((prev) => toggleSize(prev, size))}
-                  className={`min-h-[44px] min-w-[52px] rounded-xl border px-3 py-2 text-sm transition-all ${
-                    sizes.includes(size)
-                      ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
-                      : "border-border bg-muted text-foreground hover:border-accent/50"
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
+        {error && (
+          <div className="bg-destructive/15 text-destructive text-sm px-4 py-3 rounded-xl mb-4 border border-destructive/25">
+            {error}
           </div>
-          <Button type="submit" size="full" className="min-h-[48px]">
-            Devam et
-          </Button>
-        </form>
-      ) : null}
+        )}
 
-      {step === 1 ? (
-        <form onSubmit={handleNext} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-center text-sm font-medium text-foreground">Cinsiyet</label>
-            <div className="flex gap-2">
-              {GENDER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setGender(opt.value)}
-                  className={`min-h-[48px] flex-1 rounded-xl border text-sm font-medium transition-all ${
-                    gender === opt.value
-                      ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
-                      : "border-border bg-muted text-foreground hover:border-accent/50"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+        {step === 0 && (
+          <form onSubmit={handleNext} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-medium text-center text-foreground">
+                Hangi bedenlerde ürün görmek istersin?
+              </label>
+              <p className="text-xs text-muted-foreground text-center">Birden fazla seçebilirsin.</p>
+              <div className="flex flex-wrap gap-2 justify-center mt-1">
+                {SIZE_OPTIONS.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setSizes((prev) => toggleSize(prev, size))}
+                    className={`min-h-[44px] min-w-[52px] px-3 py-2 text-sm rounded-xl border transition-all ${
+                      sizes.includes(size)
+                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
+                        : "bg-muted text-foreground border-border hover:border-accent/50"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(0)} className="min-h-[48px] flex-1" size="full">
-              Geri
-            </Button>
-            <Button type="submit" className="min-h-[48px] flex-1" size="full">
+            <Button type="submit" size="full">
               Devam et
             </Button>
-          </div>
-        </form>
-      ) : null}
+          </form>
+        )}
 
-      {step === 2 ? (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-center text-sm font-medium text-foreground">Tarzın nasıl?</label>
-            <p className="text-center text-xs text-muted-foreground">Bir tane seç.</p>
-
-            <div className="mt-1 flex flex-wrap justify-center gap-2">
-              {PREFERENCE_OPTIONS.map((pref) => (
-                <button
-                  key={pref}
-                  type="button"
-                  onClick={() => setStyle(pref)}
-                  className={`min-h-[44px] rounded-xl border px-3 py-2 text-sm transition-all ${
-                    style === pref
-                      ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
-                      : "border-border bg-muted text-foreground hover:border-accent/50"
-                  }`}
-                >
-                  {pref}
-                </button>
-              ))}
+        {step === 1 && (
+          <form onSubmit={handleNext} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-medium text-center text-foreground">Cinsiyet</label>
+              <div className="flex gap-2">
+                {GENDER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setGender(opt.value)}
+                    className={`flex-1 min-h-[48px] rounded-xl border text-sm font-medium transition-all ${
+                      gender === opt.value
+                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
+                        : "bg-muted text-foreground border-border hover:border-accent/50"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setStep(0)} className="flex-1" size="full">
+                Geri
+              </Button>
+              <Button type="submit" className="flex-1" size="full">
+                Devam et
+              </Button>
+            </div>
+          </form>
+        )}
 
-          <div className="flex gap-2 border-t border-border pt-3">
-            <Button
-              type="button"
-              disabled={loading}
-              variant="outline"
-              onClick={() => setStep(1)}
-              className="min-h-[48px] flex-1"
-              size="full"
-            >
-              Geri
-            </Button>
-            <Button type="submit" disabled={loading} className="min-h-[48px] flex-[2]" size="full">
-              {loading ? "Kaydediliyor..." : "Bitir"}
-            </Button>
-          </div>
-        </form>
-      ) : null}
-    </BottomSheet>
+        {step === 2 && (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-medium text-center text-foreground">Tarzın nasıl?</label>
+              <p className="text-xs text-muted-foreground text-center">Bir tane seç.</p>
+
+              <div className="flex flex-wrap gap-2 justify-center mt-1">
+                {PREFERENCE_OPTIONS.map((pref) => (
+                  <button
+                    key={pref}
+                    type="button"
+                    onClick={() => setStyle(pref)}
+                    className={`min-h-[44px] px-3 py-2 text-sm rounded-xl border transition-all ${
+                      style === pref
+                        ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
+                        : "bg-muted text-foreground border-border hover:border-accent/50"
+                    }`}
+                  >
+                    {pref}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <Button
+                type="button"
+                disabled={loading}
+                variant="outline"
+                onClick={() => setStep(1)}
+                className="flex-1"
+                size="full"
+              >
+                Geri
+              </Button>
+              <Button type="submit" disabled={loading} className="flex-[2]" size="full">
+                {loading ? "Kaydediliyor..." : "Bitir"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }

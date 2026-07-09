@@ -2,11 +2,9 @@ import Navbar from "@/components/Navbar";
 
 export default function GuestLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden px-5 pt-[env(safe-area-inset-top)]">
+    <div className="min-h-[100dvh] flex flex-col max-w-lg mx-auto w-full px-5 py-4">
       <Navbar />
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] pt-3">
-        {children}
-      </main>
+      <main className="flex-1 py-4">{children}</main>
     </div>
   );
 }
