@@ -68,9 +68,17 @@ App Store Connect → App Privacy → Start. Asagidaki cevaplar DECIDE icin rehb
 
 ```bash
 export CAPACITOR_SERVER_URL=https://decide-web-app-nine.vercel.app
+npm run generate:splash   # krem splash + DECIDE logo (ikon/storyboard guncellemeden once)
 npm run cap:sync
 npm run cap:ios
 ```
+
+### Splash / acilis ekrani degistirdiysen (native rebuild)
+
+1. `npm run generate:splash` — iOS splash PNG + logo asset uretir
+2. `npm run cap:sync` — Xcode projesine kopyalar
+3. Xcode → **Product → Archive** → App Store Connect upload
+4. TestFlight’ta yeni build’i yukle (web deploy yetmez)
 
 Review suresi genelde 1-7 gun.
 
