@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { cleanStoreName } from "@/components/analyze/types";
 import { formatSavedDate, type SavedProductRow } from "@/lib/saved-products";
+import { safeHttpsUrl } from "@/lib/safe-url";
 
 export default function FavoritesView({
   userId,
@@ -76,15 +77,18 @@ export default function FavoritesView({
       </div>
 
       <div className="flex flex-col gap-4">
-        {items.map((item) => (
+        {items.map((item) => {
+          const imageUrl = safeHttpsUrl(item.image);
+          const linkUrl = safeHttpsUrl(item.link);
+          return (
           <article
             key={item.id}
             className="rounded-2xl border border-border bg-card p-4 shadow-sm"
           >
             <div className="flex gap-3">
-              {item.image && (
+              {imageUrl && (
                 <img
-                  src={item.image}
+                  src={imageUrl}
                   alt={item.title}
                   className="size-20 rounded-xl object-cover border border-border shrink-0"
                 />
@@ -108,8 +112,8 @@ export default function FavoritesView({
                 </div>
                 <p className="text-lg font-semibold text-secondary">{item.price}</p>
                 <p className="text-xs text-muted-foreground">{formatSavedDate(item.created_at)}</p>
-                {item.link && (
-                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="mt-1">
+                {linkUrl && (
+                  <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="mt-1">
                     <Button variant="default" size="full" className="sm:w-auto sm:min-w-[140px] gap-2 min-h-[44px]">
                       {cleanStoreName(item.source)}
                       <ExternalLink className="size-4" aria-hidden />
@@ -119,7 +123,8 @@ export default function FavoritesView({
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

@@ -7,6 +7,7 @@ import SignUpModal from "./signup-modal";
 import SignInModal from "./signin-modal";
 import { Button } from "./ui/button";
 import { DecideLogo } from "./decide-logo";
+import { clearGuestSessionLocal } from "@/lib/guest";
 
 function displayName(email: string): string {
   return email.split("@")[0] || email;
@@ -23,6 +24,7 @@ export default function NavbarClient({ userEmail }: Props) {
   const router = useRouter();
 
   const handleLogout = async () => {
+    clearGuestSessionLocal();
     const { createClient } = await import("@/utils/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();

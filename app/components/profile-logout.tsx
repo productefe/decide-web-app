@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { clearGuestSessionLocal } from "@/lib/guest";
 import { Button } from "./ui/button";
 
 export default function ProfileLogout() {
   const router = useRouter();
 
   const handleLogout = async () => {
+    clearGuestSessionLocal();
     const { createClient } = await import("@/utils/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();

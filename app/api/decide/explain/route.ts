@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { ApiSecurityError, enforceRateLimit } from "@/lib/api-security";
 import {
   generateReasons,
   generateReasonsForPieces,
+  sanitizeExplainPiecesRequest,
+  sanitizeExplainRequestBody,
   type ExplainRequest,
   type ExplainPiecesRequest,
 } from "../explain";
@@ -35,18 +38,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Yetkisiz." }, { status: 401 });
     }
 
+    try {
+      await enforceRateLimit(supabase, "explain", 20);
+    } catch (err) {
+      if (err instanceof ApiSecurityError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+
     const body = await req.json().catch(() => ({}));
 
     if (isPiecesRequest(body)) {
-      const pieceReasons = await generateReasonsForPieces(body, OPENAI_API_KEY);
+      if (body.pieces.length > 4) {
+        return NextResponse.json(
+          { error: "En fazla 4 parça için açıklama üretilebilir." },
+          { status: 400 }
+        );
+      }
+      const sanitized = sanitizeExplainPiecesRequest(body);
+      const pieceReasons = await generateReasonsForPieces(sanitized, OPENAI_API_KEY);
       return NextResponse.json({ pieces: pieceReasons });
     }
 
-    const reasons = await generateReasons(body as ExplainRequest, OPENAI_API_KEY);
+    const reasons = await generateReasons(
+      sanitizeExplainRequestBody(body as ExplainRequest),
+      OPENAI_API_KEY
+    );
     return NextResponse.json({ reasons });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
+    const status = /En fazla 4 parça/.test(message) ? 400 : 500;
     console.error("/api/decide/explain error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

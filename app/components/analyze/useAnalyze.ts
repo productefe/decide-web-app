@@ -36,6 +36,7 @@ function applyReasons(results: Results, reasons: Partial<ExplainReasons>): Resul
 }
 
 import { markGuestAnalysisUsed, saveGuestResultsLocal } from "@/lib/guest";
+import { sanitizeUploadFileName, validateImageFile } from "@/lib/upload";
 
 export function useAnalyze(
   userId: string,
@@ -108,6 +109,14 @@ export function useAnalyze(
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setError(validationError);
+      setStage("error");
+      setOpen(true);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setSelectedFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target?.result as string);
@@ -117,6 +126,13 @@ export function useAnalyze(
   const openPhotoPicker = async () => {
     const native = await pickProductPhoto();
     if (native) {
+      const validationError = validateImageFile(native.file);
+      if (validationError) {
+        setError(validationError);
+        setStage("error");
+        setOpen(true);
+        return;
+      }
       setSelectedFile(native.file);
       setPreview(native.preview);
       return;
@@ -126,6 +142,15 @@ export function useAnalyze(
 
   const start = async () => {
     if (!selectedFile || stage === "loading") return;
+
+    const validationError = validateImageFile(selectedFile);
+    if (validationError) {
+      setOpen(true);
+      setError(validationError);
+      setStage("error");
+      return;
+    }
+
     setOpen(true);
     setStage("loading");
     setError(null);
@@ -134,7 +159,8 @@ export function useAnalyze(
 
     try {
       const supabase = createClient();
-      const fileName = `${userId}/${Date.now()}-${selectedFile.name}`;
+      const safeName = sanitizeUploadFileName(selectedFile.name);
+      const fileName = `${userId}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("product-photos")
         .upload(fileName, selectedFile);

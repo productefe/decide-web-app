@@ -68,6 +68,18 @@ export function clearGuestResultsLocal(): void {
   localStorage.removeItem(GUEST_LAST_RESULTS_KEY);
 }
 
+export function clearGuestAnalysisUsed(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(GUEST_ANALYSIS_USED_KEY);
+}
+
+/** Logout or account switch: remove all guest-only local data. */
+export function clearGuestSessionLocal(): void {
+  clearGuestPrefsLocal();
+  clearGuestResultsLocal();
+  clearGuestAnalysisUsed();
+}
+
 export async function mergeGuestPrefsToDb(userId: string): Promise<void> {
   const local = readGuestPrefsLocal();
   if (!local) return;

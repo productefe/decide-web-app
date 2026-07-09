@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SavedProductHeart } from "@/components/saved-product-heart";
 import { GuestHeartUpsell } from "@/components/guest-heart-upsell";
+import { safeHttpsUrl } from "@/lib/safe-url";
 import { Results, SLOT_LABELS, cleanStoreName, type PieceResult, type Product } from "./types";
 
 function ReasonText({
@@ -57,15 +58,18 @@ function ProductCard({
         ? "border-accent/25 bg-gradient-to-br from-card to-accent/5"
         : "border-border bg-muted/30";
 
+  const imageUrl = safeHttpsUrl(product.image);
+  const linkUrl = safeHttpsUrl(product.link);
+
   return (
     <article
       className={`relative rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md ${cardClass}`}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col sm:flex-row gap-4">
-        {product.image && (
+        {imageUrl && (
           <img
-            src={product.image}
+            src={imageUrl}
             alt={product.title}
             width={120}
             height={120}
@@ -86,8 +90,8 @@ function ProductCard({
                   title: product.title,
                   price: product.price,
                   source: product.source,
-                  image: product.image,
-                  link: product.link,
+                  image: imageUrl || "",
+                  link: linkUrl || "",
                   store: product.store,
                   piece_label: pieceLabel,
                   slot: slotKey,
@@ -97,8 +101,8 @@ function ProductCard({
           </div>
           <ReasonText reason={product.reason} loading={!!reasonsLoading} />
           <p className="text-xl font-semibold text-secondary">{product.price}</p>
-          {product.link ? (
-            <a href={product.link} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+          {linkUrl ? (
+            <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
               <Button variant="default" size="full" className="sm:w-auto sm:min-w-[140px] gap-2">
                 {cleanStoreName(product.source)}
                 <ExternalLink className="size-4" aria-hidden />

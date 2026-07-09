@@ -20,6 +20,12 @@ import {
 } from "./pipeline";
 import { getVisionImageDataUrl } from "./vision-image";
 import type { PieceResult, StoredResults } from "@/components/analyze/types";
+import {
+  ApiSecurityError,
+  assertOwnStoragePath,
+  enforceGuestAnalysisCap,
+  enforceRateLimit,
+} from "@/lib/api-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -201,6 +207,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    try {
+      assertOwnStoragePath(user.id, storage_path);
+    } catch (err) {
+      if (err instanceof ApiSecurityError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+
+    const anonymous = isAnonymousUser(user);
+    try {
+      await enforceGuestAnalysisCap(supabase, anonymous);
+      await enforceRateLimit(supabase, "decide", anonymous ? 2 : 10);
+    } catch (err) {
+      if (err instanceof ApiSecurityError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+
     const { data: userPrefs } = await supabase
       .from("user_preferences")
       .select("preferences, gender, sizes")
@@ -216,7 +242,7 @@ export async function POST(req: NextRequest) {
     const styleKeyword = getStyleKeyword(userPrefs?.preferences);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    const visionImageUrl = await getVisionImageDataUrl(photo_url, supabase, storage_path);
+    const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path!);
 
     const visionContent = await openAIContent(OPENAI_API_KEY, {
       model: "gpt-4o",

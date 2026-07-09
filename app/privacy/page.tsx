@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "DECIDE uygulamasının gizlilik politikası ve kişisel verilerin işlenmesi.",
 };
 
-const LAST_UPDATED = "7 Temmuz 2026";
+const LAST_UPDATED = "9 Temmuz 2026";
 
 export default function PrivacyPage() {
   return (
@@ -58,6 +58,12 @@ export default function PrivacyPage() {
               <strong className="text-foreground">Teknik veriler:</strong> Oturum çerezleri ve kimlik
               doğrulama token&apos;ları (güvenli giriş için).
             </li>
+            <li>
+              <strong className="text-foreground">Misafir modu (cihazında):</strong> Kayıt olmadan
+              deneme yaparken tarz tercihlerin ve son analiz sonuçların yalnızca cihazındaki yerel
+              depolamada (localStorage) tutulabilir; çıkış yaptığında veya kayıt olduğunda bu veriler
+              temizlenir veya hesabına taşınır.
+            </li>
           </ul>
         </section>
 
@@ -96,7 +102,9 @@ export default function PrivacyPage() {
           </ul>
           <p className="mt-3 text-muted-foreground">
             Önerilen ürün linklerine tıkladığında ilgili mağazanın sitesine yönlendirilirsin; o sitelerin
-            kendi gizlilik politikaları geçerlidir.
+            kendi gizlilik politikaları geçerlidir. Bazı mağaza linkleri (ör. Amazon) bağlı kuruluş
+            (affiliate) programı kapsamında olabilir; bu, sana ek bir maliyet yansıtmadan uygulamanın
+            sürdürülmesine katkı sağlayabilir.
           </p>
         </section>
 

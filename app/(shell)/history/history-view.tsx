@@ -10,6 +10,7 @@ import {
   SLOT_LABELS,
   type SearchHistoryRow,
 } from "@/lib/search-history";
+import { safeHttpsUrl } from "@/lib/safe-url";
 
 function HistoryPieceBlock({
   label,
@@ -31,12 +32,15 @@ function HistoryPieceBlock({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs font-semibold text-foreground">{label}</p>
-      {slots.map(({ key, product }) =>
-        product ? (
+      {slots.map(({ key, product }) => {
+        if (!product) return null;
+        const imageUrl = safeHttpsUrl(product.image);
+        const linkUrl = safeHttpsUrl(product.link);
+        return (
           <div key={key} className="flex gap-3 items-start pl-2 border-l-2 border-secondary/20">
-            {product.image && (
+            {imageUrl && (
               <img
-                src={product.image}
+                src={imageUrl}
                 alt=""
                 className="size-12 rounded-lg object-cover border border-border shrink-0"
               />
@@ -46,15 +50,15 @@ function HistoryPieceBlock({
                 <span className="text-[11px] font-semibold text-secondary">
                   {SLOT_LABELS[key]}
                 </span>
-                {product.link && (
+                {linkUrl && (
                   <SavedProductHeart
                     userId={userId}
                     product={{
                       title: product.title,
                       price: product.price,
                       source: product.source,
-                      image: product.image,
-                      link: product.link,
+                      image: imageUrl || "",
+                      link: linkUrl,
                       store: product.store,
                       piece_label: label,
                       slot: key,
@@ -67,8 +71,8 @@ function HistoryPieceBlock({
                 {product.title}
               </p>
               <p className="text-sm font-semibold text-secondary mt-1">{product.price}</p>
-              {product.link && (
-                <a href={product.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
+              {linkUrl && (
+                <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
                   <Button variant="outline" size="full" className="h-9 text-xs gap-1.5 px-3">
                     {cleanStoreName(product.source)}
                     <ExternalLink className="size-3.5" aria-hidden />
@@ -77,8 +81,8 @@ function HistoryPieceBlock({
               )}
             </div>
           </div>
-        ) : null
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -120,6 +124,7 @@ export default function HistoryPage({
         {items.map((item) => {
           const pieces = getHistoryPieces(item.results);
           const isOutfit = pieces.length > 1;
+          const photoUrl = safeHttpsUrl(item.photo_url);
 
           return (
             <article
@@ -127,9 +132,9 @@ export default function HistoryPage({
               className="rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex gap-3 pb-4 border-b border-border">
-                {item.photo_url && (
+                {photoUrl && (
                   <img
-                    src={item.photo_url}
+                    src={photoUrl}
                     alt="Aradığın fotoğraf"
                     className="size-16 rounded-xl object-cover border border-border shrink-0"
                   />
