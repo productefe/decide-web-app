@@ -187,16 +187,16 @@ export default async function Home() {
       </div>
 
       <footer className="mt-auto shrink-0 border-t border-border bg-background w-full pb-[env(safe-area-inset-bottom)]">
-        <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-4 flex flex-row items-center justify-between gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/app-icon.png" alt="DECIDE" className="size-9 object-contain" />
-          <div className="flex flex-col sm:items-end gap-1">
-            <p className="text-sm sm:text-base font-semibold text-foreground text-center sm:text-right">
+          <img src="/app-icon.png" alt="DECIDE" className="size-11 shrink-0 rounded-2xl object-contain" />
+          <div className="flex flex-col items-end justify-center gap-0.5 min-w-0">
+            <p className="text-sm font-semibold text-foreground text-right">
               Doğru karar, doğru kıyafet
             </p>
             <Link
               href="/privacy"
-              className="text-xs text-muted-foreground hover:text-secondary transition-colors text-center sm:text-right"
+              className="text-xs text-muted-foreground hover:text-secondary transition-colors text-right"
             >
               Gizlilik Politikası
             </Link>
