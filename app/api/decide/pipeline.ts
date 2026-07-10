@@ -557,6 +557,8 @@ export function pickLink(
 
 export type EnrichedProduct = Product & {
   priceValue?: number;
+  product_id?: string | null;
+  serpapi_immersive_product_api?: string | null;
   isDirect: boolean;
   hasAffiliate: boolean;
 };
@@ -612,6 +614,8 @@ export function mergeLinks(
       title: scored.title,
       price: scored.price,
       priceValue: scored.priceValue,
+      product_id: scored.product_id,
+      serpapi_immersive_product_api: scored.serpapi_immersive_product_api,
       source: scored.source,
       image: scored.image,
       store: scored.store,

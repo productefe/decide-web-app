@@ -72,6 +72,9 @@ export function SavedProductHeart({ userId, product, className = "" }: Props) {
           store: product.store || null,
           piece_label: product.piece_label || null,
           slot: product.slot || null,
+          price_value: product.price_value ?? null,
+          product_id: product.product_id ?? null,
+          serpapi_product_api: product.serpapi_immersive_product_api ?? null,
         })
         .select("id")
         .single();

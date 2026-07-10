@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { CapacitorInit } from "@/components/capacitor-init";
+import { PushInit } from "@/components/push-init";
 
 export const metadata: Metadata = {
   title: "DECIDE · Fotoğrafla Ürün Bul",
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="tr" className={`h-full ${GeistSans.variable}`}>
       <body className={`min-h-full flex flex-col safe-area-padding ${GeistSans.className}`}>
         <CapacitorInit />
+        <PushInit />
         {children}
       </body>
     </html>

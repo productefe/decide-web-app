@@ -10,6 +10,11 @@ export type SavedProductRow = {
   piece_label: string | null;
   slot: string | null;
   created_at: string;
+  price_value?: number | null;
+  product_id?: string | null;
+  serpapi_product_api?: string | null;
+  last_checked_at?: string | null;
+  last_notified_price?: number | null;
 };
 
 export type SaveProductInput = {
@@ -21,6 +26,9 @@ export type SaveProductInput = {
   store?: string;
   piece_label?: string;
   slot?: string;
+  price_value?: number | null;
+  product_id?: string | null;
+  serpapi_immersive_product_api?: string | null;
 };
 
 export function formatSavedDate(iso: string): string {

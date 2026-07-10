@@ -80,6 +80,7 @@ export function CapacitorInit() {
         await SplashScreen.hide();
         await waitForPaintFrames(1);
         setShowSplash(false);
+        window.dispatchEvent(new CustomEvent("decide:splash-hidden"));
       } catch {
         // Capacitor plugins not available in browser
       }

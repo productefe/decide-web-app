@@ -9,6 +9,9 @@ export interface Product {
   store: string;
   reason: string;
   label: string;
+  priceValue?: number;
+  product_id?: string | null;
+  serpapi_immersive_product_api?: string | null;
 }
 
 export interface Results {

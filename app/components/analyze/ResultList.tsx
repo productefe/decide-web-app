@@ -95,6 +95,9 @@ function ProductCard({
                   store: product.store,
                   piece_label: pieceLabel,
                   slot: slotKey,
+                  price_value: product.priceValue ?? null,
+                  product_id: product.product_id ?? null,
+                  serpapi_immersive_product_api: product.serpapi_immersive_product_api ?? null,
                 }}
               />
             )}
