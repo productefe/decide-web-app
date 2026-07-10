@@ -12,11 +12,16 @@ const SPLASH_DIR = join(root, "ios/App/App/Assets.xcassets/Splash.imageset");
 const LOGO_ASSET_DIR = join(root, "ios/App/App/Assets.xcassets/DecideLogo.imageset");
 
 async function buildSplash(filename) {
-  const logo = await sharp(LOGO_PATH).resize({ width: 420 }).png().toBuffer();
+  const logo = sharp(LOGO_PATH).resize({ width: 420 });
+  const logoBuffer = await logo.png().toBuffer();
+  const { width = 420, height = 84 } = await sharp(logoBuffer).metadata();
+  const left = Math.round((SIZE - width) / 2);
+  const top = Math.round((SIZE - height) / 2);
+
   await sharp({
     create: { width: SIZE, height: SIZE, channels: 3, background: CREAM },
   })
-    .composite([{ input: logo, left: 80, top: 120 }])
+    .composite([{ input: logoBuffer, left, top }])
     .png()
     .toFile(join(SPLASH_DIR, filename));
 }

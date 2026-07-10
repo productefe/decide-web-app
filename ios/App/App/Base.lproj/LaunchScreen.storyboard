@@ -26,8 +26,8 @@
                         <viewLayoutGuide key="safeArea" id="R2Z-9S-7cG"/>
                         <color key="backgroundColor" red="0.96862745098039216" green="0.94901960784313721" blue="0.90980392156862744" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="DECIDE-Logo" firstAttribute="leading" secondItem="R2Z-9S-7cG" secondAttribute="leading" constant="20" id="logo-leading"/>
-                            <constraint firstItem="DECIDE-Logo" firstAttribute="top" secondItem="R2Z-9S-7cG" secondAttribute="top" constant="16" id="logo-top"/>
+                            <constraint firstItem="DECIDE-Logo" firstAttribute="centerX" secondItem="R2Z-9S-7cG" secondAttribute="centerX" id="logo-center-x"/>
+                            <constraint firstItem="DECIDE-Logo" firstAttribute="centerY" secondItem="R2Z-9S-7cG" secondAttribute="centerY" id="logo-center-y"/>
                         </constraints>
                     </view>
                 </viewController>
