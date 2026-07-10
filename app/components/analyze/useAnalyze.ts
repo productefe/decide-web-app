@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { pickProductPhoto } from "@/lib/pick-photo";
 import { Stage, Results, PieceResult } from "./types";
@@ -43,6 +44,7 @@ export function useAnalyze(
   options?: { guestMode?: boolean; onAnalysisComplete?: () => void }
 ) {
   const guestMode = options?.guestMode ?? false;
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -205,6 +207,8 @@ export function useAnalyze(
       if (guestMode) {
         markGuestAnalysisUsed();
         saveGuestResultsLocal({ photo_url: publicUrl, pieces: parsedPieces });
+      } else {
+        router.refresh();
       }
       void fetchReasons(parsedPieces, guestMode ? publicUrl : undefined);
     } catch (err: unknown) {

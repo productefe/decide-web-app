@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import type { SaveProductInput } from "@/lib/saved-products";
@@ -14,6 +15,7 @@ type Props = {
 const BURST_ANGLES = [0, 60, 120, 180, 240, 300];
 
 export function SavedProductHeart({ userId, product, className = "" }: Props) {
+  const router = useRouter();
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -55,6 +57,7 @@ export function SavedProductHeart({ userId, product, className = "" }: Props) {
       else {
         setSaved(false);
         window.dispatchEvent(new CustomEvent("decide:saved-product-changed"));
+        router.refresh();
       }
     } else {
       const { data, error: dbError } = await supabase
@@ -78,11 +81,12 @@ export function SavedProductHeart({ userId, product, className = "" }: Props) {
         setSaved(true);
         setJustLiked(true);
         window.dispatchEvent(new CustomEvent("decide:saved-product-changed"));
+        router.refresh();
       }
     }
 
     setBusy(false);
-  }, [userId, product, link, saved, busy]);
+  }, [userId, product, link, saved, busy, router]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();

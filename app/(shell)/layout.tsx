@@ -24,7 +24,7 @@ export default async function AppShellLayout({
 
   return (
     <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto w-full">
-      <header className="fixed top-0 inset-x-0 z-40 bg-card/95 backdrop-blur-md shadow-[0_4px_24px_rgba(15,61,46,0.06)]">
+      <header className="fixed top-0 inset-x-0 z-40 bg-background/95 backdrop-blur-md shadow-[0_4px_24px_rgba(15,61,46,0.06)]">
         <div className="mx-auto flex max-w-lg w-full px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           <DecideLogo className="h-6 w-auto" />
         </div>

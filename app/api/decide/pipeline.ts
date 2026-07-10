@@ -418,6 +418,29 @@ function scoreShoppingItems(
   return scored;
 }
 
+function pickCheaperProduct(
+  pool: ScoredProduct[],
+  recommended: ScoredProduct,
+  style: ScoredProduct | null
+): ScoredProduct | null {
+  const otherPrices = [recommended.priceValue, style?.priceValue].filter(
+    (price): price is number => typeof price === "number" && price > 0
+  );
+  if (otherPrices.length === 0) return null;
+
+  return (
+    pool
+      .filter(
+        (p) =>
+          p.priceValue > 0 &&
+          p.title !== recommended.title &&
+          p.title !== style?.title &&
+          otherPrices.every((price) => p.priceValue <= price)
+      )
+      .sort((a, b) => a.priceValue - b.priceValue)[0] || null
+  );
+}
+
 export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfile: ProductProfile): ScoringResult {
   const scoredProducts = scoreShoppingItems(shoppingResults, productProfile);
 
@@ -452,13 +475,13 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
     }
   }
 
-  const topPrice = topPool[0]?.priceValue || 0;
-  const cheaper = topPool.find((p, i) => i > 0 && p.priceValue > 0 && p.priceValue < topPrice) || topPool[1] || null;
+  const recommended = topPool[0] || null;
+  const cheaper = recommended ? pickCheaperProduct(scoredProducts, recommended, null) : null;
 
   return {
     user_id: productProfile.user_id,
     photo_url: productProfile.photo_url,
-    recommended: topPool[0] || null,
+    recommended,
     cheaper,
     style: null,
     pool: scoredProducts,
@@ -551,7 +574,13 @@ const SLOTS = ["recommended", "cheaper", "style"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredProduct }[] {
-  return SLOTS.map((slot) => ({ slot, product: scoring[slot] }))
+  const recommended = scoring.recommended;
+  const validated =
+    recommended
+      ? { ...scoring, cheaper: pickCheaperProduct(scoring.pool, recommended, scoring.style) }
+      : scoring;
+
+  return SLOTS.map((slot) => ({ slot, product: validated[slot] }))
     .filter((s): s is { slot: Slot; product: ScoredProduct } => Boolean(s.product));
 }
 
