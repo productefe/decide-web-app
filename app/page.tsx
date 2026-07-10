@@ -5,7 +5,6 @@ import { isPermanentUser } from "./lib/auth-user"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
-import { DecideLogo } from "./components/decide-logo"
 import "./globals.css"
 
 const STEPS = [
@@ -49,7 +48,8 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col w-full overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col w-full overflow-x-hidden overscroll-y-none -mb-[env(safe-area-inset-bottom)] bg-background">
+      <div className="flex-1 flex flex-col w-full">
       <div className="flex-1 w-full max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-4 flex flex-col">
         <Navbar />
 
@@ -184,10 +184,12 @@ export default async function Home() {
           })}
         </div>
       </section>
+      </div>
 
-      <footer className="border-t border-border bg-gradient-to-r from-card via-card to-secondary/5 w-full">
+      <footer className="mt-auto shrink-0 border-t border-border bg-background w-full pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <DecideLogo className="h-7 w-auto" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/app-icon.png" alt="DECIDE" className="size-9 object-contain" />
           <div className="flex flex-col sm:items-end gap-1">
             <p className="text-sm sm:text-base font-semibold text-foreground text-center sm:text-right">
               Doğru karar, doğru kıyafet
