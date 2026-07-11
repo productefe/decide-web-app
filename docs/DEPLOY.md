@@ -113,7 +113,7 @@ npm run cap:sync
 npm run cap:ios
 ```
 
-Xcode → **App** target → **Signing & Capabilities** → **+ Capability** → **Push Notifications** → **Product → Archive** → TestFlight
+Xcode → **App** target → **Signing & Capabilities** → **Push Notifications** (repoda `App.entitlements` → `aps-environment: production`) → **General → Build** numarasını artır → **Product → Clean Build Folder** → **Archive** → TestFlight
 
 ## Faz 5 — Telefon testi (~5 dk)
 
