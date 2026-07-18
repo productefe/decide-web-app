@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClient, getBearerToken } from "@/utils/supabase/server";
 import { ApiSecurityError, enforceRateLimit } from "@/lib/api-security";
 import {
   generateReasons,
@@ -29,12 +29,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sunucu yapılandırması eksik." }, { status: 500 });
     }
 
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const bearerToken = getBearerToken(req);
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+      error: authError,
+    } = await supabase.auth.getUser(bearerToken);
 
-    if (!user) {
+    if (authError || !user) {
+      if (authError) console.error("/api/decide/explain auth error:", authError.message);
       return NextResponse.json({ error: "Yetkisiz." }, { status: 401 });
     }
 

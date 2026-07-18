@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseSizes } from "@/lib/preferences";
 import { isAnonymousUser } from "@/lib/auth-user";
-import { createClient } from "@/utils/supabase/server";
+import { createClient, getBearerToken } from "@/utils/supabase/server";
 import {
   parseVisionOutfit,
   scoreProducts,
@@ -188,12 +188,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const bearerToken = getBearerToken(req);
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+      error: authError,
+    } = await supabase.auth.getUser(bearerToken);
 
-    if (!user) {
+    if (authError || !user) {
+      if (authError) console.error("/api/decide auth error:", authError.message);
       return NextResponse.json({ error: "Yetkisiz." }, { status: 401 });
     }
 

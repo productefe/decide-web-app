@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClient, getBearerToken } from "@/utils/supabase/server";
 import { isPermanentUser } from "@/lib/auth-user";
 
 const TOKEN_RE = /^[a-f0-9]{32,}$/i;
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const bearerToken = getBearerToken(req);
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+      error: authError,
+    } = await supabase.auth.getUser(bearerToken);
+
+    if (authError) console.error("/api/push/register auth error:", authError.message);
 
     if (!user || !isPermanentUser(user)) {
       return NextResponse.json({ error: "Yetkisiz." }, { status: 401 });
