@@ -34,7 +34,7 @@ const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const SERPAPI_URL = "https://serpapi.com/search";
 
 const VISION_OUTFIT_PROMPT =
-  'Analyze this fashion image. Identify distinct clothing items the person is wearing (max 4: top, bottom, shoes, outerwear). Skip small accessories unless prominent. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Turkish label like Tişört/Pantolon/Ayakkabı/Ceket","category":"exact type like t-shirt/jeans/sneaker/hoodie/jacket","colors":["primary color"],"fit":"slim/regular/oversized/loose","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nIf only one item is visible, return one item in the array.';
+  'Analyze this fashion image. Identify distinct clothing items the person is wearing (max 4: top, bottom, shoes, outerwear). Skip small accessories unless prominent. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Tişört","category":"exact type like t-shirt/jeans/sneaker/hoodie/jacket","colors":["primary color"],"fit":"slim/regular/oversized/loose","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nThe "label" value must be ONLY the item name in Turkish (e.g. Tişört, Pantolon, Ayakkabı, Ceket) — no English words, no explanations.\nIf only one item is visible, return one item in the array.';
 
 interface OpenAIChatResponse {
   choices?: { message?: { content?: string } }[];
