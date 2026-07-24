@@ -45,12 +45,12 @@ export default async function Home() {
               aria-hidden
             />
 
-            <p className="relative inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-3 py-1 text-xs font-semibold text-secondary shadow-sm sm:px-4 sm:py-1.5 sm:text-sm">
+            <p className="relative hidden items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-sm font-semibold text-secondary shadow-sm md:inline-flex">
               <span className="size-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
               Doğru karar, doğru kıyafet
             </p>
 
-            <h1 className="relative mt-4 text-[2rem] font-semibold leading-[1.1] text-foreground sm:mt-6 sm:text-4xl md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
+            <h1 className="relative mt-2 text-center text-[2rem] font-semibold leading-[1.1] text-foreground sm:mt-4 sm:text-4xl md:mt-6 md:text-left md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
               Beğendiğin{" "}
               <span className="text-secondary underline decoration-secondary/30 decoration-[3px] underline-offset-[6px]">
                 kıyafeti
@@ -59,7 +59,10 @@ export default async function Home() {
               saniyeler içinde bul
             </h1>
 
-            <p className="relative mt-3 max-w-xl text-base leading-relaxed text-muted-foreground sm:mt-5 sm:text-lg md:text-xl">
+            <p className="relative mx-auto mt-3 max-w-xl text-center text-base leading-relaxed text-muted-foreground md:mx-0 md:mt-5 md:hidden">
+              Yapay zeka, tek fotoğrafınla internetten binlerce arama yaparak Türk mağazalarından sana ve kıyafetine en uygun alternatifleri sunuyor.
+            </p>
+            <p className="relative mt-5 hidden max-w-xl text-lg leading-relaxed text-muted-foreground md:block md:text-xl">
               Tek fotoğraf yeter — Türk mağazalarından sana en uygun üç alternatifi getiriyoruz.
             </p>
 
