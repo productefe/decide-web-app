@@ -40,11 +40,11 @@ export function LandingActions({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   return (
     <>
-      <div className="flex flex-wrap gap-3 mt-10">
+      <div className="mt-7 flex w-full flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap">
         {isLoggedIn ? (
           <Button
             size="lg"
-            className="min-h-[48px] px-8 shadow-sm"
+            className="min-h-[48px] w-full px-8 shadow-sm sm:w-auto"
             onClick={() => router.push("/workspace")}
           >
             Yükle!
@@ -52,7 +52,7 @@ export function LandingActions({ isLoggedIn }: { isLoggedIn: boolean }) {
         ) : (
           <Button
             size="lg"
-            className="min-h-[48px] px-8 shadow-sm"
+            className="min-h-[48px] w-full px-8 shadow-sm sm:w-auto"
             onClick={startGuestMode}
             disabled={guestLoading}
           >

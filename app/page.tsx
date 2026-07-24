@@ -4,37 +4,19 @@ import { createClient } from "./utils/supabase/server"
 import { isPermanentUser } from "./lib/auth-user"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Upload, Search, CheckCircle2, Store, Sparkles, Heart, Star, Tag, UserRound } from "lucide-react"
+import { Upload, Search, CheckCircle2, Star, Tag, UserRound } from "lucide-react"
 import "./globals.css"
 
 const STEPS = [
   { num: "1", title: "Yükle", desc: "Beğendiğin kıyafetin fotoğrafını yükle", icon: Upload },
   { num: "2", title: "Karşılaştır", desc: "Alternatifleri tarayalım", icon: Search },
-  { num: "3", title: "Seç", desc: "Sana uygun olduğunu düşündüğümüz 3 seçeneği gör", icon: CheckCircle2 },
+  { num: "3", title: "Seç", desc: "Sana uygun 3 seçeneği gör", icon: CheckCircle2 },
 ];
 
 const RESULT_TYPES = [
   { label: "Önerilen", desc: "Fotoğrafına en yakın eşleşme.", icon: Star },
   { label: "Daha uygun", desc: "Benzer ürün, daha iyi fiyat.", icon: Tag },
   { label: "Sana özel", desc: "Tarzına göre seçilmiş alternatif.", icon: UserRound },
-];
-
-const FEATURES = [
-  {
-    title: "Senin mağazaların",
-    desc: "Son alışveriş yaptığın 10 mağazanın en az 9'u burada, fotoğrafını bekliyor",
-    icon: Store,
-  },
-  {
-    title: "Yapay zeka analizi",
-    desc: "Fotoğraftan renk, kategori ve detayları otomatik okur.",
-    icon: Sparkles,
-  },
-  {
-    title: "Kişisel öneri",
-    desc: "Tarzına özel alternatif",
-    icon: Heart,
-  },
 ];
 
 export default async function Home() {
@@ -48,28 +30,27 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col w-full overflow-x-hidden overscroll-y-none -mb-[env(safe-area-inset-bottom)] bg-background">
-      <div className="flex-1 flex flex-col w-full">
-      <div className="flex-1 w-full max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-4 flex flex-col">
+    <div className="flex min-h-[100dvh] w-full flex-col overflow-x-hidden overscroll-y-none bg-background -mb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 pb-6 pt-4 md:px-10 md:pb-10 lg:px-14">
         <Navbar />
 
-        <main className="flex-1 grid lg:grid-cols-12 gap-10 lg:gap-14 items-center py-8 lg:py-14">
-          <div className="lg:col-span-7 relative">
+        <main className="grid flex-1 items-center gap-8 py-6 lg:grid-cols-12 lg:gap-14 lg:py-14">
+          <div className="relative lg:col-span-7">
             <div
-              className="pointer-events-none absolute -top-8 -left-6 h-56 w-56 rounded-full bg-secondary/15 blur-3xl md:h-72 md:w-72"
+              className="pointer-events-none absolute -top-8 -left-6 h-40 w-40 rounded-full bg-secondary/15 blur-3xl md:h-72 md:w-72"
               aria-hidden
             />
             <div
-              className="pointer-events-none absolute top-32 -right-4 h-40 w-40 rounded-full bg-accent/10 blur-3xl hidden md:block"
+              className="pointer-events-none absolute top-32 -right-4 hidden h-40 w-40 rounded-full bg-accent/10 blur-3xl md:block"
               aria-hidden
             />
 
-            <p className="relative inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-sm font-semibold text-secondary shadow-sm">
+            <p className="relative inline-flex items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-3 py-1 text-xs font-semibold text-secondary shadow-sm sm:px-4 sm:py-1.5 sm:text-sm">
               <span className="size-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
               Doğru karar, doğru kıyafet
             </p>
 
-            <h1 className="relative mt-6 text-4xl md:text-5xl lg:text-[3.25rem] leading-[1.08] font-semibold text-foreground">
+            <h1 className="relative mt-4 text-[2rem] font-semibold leading-[1.1] text-foreground sm:mt-6 sm:text-4xl md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
               Beğendiğin{" "}
               <span className="text-secondary underline decoration-secondary/30 decoration-[3px] underline-offset-[6px]">
                 kıyafeti
@@ -78,36 +59,34 @@ export default async function Home() {
               saniyeler içinde bul
             </h1>
 
-            <p className="relative mt-5 text-lg md:text-xl text-muted-foreground leading-relaxed max-w-xl">
-              Tek fotoğraf yeter, gerisini biz hallederiz
-              <br className="hidden sm:block" />
-              {" "}Türk mağazalarından sana en uygun üç alternatifi getiriyoruz
+            <p className="relative mt-3 max-w-xl text-base leading-relaxed text-muted-foreground sm:mt-5 sm:text-lg md:text-xl">
+              Tek fotoğraf yeter — Türk mağazalarından sana en uygun üç alternatifi getiriyoruz.
             </p>
 
-            <div className="relative mt-10 grid sm:grid-cols-3 gap-3">
+            <div className="relative mt-6 grid grid-cols-3 gap-2 sm:mt-10 sm:gap-3">
               {STEPS.map((step, i) => {
                 const Icon = step.icon;
                 return (
                   <div
                     key={step.num}
-                    className={`rounded-2xl border bg-card p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                    className={`rounded-xl border bg-card p-2.5 shadow-sm sm:rounded-2xl sm:p-4 ${
                       i === 0
-                        ? "border-secondary/40 ring-1 ring-secondary/10 bg-gradient-to-br from-card to-secondary/[0.06]"
-                        : i === 1
-                          ? "border-border hover:border-secondary/25"
-                          : "border-border hover:border-accent/30"
+                        ? "border-secondary/40 bg-gradient-to-br from-card to-secondary/[0.06] ring-1 ring-secondary/10"
+                        : "border-border"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex size-8 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground shadow-sm">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-secondary-foreground shadow-sm sm:size-8 sm:text-sm">
                         {step.num}
                       </span>
-                      <span className="flex size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
+                      <span className="hidden size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary sm:flex">
                         <Icon className="size-4" aria-hidden />
                       </span>
                     </div>
-                    <p className="mt-3 font-semibold text-foreground">{step.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground leading-snug">{step.desc}</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground sm:mt-3">{step.title}</p>
+                    <p className="mt-0.5 hidden text-sm leading-snug text-muted-foreground sm:block">
+                      {step.desc}
+                    </p>
                   </div>
                 );
               })}
@@ -116,12 +95,12 @@ export default async function Home() {
             <LandingActions isLoggedIn={isPermanentUser(user)} />
           </div>
 
-          <div className="lg:col-span-5 relative flex flex-col gap-3 lg:border-l lg:border-border lg:pl-12">
+          <div className="relative hidden flex-col gap-3 lg:col-span-5 lg:flex lg:border-l lg:border-border lg:pl-12">
             <div
-              className="pointer-events-none absolute -top-6 right-0 h-32 w-32 rounded-full bg-secondary/10 blur-2xl lg:block hidden"
+              className="pointer-events-none absolute -top-6 right-0 hidden h-32 w-32 rounded-full bg-secondary/10 blur-2xl lg:block"
               aria-hidden
             />
-            <p className="text-sm font-semibold text-foreground mb-1">
+            <p className="mb-1 text-sm font-semibold text-foreground">
               Birazdan ne göreceksin?
             </p>
             {RESULT_TYPES.map((item, i) => {
@@ -129,7 +108,7 @@ export default async function Home() {
               return (
                 <div
                   key={item.label}
-                  className={`flex gap-3 rounded-2xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                  className={`flex gap-3 rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
                     i === 0
                       ? "border-secondary/35 bg-gradient-to-br from-card to-secondary/5 shadow-sm"
                       : i === 2
@@ -150,7 +129,7 @@ export default async function Home() {
                   </span>
                   <div>
                     <p className="font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
                   </div>
                 </div>
               );
@@ -159,44 +138,17 @@ export default async function Home() {
         </main>
       </div>
 
-      <section className="border-t border-border bg-gradient-to-b from-muted/60 to-muted/30 w-full relative overflow-hidden">
-        <div
-          className="pointer-events-none absolute bottom-0 left-1/4 h-48 w-48 rounded-full bg-secondary/8 blur-3xl"
-          aria-hidden
-        />
-        <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-10 lg:py-14 grid md:grid-cols-3 gap-5 relative">
-          {FEATURES.map((f, i) => {
-            const Icon = f.icon;
-            return (
-              <div
-                key={f.title}
-                className={`rounded-2xl border bg-card/80 p-5 shadow-sm transition-shadow hover:shadow-md ${
-                  i === 0 ? "border-secondary/30 ring-1 ring-secondary/10 md:col-span-1" : "border-border"
-                }`}
-              >
-                <span className="inline-flex size-10 items-center justify-center rounded-xl bg-secondary/10 text-secondary mb-3">
-                  <Icon className="size-5" aria-hidden />
-                </span>
-                <h3 className="text-base font-semibold text-foreground">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-      </div>
-
-      <footer className="mt-auto shrink-0 border-t border-border bg-background w-full pb-[env(safe-area-inset-bottom)]">
-        <div className="max-w-6xl mx-auto px-5 md:px-10 lg:px-14 py-4 flex flex-row items-center justify-between gap-4">
+      <footer className="mt-auto w-full shrink-0 border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto flex max-w-6xl flex-row items-center justify-between gap-4 px-5 py-3 md:px-10 md:py-4 lg:px-14">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/app-icon.png" alt="DECIDE" className="size-11 shrink-0 rounded-2xl object-contain" />
-          <div className="flex flex-col items-end justify-center gap-0.5 min-w-0">
-            <p className="text-sm font-semibold text-foreground text-right">
+          <img src="/app-icon.png" alt="DECIDE" className="size-9 shrink-0 rounded-xl object-contain sm:size-11 sm:rounded-2xl" />
+          <div className="flex min-w-0 flex-col items-end justify-center gap-0.5">
+            <p className="text-right text-xs font-semibold text-foreground sm:text-sm">
               Doğru karar, doğru kıyafet
             </p>
             <Link
               href="/privacy"
-              className="text-xs text-muted-foreground hover:text-secondary transition-colors text-right"
+              className="text-right text-xs text-muted-foreground transition-colors hover:text-secondary"
             >
               Gizlilik Politikası
             </Link>
