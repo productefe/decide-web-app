@@ -44,7 +44,6 @@ export default function AnalyzeModal({
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={handleFileChange}
         hidden
       />
