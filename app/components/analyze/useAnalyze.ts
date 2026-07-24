@@ -52,7 +52,9 @@ export function useAnalyze(
   const [pieces, setPieces] = useState<PieceResult[] | null>(null);
   const [reasonsLoading, setReasonsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const explainAbortRef = useRef<AbortController | null>(null);
 
   const fetchReasons = async (parsedPieces: PieceResult[], photoUrl?: string) => {
@@ -108,15 +110,21 @@ export function useAnalyze(
     }
   };
 
+  const clearFileInputs = () => {
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    setSourceSheetOpen(false);
     if (!file) return;
     const validationError = validateImageFile(file);
     if (validationError) {
       setError(validationError);
       setStage("idle");
       setOpen(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      clearFileInputs();
       return;
     }
     setError(null);
@@ -141,8 +149,20 @@ export function useAnalyze(
       setPreview(native.preview);
       return;
     }
-    fileInputRef.current?.click();
+    setSourceSheetOpen(true);
   };
+
+  const pickFromGallery = () => {
+    galleryInputRef.current?.click();
+    setSourceSheetOpen(false);
+  };
+
+  const pickFromCamera = () => {
+    cameraInputRef.current?.click();
+    setSourceSheetOpen(false);
+  };
+
+  const closeSourceSheet = () => setSourceSheetOpen(false);
 
   const start = async () => {
     if (!selectedFile || stage === "loading") return;
@@ -236,11 +256,27 @@ export function useAnalyze(
     close();
     setSelectedFile(null);
     setPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    clearFileInputs();
   };
 
   return {
-    open, stage, preview, pieces, reasonsLoading, error, fileInputRef,
-    selectedFile, handleFileChange, openPhotoPicker, start, close, analyzeAnother,
+    open,
+    stage,
+    preview,
+    pieces,
+    reasonsLoading,
+    error,
+    galleryInputRef,
+    cameraInputRef,
+    sourceSheetOpen,
+    selectedFile,
+    handleFileChange,
+    openPhotoPicker,
+    pickFromGallery,
+    pickFromCamera,
+    closeSourceSheet,
+    start,
+    close,
+    analyzeAnother,
   };
 }
