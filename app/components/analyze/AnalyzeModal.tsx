@@ -38,9 +38,12 @@ export default function AnalyzeModal({
     galleryInputRef,
     cameraInputRef,
     sourceSheetOpen,
+    sourceSheetReady,
     selectedFile,
     handleFileChange,
     openPhotoPicker,
+    pickFromGallery,
+    pickFromCamera,
     closeSourceSheet,
     start,
     close,
@@ -56,21 +59,21 @@ export default function AnalyzeModal({
   return (
     <>
       <input
-        id="decide-gallery-input"
         ref={galleryInputRef}
         type="file"
         accept="image/*"
         onChange={handleFileChange}
-        hidden
+        className="sr-only"
+        tabIndex={-1}
       />
       <input
-        id="decide-camera-input"
         ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         onChange={handleFileChange}
-        hidden
+        className="sr-only"
+        tabIndex={-1}
       />
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -123,25 +126,27 @@ export default function AnalyzeModal({
         </p>
       </div>
 
-      <Modal open={sourceSheetOpen} onClose={closeSourceSheet}>
+      <Modal open={sourceSheetOpen} onClose={sourceSheetReady ? closeSourceSheet : () => {}}>
         <h2 className="mb-4 text-lg font-semibold text-foreground">Fotoğraf ekle</h2>
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="decide-gallery-input"
-            onClick={closeSourceSheet}
-            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        <div
+          className={`flex flex-col gap-2 transition-opacity ${sourceSheetReady ? "opacity-100" : "pointer-events-none opacity-60"}`}
+        >
+          <button
+            type="button"
+            onClick={pickFromGallery}
+            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
-            <Images className="size-5 text-secondary" aria-hidden />
+            <Images className="size-5 shrink-0 text-secondary" aria-hidden />
             Galeriden seç
-          </label>
-          <label
-            htmlFor="decide-camera-input"
-            onClick={closeSourceSheet}
-            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          </button>
+          <button
+            type="button"
+            onClick={pickFromCamera}
+            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
-            <Camera className="size-5 text-secondary" aria-hidden />
+            <Camera className="size-5 shrink-0 text-secondary" aria-hidden />
             Kameradan çek
-          </label>
+          </button>
           <Button type="button" variant="ghost" onClick={closeSourceSheet} className="mt-1 min-h-[48px]">
             Vazgeç
           </Button>

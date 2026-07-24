@@ -3,7 +3,6 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
-import { pickProductPhoto } from "@/lib/pick-photo";
 import { Stage, Results, PieceResult } from "./types";
 
 type ExplainReasons = {
@@ -53,9 +52,11 @@ export function useAnalyze(
   const [reasonsLoading, setReasonsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
+  const [sourceSheetReady, setSourceSheetReady] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const explainAbortRef = useRef<AbortController | null>(null);
+  const sourceSheetReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchReasons = async (parsedPieces: PieceResult[], photoUrl?: string) => {
     explainAbortRef.current?.abort();
@@ -115,9 +116,18 @@ export function useAnalyze(
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
+  const closeSourceSheet = () => {
+    if (sourceSheetReadyTimerRef.current) {
+      clearTimeout(sourceSheetReadyTimerRef.current);
+      sourceSheetReadyTimerRef.current = null;
+    }
+    setSourceSheetOpen(false);
+    setSourceSheetReady(false);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    setSourceSheetOpen(false);
+    closeSourceSheet();
     if (!file) return;
     const validationError = validateImageFile(file);
     if (validationError) {
@@ -134,35 +144,31 @@ export function useAnalyze(
     reader.readAsDataURL(file);
   };
 
-  const openPhotoPicker = async () => {
-    const native = await pickProductPhoto();
-    if (native) {
-      const validationError = validateImageFile(native.file);
-      if (validationError) {
-        setError(validationError);
-        setStage("idle");
-        setOpen(false);
-        return;
-      }
-      setError(null);
-      setSelectedFile(native.file);
-      setPreview(native.preview);
-      return;
+  /** Always use in-app chooser — Capacitor Camera / capture inputs skip the sheet on phones. */
+  const openPhotoPicker = () => {
+    if (sourceSheetReadyTimerRef.current) {
+      clearTimeout(sourceSheetReadyTimerRef.current);
     }
+    setSourceSheetReady(false);
     setSourceSheetOpen(true);
+    // Ignore the opening tap's ghost click so it can't hit "Kameradan çek".
+    sourceSheetReadyTimerRef.current = setTimeout(() => {
+      setSourceSheetReady(true);
+      sourceSheetReadyTimerRef.current = null;
+    }, 450);
   };
 
   const pickFromGallery = () => {
+    if (!sourceSheetReady) return;
     galleryInputRef.current?.click();
-    setSourceSheetOpen(false);
+    closeSourceSheet();
   };
 
   const pickFromCamera = () => {
+    if (!sourceSheetReady) return;
     cameraInputRef.current?.click();
-    setSourceSheetOpen(false);
+    closeSourceSheet();
   };
-
-  const closeSourceSheet = () => setSourceSheetOpen(false);
 
   const start = async () => {
     if (!selectedFile || stage === "loading") return;
@@ -269,6 +275,7 @@ export function useAnalyze(
     galleryInputRef,
     cameraInputRef,
     sourceSheetOpen,
+    sourceSheetReady,
     selectedFile,
     handleFileChange,
     openPhotoPicker,
