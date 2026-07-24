@@ -1,10 +1,9 @@
 "use client";
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Camera, ImagePlus, Images } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecideLogo } from "@/components/decide-logo";
-import Modal from "@/components/modal";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useAnalyze } from "./useAnalyze";
 import { ResultList } from "./ResultList";
@@ -35,16 +34,9 @@ export default function AnalyzeModal({
     pieces,
     reasonsLoading,
     error,
-    galleryInputRef,
-    cameraInputRef,
-    sourceSheetOpen,
-    sourceSheetReady,
+    fileInputRef,
     selectedFile,
     handleFileChange,
-    openPhotoPicker,
-    pickFromGallery,
-    pickFromCamera,
-    closeSourceSheet,
     start,
     close,
     analyzeAnother,
@@ -58,28 +50,20 @@ export default function AnalyzeModal({
 
   return (
     <>
+      {/* No capture attr → iOS/Android native sheet (Photo Library / Take Photo / Files) */}
       <input
-        ref={galleryInputRef}
+        id="decide-photo-input"
+        ref={fileInputRef}
         type="file"
         accept="image/*"
-        onChange={handleFileChange}
-        className="sr-only"
-        tabIndex={-1}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
         onChange={handleFileChange}
         className="sr-only"
         tabIndex={-1}
       />
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <button
-          type="button"
-          onClick={() => openPhotoPicker()}
+        <label
+          htmlFor="decide-photo-input"
           className={`relative flex min-h-[13rem] flex-1 cursor-pointer touch-manipulation flex-col place-content-center gap-3 overflow-hidden rounded-2xl px-4 py-8 text-center text-foreground transition-all duration-300 animate-press ${
             preview
               ? "border-2 border-secondary/30 bg-gradient-to-br from-card to-secondary/[0.04] shadow-sm ring-1 ring-secondary/10"
@@ -102,7 +86,7 @@ export default function AnalyzeModal({
               <small className="text-sm text-muted-foreground">Galeriden seç veya çek · JPG, PNG</small>
             </>
           )}
-        </button>
+        </label>
 
         {inlineError ? (
           <p className="mt-3 shrink-0 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -125,33 +109,6 @@ export default function AnalyzeModal({
           {PHOTO_DISCLAIMER}
         </p>
       </div>
-
-      <Modal open={sourceSheetOpen} onClose={sourceSheetReady ? closeSourceSheet : () => {}}>
-        <h2 className="mb-4 text-lg font-semibold text-foreground">Fotoğraf ekle</h2>
-        <div
-          className={`flex flex-col gap-2 transition-opacity ${sourceSheetReady ? "opacity-100" : "pointer-events-none opacity-60"}`}
-        >
-          <button
-            type="button"
-            onClick={pickFromGallery}
-            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <Images className="size-5 shrink-0 text-secondary" aria-hidden />
-            Galeriden seç
-          </button>
-          <button
-            type="button"
-            onClick={pickFromCamera}
-            className="flex min-h-[48px] cursor-pointer touch-manipulation items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <Camera className="size-5 shrink-0 text-secondary" aria-hidden />
-            Kameradan çek
-          </button>
-          <Button type="button" variant="ghost" onClick={closeSourceSheet} className="mt-1 min-h-[48px]">
-            Vazgeç
-          </Button>
-        </div>
-      </Modal>
 
       {open && mounted
         ? createPortal(

@@ -51,12 +51,8 @@ export function useAnalyze(
   const [pieces, setPieces] = useState<PieceResult[] | null>(null);
   const [reasonsLoading, setReasonsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
-  const [sourceSheetReady, setSourceSheetReady] = useState(false);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const explainAbortRef = useRef<AbortController | null>(null);
-  const sourceSheetReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchReasons = async (parsedPieces: PieceResult[], photoUrl?: string) => {
     explainAbortRef.current?.abort();
@@ -111,30 +107,15 @@ export function useAnalyze(
     }
   };
 
-  const clearFileInputs = () => {
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-  };
-
-  const closeSourceSheet = () => {
-    if (sourceSheetReadyTimerRef.current) {
-      clearTimeout(sourceSheetReadyTimerRef.current);
-      sourceSheetReadyTimerRef.current = null;
-    }
-    setSourceSheetOpen(false);
-    setSourceSheetReady(false);
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    closeSourceSheet();
     if (!file) return;
     const validationError = validateImageFile(file);
     if (validationError) {
       setError(validationError);
       setStage("idle");
       setOpen(false);
-      clearFileInputs();
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
     setError(null);
@@ -144,30 +125,9 @@ export function useAnalyze(
     reader.readAsDataURL(file);
   };
 
-  /** Always use in-app chooser — Capacitor Camera / capture inputs skip the sheet on phones. */
+  /** Native OS picker (Photo Library / Take Photo / Choose File). No capture, no Capacitor. */
   const openPhotoPicker = () => {
-    if (sourceSheetReadyTimerRef.current) {
-      clearTimeout(sourceSheetReadyTimerRef.current);
-    }
-    setSourceSheetReady(false);
-    setSourceSheetOpen(true);
-    // Ignore the opening tap's ghost click so it can't hit "Kameradan çek".
-    sourceSheetReadyTimerRef.current = setTimeout(() => {
-      setSourceSheetReady(true);
-      sourceSheetReadyTimerRef.current = null;
-    }, 450);
-  };
-
-  const pickFromGallery = () => {
-    if (!sourceSheetReady) return;
-    galleryInputRef.current?.click();
-    closeSourceSheet();
-  };
-
-  const pickFromCamera = () => {
-    if (!sourceSheetReady) return;
-    cameraInputRef.current?.click();
-    closeSourceSheet();
+    fileInputRef.current?.click();
   };
 
   const start = async () => {
@@ -262,7 +222,7 @@ export function useAnalyze(
     close();
     setSelectedFile(null);
     setPreview(null);
-    clearFileInputs();
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return {
@@ -272,16 +232,10 @@ export function useAnalyze(
     pieces,
     reasonsLoading,
     error,
-    galleryInputRef,
-    cameraInputRef,
-    sourceSheetOpen,
-    sourceSheetReady,
+    fileInputRef,
     selectedFile,
     handleFileChange,
     openPhotoPicker,
-    pickFromGallery,
-    pickFromCamera,
-    closeSourceSheet,
     start,
     close,
     analyzeAnother,
