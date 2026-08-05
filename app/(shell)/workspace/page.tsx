@@ -19,7 +19,7 @@ export default async function WorkspacePage() {
 
   const { data: userPreferences } = await supabase
     .from("user_preferences")
-    .select("id, sizes, gender, preferences")
+    .select("id, sizes, gender, preferences, price_mode")
     .eq("id", user.id)
     .single();
 

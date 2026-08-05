@@ -6,9 +6,11 @@ import { Button } from "./ui/button";
 import { createClient } from "@/utils/supabase/client";
 import {
   GENDER_OPTIONS,
-  PREFERENCE_OPTIONS,
+  PRICE_MODE_OPTIONS,
   SIZE_OPTIONS,
+  parsePriceMode,
   parseSizes,
+  type PriceMode,
   type UserGender,
   type UserPreferencesRow,
   type UserSize,
@@ -27,14 +29,16 @@ export default function ProfileForm({ userId, initial }: Props) {
   const router = useRouter();
   const [sizes, setSizes] = useState<UserSize[]>(parseSizes(initial.sizes) as UserSize[]);
   const [gender, setGender] = useState<UserGender | "">(initial.gender ?? "");
-  const [style, setStyle] = useState(initial.preferences?.[0] ?? "");
+  const [priceMode, setPriceMode] = useState<PriceMode | "">(
+    parsePriceMode(initial.price_mode) ?? ""
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sizes.length || !gender || !style) {
+    if (!sizes.length || !gender || !priceMode) {
       setError("Tüm alanları doldur.");
       return;
     }
@@ -48,7 +52,8 @@ export default function ProfileForm({ userId, initial }: Props) {
       id: userId,
       sizes,
       gender,
-      preferences: [style],
+      price_mode: priceMode,
+      preferences: [],
     });
 
     setLoading(false);
@@ -117,24 +122,29 @@ export default function ProfileForm({ userId, initial }: Props) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-foreground">Tarzın</span>
-        <p className="text-xs text-muted-foreground">Bir tane seç.</p>
+        <span className="text-sm font-medium text-foreground">Fiyat tercihin</span>
+        <p className="text-xs text-muted-foreground">Önerilerde hangi mağaza dilimini göreceğini belirler.</p>
         <div className="flex flex-wrap gap-2">
-          {PREFERENCE_OPTIONS.map((pref) => (
+          {PRICE_MODE_OPTIONS.map((opt) => (
             <button
-              key={pref}
+              key={opt.value}
               type="button"
-              onClick={() => setStyle(pref)}
+              onClick={() => setPriceMode(opt.value)}
               className={`min-h-[44px] px-3 py-2 text-sm rounded-xl border transition-all ${
-                style === pref
+                priceMode === opt.value
                   ? "bg-secondary text-secondary-foreground border-secondary shadow-sm"
                   : "bg-muted text-foreground border-border hover:border-accent/50"
               }`}
             >
-              {pref}
+              {opt.label}
             </button>
           ))}
         </div>
+        {priceMode ? (
+          <p className="text-xs text-muted-foreground">
+            {PRICE_MODE_OPTIONS.find((o) => o.value === priceMode)?.desc}
+          </p>
+        ) : null}
       </div>
 
       <Button type="submit" disabled={loading} size="full">

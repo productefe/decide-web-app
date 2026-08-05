@@ -5,6 +5,7 @@ import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecideLogo } from "@/components/decide-logo";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
+import { OCCASION_OPTIONS, type Occasion } from "@/lib/preferences";
 import { useAnalyze } from "./useAnalyze";
 import { ResultList } from "./ResultList";
 import { AnalyzeLoadingProgress, DEFAULT_LOADING_STEPS } from "./AnalyzeLoadingProgress";
@@ -36,6 +37,8 @@ export default function AnalyzeModal({
     error,
     fileInputRef,
     selectedFile,
+    occasion,
+    setOccasion,
     handleFileChange,
     start,
     close,
@@ -50,7 +53,6 @@ export default function AnalyzeModal({
 
   return (
     <>
-      {/* No capture attr → iOS/Android native sheet (Photo Library / Take Photo / Files) */}
       <input
         id="decide-photo-input"
         ref={fileInputRef}
@@ -88,6 +90,29 @@ export default function AnalyzeModal({
           )}
         </label>
 
+        <div className="mt-4 shrink-0">
+          <p className="text-center text-sm font-medium text-foreground">Giyim amacı</p>
+          <p className="mt-1 text-center text-xs text-muted-foreground">
+            Bu fotoğraf için neye göre önerelim?
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {OCCASION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setOccasion(opt.value as Occasion)}
+                className={`min-h-[40px] rounded-xl border px-3 py-2 text-sm transition-all ${
+                  occasion === opt.value
+                    ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
+                    : "border-border bg-muted text-foreground hover:border-accent/50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {inlineError ? (
           <p className="mt-3 shrink-0 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {inlineError}
@@ -96,7 +121,7 @@ export default function AnalyzeModal({
 
         <Button
           onClick={start}
-          disabled={!selectedFile || stage === "loading"}
+          disabled={!selectedFile || !occasion || stage === "loading"}
           variant="default"
           size="full"
           className="relative mt-4 min-h-[48px] shrink-0 shadow-sm"

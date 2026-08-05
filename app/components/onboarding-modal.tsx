@@ -8,8 +8,9 @@ import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { createClient } from "@/utils/supabase/client";
 import {
   GENDER_OPTIONS,
-  PREFERENCE_OPTIONS,
+  PRICE_MODE_OPTIONS,
   SIZE_OPTIONS,
+  type PriceMode,
   type UserGender,
   type UserSize,
 } from "@/lib/preferences";
@@ -21,7 +22,7 @@ type Props = {
   onComplete?: () => void;
 };
 
-const STEPS = ["Beden", "Cinsiyet", "Tarz"];
+const STEPS = ["Beden", "Cinsiyet", "Fiyat"];
 
 const useIsMounted = () =>
   useSyncExternalStore(() => () => {}, () => true, () => false);
@@ -57,7 +58,7 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
 
   const [sizes, setSizes] = useState<UserSize[]>([]);
   const [gender, setGender] = useState<UserGender | "">("");
-  const [style, setStyle] = useState("");
+  const [priceMode, setPriceMode] = useState<PriceMode | "">("");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -81,8 +82,8 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!style) {
-      setError("Bir tarz seç, sana özel öneriler için lazım.");
+    if (!priceMode) {
+      setError("Bir fiyat modu seç.");
       return;
     }
 
@@ -95,7 +96,8 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
       id: userId,
       sizes,
       gender,
-      preferences: [style],
+      price_mode: priceMode,
+      preferences: [],
     });
 
     setLoading(false);
@@ -105,7 +107,11 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
       return;
     }
 
-    saveGuestPrefsLocal({ sizes, gender: gender as UserGender, preferences: [style] });
+    saveGuestPrefsLocal({
+      sizes,
+      gender: gender as UserGender,
+      price_mode: priceMode,
+    });
     setOpen(false);
     onComplete?.();
     if (redirectPath) {
@@ -214,25 +220,32 @@ export default function OnboardingModal({ userId, redirectPath, onComplete }: Pr
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col justify-center gap-5 overflow-y-auto overscroll-contain">
               <div className="flex flex-col gap-3">
-                <label className="text-center text-sm font-medium text-foreground">Tarzın nasıl?</label>
-                <p className="text-center text-xs text-muted-foreground">Bir tane seç.</p>
+                <label className="text-center text-sm font-medium text-foreground">Fiyat tercihin?</label>
+                <p className="text-center text-xs text-muted-foreground">
+                  Önerilerde hangi mağaza dilimini göreceğini belirler.
+                </p>
 
                 <div className="mt-1 flex flex-wrap justify-center gap-2">
-                  {PREFERENCE_OPTIONS.map((pref) => (
+                  {PRICE_MODE_OPTIONS.map((opt) => (
                     <button
-                      key={pref}
+                      key={opt.value}
                       type="button"
-                      onClick={() => setStyle(pref)}
+                      onClick={() => setPriceMode(opt.value)}
                       className={`min-h-[44px] rounded-xl border px-3 py-2 text-sm transition-all ${
-                        style === pref
+                        priceMode === opt.value
                           ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
                           : "border-border bg-muted text-foreground hover:border-accent/50"
                       }`}
                     >
-                      {pref}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
+                {priceMode ? (
+                  <p className="text-center text-xs text-muted-foreground">
+                    {PRICE_MODE_OPTIONS.find((o) => o.value === priceMode)?.desc}
+                  </p>
+                ) : null}
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import ProfileForm from "@/components/profile-form";
 import ProfileLogout from "@/components/profile-logout";
+import { parsePriceMode } from "@/lib/preferences";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function ProfilePage() {
@@ -12,7 +13,7 @@ export default async function ProfilePage() {
 
   const { data: userPreferences } = await supabase
     .from("user_preferences")
-    .select("id, sizes, gender, preferences")
+    .select("id, sizes, gender, preferences, price_mode")
     .eq("id", user.id)
     .single();
 
@@ -21,7 +22,7 @@ export default async function ProfilePage() {
       <div className="mb-6">
         <h1 className="text-3xl font-semibold text-foreground">Profil</h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Beden, cinsiyet ve tarzını buradan güncelleyebilirsin.
+          Beden, cinsiyet ve fiyat tercihinizi buradan güncelleyebilirsin.
         </p>
       </div>
 
@@ -33,6 +34,7 @@ export default async function ProfilePage() {
             sizes: (userPreferences?.sizes as string[] | null) ?? null,
             gender: (userPreferences?.gender as "men" | "women" | null) ?? null,
             preferences: (userPreferences?.preferences as string[] | null) ?? null,
+            price_mode: parsePriceMode(userPreferences?.price_mode),
           }}
         />
       </div>

@@ -1,5 +1,5 @@
 import type { PieceResult } from "@/components/analyze/types";
-import type { UserGender } from "./preferences";
+import type { PriceMode, UserGender } from "./preferences";
 
 export const GUEST_PREFS_KEY = "decide_guest_prefs";
 export const GUEST_ANALYSIS_USED_KEY = "decide_guest_analysis_used";
@@ -13,7 +13,7 @@ export type GuestLastResults = {
 export type GuestPrefs = {
   sizes: string[];
   gender: UserGender;
-  preferences: string[];
+  price_mode: PriceMode;
 };
 
 export function saveGuestPrefsLocal(prefs: GuestPrefs): void {
@@ -90,7 +90,8 @@ export async function mergeGuestPrefsToDb(userId: string): Promise<void> {
     id: userId,
     sizes: local.sizes,
     gender: local.gender,
-    preferences: local.preferences,
+    price_mode: local.price_mode,
+    preferences: [],
   });
   clearGuestPrefsLocal();
 }

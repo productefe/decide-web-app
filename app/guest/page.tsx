@@ -49,7 +49,7 @@ export default function GuestPage() {
 
       const { data: prefs } = await supabase
         .from("user_preferences")
-        .select("id, sizes, gender, preferences")
+        .select("id, sizes, gender, preferences, price_mode")
         .eq("id", user.id)
         .single();
 

@@ -1,4 +1,5 @@
 import { Product, Results } from "@/components/analyze/types";
+import type { Occasion, PriceMode } from "@/lib/preferences";
 
 export interface RequestContext {
   photo_url: string;
@@ -11,6 +12,8 @@ export interface UserProfile {
   budget_max?: number;
   preferences?: string[];
   sizes?: string[];
+  price_mode?: PriceMode;
+  occasion?: Occasion | null;
   [key: string]: unknown;
 }
 
@@ -20,6 +23,7 @@ export interface ProductProfile extends RequestContext {
   color_tr: string;
   colors: string[];
   fit: string;
+  fit_tr: string;
   collar: string;
   collar_tr: string;
   pattern: string;
@@ -30,6 +34,13 @@ export interface ProductProfile extends RequestContext {
   gender_tr: string;
   search_query: string;
   fallback_query: string;
+}
+
+export interface MatchSignals {
+  category: boolean;
+  color: boolean;
+  fit: boolean;
+  cheaper: boolean;
 }
 
 export interface ScoredProduct {
@@ -46,6 +57,7 @@ export interface ScoredProduct {
   forYouScore: number;
   trustScore: number;
   recommendationScore: number;
+  signals: MatchSignals;
 }
 
 export interface ScoringResult {
@@ -70,9 +82,17 @@ interface SerpShoppingItem {
 }
 
 // ---------------------------------------------------------------------------
-// Style preferences -> search keywords
+// Occasion + price mode
 // ---------------------------------------------------------------------------
 
+const OCCASION_KEYWORDS: Record<Occasion, string> = {
+  spor: "spor athleisure",
+  gundelik: "günlük casual",
+  luks: "premium lüks şık",
+  aksam: "akşam davet şık",
+};
+
+/** @deprecated Prefer getOccasionKeyword. Kept for older callers. */
 const STYLE_KEYWORDS: Record<string, string> = {
   "Rahatlık & Konfor": "rahat oversize",
   "Minimalist & Sade": "minimal sade",
@@ -84,9 +104,170 @@ const STYLE_KEYWORDS: Record<string, string> = {
   "Trend & Moda": "trend",
 };
 
+export function getOccasionKeyword(occasion: Occasion | null | undefined): string {
+  if (!occasion) return "";
+  return OCCASION_KEYWORDS[occasion] || "";
+}
+
 export function getStyleKeyword(preferences: string[] | undefined): string {
   if (!preferences?.length) return "";
   return STYLE_KEYWORDS[preferences[0]] || "";
+}
+
+const BUDGET_STORES = [
+  "lc waikiki",
+  "lcw",
+  "mavi",
+  "defacto",
+  "koton",
+  "english home",
+  "gratis",
+];
+
+const LUXURY_STORES = [
+  "beymen",
+  "vakko",
+  "vakkorama",
+  "network",
+  "twist",
+  "massimo dutti",
+  "lacoste",
+  "tommy hilfiger",
+  "hugo boss",
+  "boss",
+  "sandro",
+  "maje",
+  "ralph lauren",
+  "calvin klein",
+  "guess",
+  "michael kors",
+  "armâni",
+  "armani",
+  "diesel",
+  "liu jo",
+  "iksv",
+  "matmazel",
+  "i pezzi dipinti",
+  "pinko",
+  "coach",
+];
+
+const MASS_MARKET_STORES = [
+  "trendyol",
+  "hepsiburada",
+  "amazon",
+  "boyner",
+  "zara",
+  "mango",
+  "h&m",
+  "bershka",
+  "pull&bear",
+  "stradivarius",
+  "gap",
+  "next",
+  "n11",
+  "flo",
+  "nike",
+  "adidas",
+  "decathlon",
+  "puma",
+];
+
+function normalizeStore(source?: string): string {
+  return (source || "").toLowerCase().trim();
+}
+
+function storeMatches(source: string | undefined, names: string[]): boolean {
+  const s = normalizeStore(source);
+  if (!s) return false;
+  return names.some(
+    (name) =>
+      s === name ||
+      s.startsWith(name + " ") ||
+      s.startsWith(name + ".") ||
+      s.includes(name + ".com") ||
+      s.includes(name)
+  );
+}
+
+export function isBudgetStore(source?: string): boolean {
+  return storeMatches(source, BUDGET_STORES);
+}
+
+export function isLuxuryStore(source?: string): boolean {
+  return storeMatches(source, LUXURY_STORES);
+}
+
+export function allowedByPriceMode(source: string | undefined, priceMode: PriceMode | undefined): boolean {
+  const mode = priceMode || "karma";
+  if (mode === "luks") return !isBudgetStore(source);
+  if (mode === "uygunluk") return !isLuxuryStore(source);
+  return true;
+}
+
+const FIT_TR: Record<string, string> = {
+  slim: "slim fit",
+  regular: "regular fit",
+  oversized: "oversize",
+  oversize: "oversize",
+  loose: "bol kesim",
+  cropped: "crop",
+  crop: "crop",
+  "crop top": "crop",
+};
+
+function fitToken(fit: string | undefined): string {
+  const raw = (fit || "").toLowerCase().trim();
+  if (!raw) return "";
+  return FIT_TR[raw] || raw;
+}
+
+/** Hard filter titles that contradict the vision category/fit. */
+export function contradictsCategoryFit(title: string, profile: ProductProfile): boolean {
+  const t = title.toLowerCase();
+  const cat = (profile.category || "").toLowerCase();
+  const catTr = (profile.category_tr || "").toLowerCase();
+  const fit = (profile.fit || "").toLowerCase();
+
+  const isCrop =
+    fit.includes("crop") ||
+    cat.includes("crop") ||
+    catTr.includes("crop") ||
+    /\bcrop\b/.test(cat) ||
+    /\bcrop\b/.test(catTr);
+
+  if (isCrop) {
+    if (/\b(oversize|oversized|bol kesim|boyfriend|boxy)\b/.test(t) && !/\bcrop\b/.test(t)) {
+      return true;
+    }
+  }
+
+  if (/\b(oversize|oversized)\b/.test(fit)) {
+    if (/\b(crop|cropped|slim fit|dar kesim)\b/.test(t) && !/\b(oversize|oversized)\b/.test(t)) {
+      return true;
+    }
+  }
+
+  // Category family conflicts (very coarse)
+  if ((cat.includes("skirt") || catTr.includes("etek")) && /\b(pantolon|jeans|eşofman)\b/.test(t)) {
+    return true;
+  }
+  if ((cat.includes("jeans") || catTr.includes("kot pantolon")) && /\b(etek|skirt|elbise)\b/.test(t)) {
+    return true;
+  }
+  if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı")) && /\b(bot|topuklu|sandalet)\b/.test(t)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function buildShortReason(signals: MatchSignals, slot: "recommended" | "cheaper" | "style"): string {
+  if (slot === "cheaper" || signals.cheaper) return "Bütçene uygun";
+  if (signals.fit) return "Benzer kesim";
+  if (signals.color) return "Benzer renk";
+  if (signals.category) return "Aynı tür";
+  return "Benzer stil";
 }
 
 /** Override vision gender with user-stated gender and rebuild search queries. */
@@ -98,13 +279,13 @@ export function applyUserGender(
 
   const gender_tr = gender === "women" ? "kadın" : "erkek";
 
-  const search_query = [gender_tr, profile.color_tr, profile.collar_tr, profile.pattern_tr, profile.category_tr]
+  const search_query = [gender_tr, profile.color_tr, profile.fit_tr, profile.collar_tr, profile.pattern_tr, profile.category_tr]
     .filter(Boolean)
     .join(" ")
     .trim()
     .replace(/\s+/g, " ");
 
-  const fallback_query = [gender_tr, profile.color_tr, profile.category_tr]
+  const fallback_query = [gender_tr, profile.color_tr, profile.fit_tr, profile.category_tr]
     .filter(Boolean)
     .join(" ")
     .trim()
@@ -157,6 +338,7 @@ const colorTR: Record<string, string> = {
 
 const categoryTR: Record<string, string> = {
   "t-shirt": "tişört", tshirt: "tişört", tee: "tişört",
+  "crop top": "crop top", croptop: "crop top", crop: "crop top",
   shirt: "gömlek", polo: "polo tişört", "polo shirt": "polo tişört",
   hoodie: "kapüşonlu sweatshirt", sweatshirt: "sweatshirt",
   jacket: "ceket", "bomber jacket": "bomber ceket", "denim jacket": "kot ceket",
@@ -219,6 +401,7 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
   const color = colorTR[rawColor.toLowerCase()] || rawColor;
   const category = categoryTR[rawCategory] || rawCategory;
   const gender = genderTR[rawGender] || "";
+  const fitWord = fitToken(product.fit);
 
   const collarWord = collarCategories.some((c) => rawCategory.includes(c))
     ? collarTR[rawCollar] || ""
@@ -230,13 +413,13 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
       : patternTR[rawPattern] || ""
     : "";
 
-  const search_query = [gender, color, collarWord, patternWord, category]
+  const search_query = [gender, color, fitWord, collarWord, patternWord, category]
     .filter(Boolean)
     .join(" ")
     .trim()
     .replace(/\s+/g, " ");
 
-  const fallback_query = [gender, color, category]
+  const fallback_query = [gender, color, fitWord, category]
     .filter(Boolean)
     .join(" ")
     .trim()
@@ -251,6 +434,7 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     color_tr: color,
     colors: product.colors || [],
     fit: product.fit || "",
+    fit_tr: fitWord,
     collar: product.collar || "",
     collar_tr: collarWord,
     pattern: product.pattern || "",
@@ -308,14 +492,29 @@ export function parseVision(visionContent: string, ctx: RequestContext): Product
 // Scoring Engine
 // ---------------------------------------------------------------------------
 
-const tier1 = ["trendyol", "hepsiburada", "amazon", "boyner", "zara", "mango",
-  "koton", "lc waikiki", "lcw", "mavi", "defacto", "beymen", "decathlon",
-  "n11", "flo", "nike", "adidas", "gap", "h&m", "bershka", "vakkorama", "next"];
+const tier1 = [
+  ...new Set([
+    ...MASS_MARKET_STORES,
+    ...LUXURY_STORES,
+    "koton",
+    "lc waikiki",
+    "lcw",
+    "mavi",
+    "defacto",
+  ]),
+];
 
-function getTrust(source?: string): number {
-  const s = (source || "").toLowerCase();
-  if (tier1.some((name) => s === name || s.startsWith(name + " ") || s.startsWith(name + ".") || s.includes(name + ".com"))) return 92;
-  return 70;
+function getTrust(source?: string, priceMode?: PriceMode): number {
+  const s = normalizeStore(source);
+  let trust = 70;
+  if (tier1.some((name) => s === name || s.startsWith(name + " ") || s.startsWith(name + ".") || s.includes(name + ".com") || s.includes(name))) {
+    trust = 92;
+  }
+  if (isLuxuryStore(source)) trust = Math.max(trust, 94);
+  if (priceMode === "luks" && isLuxuryStore(source)) trust += 6;
+  if (priceMode === "uygunluk" && isBudgetStore(source)) trust += 4;
+  if (priceMode === "karma" && isLuxuryStore(source)) trust += 3;
+  return Math.min(trust, 100);
 }
 
 function getPrice(item: SerpShoppingItem): number {
@@ -333,7 +532,7 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
 
 /** Most specific → broadest; deduplicated. Optional size prepended as extra candidate only. */
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
-  const { gender_tr, color_tr, category_tr, search_query, fallback_query } = productProfile;
+  const { gender_tr, color_tr, category_tr, fit_tr, search_query, fallback_query } = productProfile;
   const sizes = productProfile.user_profile?.sizes || [];
   const firstSize = sizes[0];
 
@@ -345,9 +544,10 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
     sizeQuery,
     search_query,
     fallback_query,
+    [gender_tr, fit_tr, category_tr].filter(Boolean).join(" "),
     [gender_tr, category_tr].filter(Boolean).join(" "),
+    [color_tr, fit_tr, category_tr].filter(Boolean).join(" "),
     [color_tr, category_tr].filter(Boolean).join(" "),
-    category_tr,
   ];
   const seen = new Set<string>();
   return candidates
@@ -365,24 +565,43 @@ function scoreShoppingItems(
   styleKeyword = ""
 ): ScoredProduct[] {
   const userProfile = productProfile.user_profile || {};
+  const priceMode = (userProfile.price_mode as PriceMode | undefined) || "karma";
   const styleWords = styleKeyword.toLowerCase().split(/\s+/).filter(Boolean);
+  const fitWord = (productProfile.fit_tr || fitToken(productProfile.fit)).toLowerCase();
 
-  const validResults = (shoppingResults || []).filter(isValidShoppingItem);
+  const validResults = (shoppingResults || [])
+    .filter(isValidShoppingItem)
+    .filter((item) => allowedByPriceMode(item.source, priceMode))
+    .filter((item) => !contradictsCategoryFit(item.title || "", productProfile));
 
-  const scored = validResults.slice(0, 20).map((item) => {
+  const scored = validResults.slice(0, 30).map((item) => {
     const title = (item.title || "").toLowerCase();
     const price = getPrice(item);
-    const trustScore = getTrust(item.source);
+    const trustScore = getTrust(item.source, priceMode);
+
+    const categoryHit = Boolean(
+      productProfile.category_tr && title.includes(productProfile.category_tr.toLowerCase())
+    );
+    const colorHit = Boolean(
+      productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())
+    );
+    const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
 
     let matchScore = 0;
-    if (productProfile.category_tr && title.includes(productProfile.category_tr.toLowerCase())) matchScore += 40;
-    if (productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())) matchScore += 25;
-    if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 15;
+    if (categoryHit) matchScore += 55;
+    if (colorHit) matchScore += 25;
+    if (fitHit) matchScore += 20;
+    if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 12;
     if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
     if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 10;
-    if (styleWords.some((w) => title.includes(w))) matchScore += 15;
+    if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     matchScore = Math.min(matchScore, 100);
+
+    // Require category fidelity when we know the category
+    if (productProfile.category_tr && !categoryHit) {
+      matchScore = Math.min(matchScore, 45);
+    }
 
     let forYouScore = 0;
     if (userProfile.budget_min && userProfile.budget_max) {
@@ -394,7 +613,7 @@ function scoreShoppingItems(
     forYouScore = Math.min(forYouScore, 100);
 
     const recommendationScore = Math.round(
-      0.5 * matchScore + 0.25 * forYouScore + 0.25 * trustScore
+      0.55 * matchScore + 0.2 * forYouScore + 0.25 * trustScore
     );
 
     return {
@@ -411,6 +630,12 @@ function scoreShoppingItems(
       forYouScore,
       trustScore,
       recommendationScore,
+      signals: {
+        category: categoryHit,
+        color: colorHit,
+        fit: fitHit,
+        cheaper: false,
+      },
     };
   });
 
@@ -517,12 +742,20 @@ interface ImmersiveSeller {
   name?: string;
   direct_link?: string;
   link?: string;
+  in_stock?: boolean;
+  available?: boolean;
 }
 
 interface ImmersiveResponse {
-  product_results?: { stores?: ImmersiveSeller[]; sellers?: ImmersiveSeller[] };
+  product_results?: {
+    stores?: ImmersiveSeller[];
+    sellers?: ImmersiveSeller[];
+    out_of_stock?: boolean;
+    availability?: string;
+  };
   stores?: ImmersiveSeller[];
   sellers_results?: { online_sellers?: ImmersiveSeller[] };
+  search_information?: { shopping_results_state?: string };
 }
 
 function findSellers(resp: ImmersiveResponse | null | undefined): ImmersiveSeller[] {
@@ -533,6 +766,20 @@ function findSellers(resp: ImmersiveResponse | null | undefined): ImmersiveSelle
     resp?.product_results?.sellers ||
     []
   );
+}
+
+/** True only when immersive payload clearly says out of stock. */
+export function isClearlyOutOfStock(resp: ImmersiveResponse | null | undefined): boolean {
+  if (!resp) return false;
+  const pr = resp.product_results;
+  if (pr?.out_of_stock === true) return true;
+  const availability = (pr?.availability || "").toLowerCase();
+  if (availability.includes("out of stock") || availability.includes("stokta yok")) return true;
+
+  const sellers = findSellers(resp);
+  if (sellers.length === 0) return false;
+  const flagged = sellers.filter((s) => s.in_stock === false || s.available === false);
+  return flagged.length > 0 && flagged.length === sellers.length;
 }
 
 export function pickLink(
@@ -586,6 +833,26 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
     .filter((s): s is { slot: Slot; product: ScoredProduct } => Boolean(s.product));
 }
 
+/**
+ * Replace clearly OOS slot products with the next pool candidate.
+ * Returns updated slots + immersive list (null for replacements until re-fetched by caller).
+ */
+export function replaceOutOfStockSlots(
+  scoring: ScoringResult,
+  slots: { slot: Slot; product: ScoredProduct }[],
+  immersiveResponses: (ImmersiveResponse | null)[]
+): { slot: Slot; product: ScoredProduct }[] {
+  const used = new Set(slots.map((s) => s.product.title));
+  return slots.map((entry, i) => {
+    if (!isClearlyOutOfStock(immersiveResponses[i])) return entry;
+    const replacement = scoring.pool.find((p) => !used.has(p.title));
+    if (!replacement) return entry;
+    used.add(replacement.title);
+    used.delete(entry.product.title);
+    return { slot: entry.slot, product: replacement };
+  });
+}
+
 export function mergeLinks(
   scoring: ScoringResult,
   slots: { slot: Slot; product: ScoredProduct }[],
@@ -610,6 +877,11 @@ export function mergeLinks(
       affiliateTag
     );
 
+    const signals: MatchSignals = {
+      ...scored.signals,
+      cheaper: slot === "cheaper",
+    };
+
     const product: EnrichedProduct = {
       title: scored.title,
       price: scored.price,
@@ -620,7 +892,7 @@ export function mergeLinks(
       image: scored.image,
       store: scored.store,
       link,
-      reason: "",
+      reason: buildShortReason(signals, slot),
       label: "",
       isDirect: enriched,
       hasAffiliate: link.includes(`tag=${affiliateTag}`),
@@ -643,16 +915,28 @@ export interface Reasons {
   style_reason?: string;
 }
 
-export function buildResults(merged: MergedResult, reasons: Reasons): Results {
+export function buildResults(merged: MergedResult, reasons: Reasons = {}): Results {
   return {
     recommended: merged.recommended
-      ? { ...merged.recommended, reason: reasons.recommended_reason || "", label: "Recommended" }
+      ? {
+          ...merged.recommended,
+          reason: reasons.recommended_reason || merged.recommended.reason || "",
+          label: "Recommended",
+        }
       : null,
     cheaper: merged.cheaper
-      ? { ...merged.cheaper, reason: reasons.cheaper_reason || "", label: "Cheaper Option" }
+      ? {
+          ...merged.cheaper,
+          reason: reasons.cheaper_reason || merged.cheaper.reason || "",
+          label: "Cheaper Option",
+        }
       : null,
     style: merged.style
-      ? { ...merged.style, reason: reasons.style_reason || "", label: "Tarzına Uygun" }
+      ? {
+          ...merged.style,
+          reason: reasons.style_reason || merged.style.reason || "",
+          label: "Tarzına Uygun",
+        }
       : null,
   };
 }

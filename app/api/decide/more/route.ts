@@ -8,14 +8,13 @@ import {
   applyUserGender,
   type RequestContext,
   type UserProfile,
-} from "./pipeline";
-import { processPiece } from "./run-piece";
-import { getVisionImageDataUrl } from "./vision-image";
-import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
+} from "../pipeline";
+import { processPiece } from "../run-piece";
+import { getVisionImageDataUrl } from "../vision-image";
+import type { PieceResult, Results } from "@/components/analyze/types";
 import {
   ApiSecurityError,
   assertOwnStoragePath,
-  enforceGuestAnalysisCap,
   enforceRateLimit,
 } from "@/lib/api-security";
 
@@ -51,19 +50,15 @@ async function openAIContent(apiKey: string, body: unknown): Promise<string> {
   return content;
 }
 
-function toUserFacingError(message: string): string {
-  if (/JSON|Unexpected token|SyntaxError|parse/i.test(message)) {
-    return "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.";
-  }
-  return message;
-}
-
 function collectTitles(results: Results): string[] {
   return [results.recommended?.title, results.cheaper?.title, results.style?.title].filter(
     (t): t is string => Boolean(t)
   );
 }
 
+/**
+ * Re-run search for one piece (or first piece), excluding previously shown titles.
+ */
 export async function POST(req: NextRequest) {
   try {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -71,10 +66,7 @@ export async function POST(req: NextRequest) {
     const AFFILIATE_TAG = process.env.AMAZON_AFFILIATE_TAG || "decide07-21";
 
     if (!OPENAI_API_KEY || !SERPAPI_KEY) {
-      return NextResponse.json(
-        { error: "Sunucu yapılandırması eksik." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Sunucu yapılandırması eksik." }, { status: 500 });
     }
 
     const supabase = await createClient(req);
@@ -85,7 +77,6 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser(bearerToken);
 
     if (authError || !user) {
-      if (authError) console.error("/api/decide auth error:", authError.message);
       return NextResponse.json({ error: "Yetkisiz." }, { status: 401 });
     }
 
@@ -93,32 +84,22 @@ export async function POST(req: NextRequest) {
     const photo_url: string | undefined = body?.photo_url;
     const storage_path: string | undefined = body?.storage_path;
     const occasion: Occasion | null = parseOccasion(body?.occasion);
-    if (!photo_url) {
-      return NextResponse.json(
-        { error: "Fotoğraf bulunamadı." },
-        { status: 400 }
-      );
+    const pieceLabel: string | undefined = body?.piece_label;
+    const excludeRaw = Array.isArray(body?.exclude_titles) ? body.exclude_titles : [];
+    const excludeTitles = new Set<string>(
+      excludeRaw.filter((t: unknown): t is string => typeof t === "string" && t.length > 0).slice(0, 40)
+    );
+
+    if (!photo_url || !storage_path) {
+      return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 400 });
     }
     if (!occasion) {
-      return NextResponse.json(
-        { error: "Giyim amacı seçmelisin." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Giyim amacı seçmelisin." }, { status: 400 });
     }
 
     try {
       assertOwnStoragePath(user.id, storage_path);
-    } catch (err) {
-      if (err instanceof ApiSecurityError) {
-        return NextResponse.json({ error: err.message }, { status: err.status });
-      }
-      throw err;
-    }
-
-    const anonymous = isAnonymousUser(user);
-    try {
-      await enforceGuestAnalysisCap(supabase, anonymous);
-      await enforceRateLimit(supabase, "decide", anonymous ? 2 : 10);
+      await enforceRateLimit(supabase, "decide_more", isAnonymousUser(user) ? 3 : 15);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });
@@ -133,7 +114,8 @@ export async function POST(req: NextRequest) {
       .single();
 
     const sizes = parseSizes(userPrefs?.sizes);
-    const price_mode: PriceMode = parsePriceMode(userPrefs?.price_mode) || "karma";
+    const price_mode: PriceMode =
+      parsePriceMode(body?.price_mode) || parsePriceMode(userPrefs?.price_mode) || "karma";
 
     const user_profile: UserProfile = {
       preferences: userPrefs?.preferences || [],
@@ -144,8 +126,7 @@ export async function POST(req: NextRequest) {
     const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path!);
-
+    const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
     const visionContent = await openAIContent(OPENAI_API_KEY, {
       model: "gpt-4o",
       messages: [
@@ -161,58 +142,43 @@ export async function POST(req: NextRequest) {
     });
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
-    const profiles = visionPieces.map(({ label, profile }) => {
-      let p = profile;
-      if (userPrefs?.gender) {
-        p = applyUserGender(p, userPrefs.gender);
-      }
-      return { label, profile: p };
-    });
-
-    const pieceResults = (
-      await Promise.all(
-        profiles.map(({ label, profile }) =>
-          processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
-            piece ? { ...piece, label } : null
-          )
-        )
-      )
-    ).filter((p): p is PieceResult => p !== null);
-
-    if (pieceResults.length === 0) {
-      return NextResponse.json({
-        user_id: user.id,
-        photo_url,
-        pieces: [],
-        results: null,
-        error: "Bu fotoğraf için sonuç bulunamadı.",
-      });
+    let target = visionPieces[0];
+    if (pieceLabel) {
+      const match = visionPieces.find(
+        (p) => p.label === pieceLabel || p.profile.category_tr === pieceLabel
+      );
+      if (match) target = match;
     }
 
-    const stored: StoredResults = { pieces: pieceResults };
-    const firstResults = pieceResults[0].results;
-
-    if (!isAnonymousUser(user)) {
-      const { error: insertError } = await supabase.from("search_history").insert({
-        user_id: user.id,
-        photo_url,
-        results: stored,
-      });
-      if (insertError) console.error("search_history insert:", insertError.message);
+    let profile = target.profile;
+    if (userPrefs?.gender) {
+      profile = applyUserGender(profile, userPrefs.gender);
     }
+
+    const piece = await processPiece(
+      profile,
+      occasionKeyword,
+      SERPAPI_KEY,
+      AFFILIATE_TAG,
+      excludeTitles
+    );
+
+    if (!piece) {
+      return NextResponse.json(
+        { error: "Yeni alternatif bulunamadı. Farklı bir fotoğraf dene." },
+        { status: 404 }
+      );
+    }
+
+    const labeled: PieceResult = { ...piece, label: pieceLabel || target.label || piece.label };
 
     return NextResponse.json({
-      user_id: user.id,
-      photo_url,
-      pieces: pieceResults,
-      results: firstResults,
-      exclude_titles: pieceResults.flatMap((p) => collectTitles(p.results)),
-      occasion,
-      price_mode,
+      piece: labeled,
+      exclude_titles: [...excludeTitles, ...collectTitles(labeled.results)],
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
-    console.error("/api/decide:", message);
-    return NextResponse.json({ error: toUserFacingError(message) }, { status: 500 });
+    console.error("/api/decide/more:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
