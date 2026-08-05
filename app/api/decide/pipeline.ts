@@ -14,6 +14,7 @@ export interface UserProfile {
   sizes?: string[];
   price_mode?: PriceMode;
   occasion?: Occasion | null;
+  gender?: string | null;
   [key: string]: unknown;
 }
 
@@ -485,30 +486,100 @@ export function contradictsCategoryFit(
   return false;
 }
 
-/** Hard filter opposite-gender products. */
+/** Hard filter opposite-gender products (Turkish-safe; avoid JS \\b with ı/ğ/ü…). */
+const WOMEN_GENDER_TOKENS = [
+  "kadın",
+  "kadin",
+  "bayan",
+  "women",
+  "woman",
+  "women's",
+  "womens",
+  "ladies",
+  "kız",
+  "kiz",
+  "hanım",
+  "hanim",
+  "female",
+];
+
+const MEN_GENDER_TOKENS = [
+  "erkek",
+  "men",
+  "man's",
+  "mens",
+  "men's",
+  "male",
+  "oğlan",
+  "oglan",
+];
+
+function normalizeTr(text: string): string {
+  return text.toLocaleLowerCase("tr-TR");
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Match whole tokens without relying on \\b (broken for Turkish letters). */
+function titleHasGenderToken(title: string, tokens: string[]): boolean {
+  const t = normalizeTr(title);
+  return tokens.some((raw) => {
+    const tok = normalizeTr(raw);
+    if (!tok) return false;
+    // Always use letter-boundaries — never plain includes("men's") which matches inside "women's".
+    if (tok.includes(" ")) return t.includes(tok);
+    const re = new RegExp(`(^|[^a-z0-9çğıöşü])${escapeRegExp(tok)}([^a-z0-9çğıöşü]|$)`, "i");
+    return re.test(t);
+  });
+}
+
+export function parseUserGender(raw: unknown): "men" | "women" | null {
+  if (raw === "men" || raw === "women") return raw;
+  if (typeof raw !== "string") return null;
+  const v = normalizeTr(raw.trim());
+  if (v === "erkek" || v === "male" || v === "man") return "men";
+  if (v === "kadın" || v === "kadin" || v === "female" || v === "woman") return "women";
+  return null;
+}
+
+export function profileGenderSide(profile: ProductProfile): "men" | "women" | null {
+  const fromProfile = parseUserGender(profile.gender) || parseUserGender(profile.gender_tr);
+  if (fromProfile) return fromProfile;
+  const fromPrefs = parseUserGender(profile.user_profile?.gender as string | undefined);
+  return fromPrefs;
+}
+
 export function contradictsGender(title: string, profile: ProductProfile): boolean {
-  const t = title.toLowerCase();
-  const gender = (profile.gender || "").toLowerCase();
-  const genderTr = (profile.gender_tr || "").toLowerCase();
+  const side = profileGenderSide(profile);
+  if (!side) return false;
 
-  const isMen = gender === "men" || genderTr === "erkek";
-  const isWomen = gender === "women" || genderTr === "kadın";
-
-  if (isMen) {
-    if (/\b(kadın|bayan|women'?s|woman\b|female|ladies|kız çocuk|hanım)\b/.test(t)) return true;
+  if (side === "men") {
+    // Explicit women marking → reject (even if "erkek" somehow also present)
+    if (titleHasGenderToken(title, WOMEN_GENDER_TOKENS)) return true;
+    return false;
   }
-  if (isWomen) {
-    if (/\b(erkek|men'?s|menswear|male|oğlan)\b/.test(t) && !/\b(kadın|women'?s|woman)\b/.test(t)) {
-      return true;
-    }
+
+  // women: reject explicit men marking unless also clearly women
+  if (titleHasGenderToken(title, MEN_GENDER_TOKENS) && !titleHasGenderToken(title, WOMEN_GENDER_TOKENS)) {
+    return true;
   }
   return false;
 }
 
+export function titleMatchesUserGender(title: string, profile: ProductProfile): boolean {
+  const side = profileGenderSide(profile);
+  if (!side) return false;
+  return side === "men"
+    ? titleHasGenderToken(title, MEN_GENDER_TOKENS)
+    : titleHasGenderToken(title, WOMEN_GENDER_TOKENS);
+}
+
 export function titleMatchesCategory(title: string, profile: ProductProfile): boolean {
-  const t = title.toLowerCase();
-  const catTr = (profile.category_tr || "").toLowerCase();
-  const cat = (profile.category || "").toLowerCase();
+  const t = normalizeTr(title);
+  const catTr = normalizeTr(profile.category_tr || "");
+  const cat = normalizeTr(profile.category || "");
   if (catTr && t.includes(catTr)) return true;
 
   const aliases: string[] = [];
@@ -528,7 +599,7 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
   } else if (/spor ayakkabı|sneaker/.test(blob)) {
     aliases.push("spor ayakkabı", "sneaker", "sneakers");
   }
-  return aliases.some((a) => t.includes(a));
+  return aliases.some((a) => t.includes(normalizeTr(a)));
 }
 
 export function buildShortReason(signals: MatchSignals, slot: "recommended" | "cheaper" | "style"): string {
@@ -544,9 +615,10 @@ export function applyUserGender(
   profile: ProductProfile,
   gender: string | null | undefined
 ): ProductProfile {
-  if (gender !== "men" && gender !== "women") return profile;
+  const parsed = parseUserGender(gender);
+  if (!parsed) return profile;
 
-  const gender_tr = gender === "women" ? "kadın" : "erkek";
+  const gender_tr = parsed === "women" ? "kadın" : "erkek";
 
   const search_query = [gender_tr, profile.color_tr, profile.fit_tr, profile.collar_tr, profile.pattern_tr, profile.category_tr]
     .filter(Boolean)
@@ -562,10 +634,14 @@ export function applyUserGender(
 
   return {
     ...profile,
-    gender,
+    gender: parsed,
     gender_tr,
     search_query,
     fallback_query,
+    user_profile: {
+      ...profile.user_profile,
+      gender: parsed,
+    },
   };
 }
 
@@ -727,6 +803,24 @@ export interface VisionPiece {
 
 const MAX_OUTFIT_PIECES = 4;
 
+function pieceFamilyKey(category: string, categoryTr: string): string {
+  const blob = `${category} ${categoryTr}`.toLowerCase();
+  if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) return "eyewear";
+  if (/crop/.test(blob)) return "crop";
+  if (/tişört|t-shirt|tshirt|tee|polo/.test(blob)) return "tee";
+  if (/gömlek|shirt/.test(blob) && !/t-shirt|sweatshirt/.test(blob)) return "shirt";
+  if (/hoodie|sweatshirt|kapüşonlu|kazak|sweater|cardigan|hırka/.test(blob)) return "knit";
+  if (/ceket|jacket|blazer|kaban|coat|trenç/.test(blob)) return "outer";
+  if (/etek|skirt/.test(blob)) return "skirt";
+  if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
+  if (/pantolon|jeans|chino|jogger|eşofman|şort|shorts|tayt|leggings/.test(blob)) return "bottom";
+  if (/ayakkabı|sneaker|bot|sandal|loafer|heel/.test(blob)) return "shoes";
+  if (/çanta|bag|backpack/.test(blob)) return "bag";
+  if (/şapka|hat|bere|beanie|cap/.test(blob)) return "hat";
+  if (/kemer|belt|saat|watch|atkı|scarf/.test(blob)) return "accessory";
+  return blob.trim() || "other";
+}
+
 export function parseVisionOutfit(visionContent: string, ctx: RequestContext): VisionPiece[] {
   const clean = visionContent.replace(/```json|```/g, "").trim();
   let parsed: { items?: VisionProduct[] } & VisionProduct;
@@ -745,7 +839,7 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
     throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
   }
 
-  return items.map((item) => {
+  const pieces = items.map((item) => {
     const profile = visionProductToProfile(item, ctx);
     const label =
       item.label?.trim() ||
@@ -754,6 +848,17 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
       "Parça";
     return { label, profile };
   });
+
+  // Keep one item per garment family so outfit slots stay distinct (top/bottom/shoes…).
+  const seen = new Set<string>();
+  const deduped: VisionPiece[] = [];
+  for (const piece of pieces) {
+    const key = pieceFamilyKey(piece.profile.category, piece.profile.category_tr);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(piece);
+  }
+  return deduped.slice(0, MAX_OUTFIT_PIECES);
 }
 
 export function parseVision(visionContent: string, ctx: RequestContext): ProductProfile {
@@ -879,6 +984,17 @@ function scoreShoppingItems(
     if (relaxed.length > validResults.length) validResults = relaxed;
   }
 
+  // Prefer titles that explicitly mark the user's gender (erkek/kadın) when enough exist.
+  if (profileGenderSide(productProfile)) {
+    const gendered = validResults.filter((item) => titleMatchesUserGender(item.title || "", productProfile));
+    if (gendered.length >= 3) {
+      validResults = gendered;
+    } else if (gendered.length > 0) {
+      const rest = validResults.filter((item) => !titleMatchesUserGender(item.title || "", productProfile));
+      validResults = [...gendered, ...rest];
+    }
+  }
+
   // In lüks mode, prefer luxury hits before scoring pool is capped.
   if (priceMode === "luks") {
     const luxuryOnly = validResults.filter((item) => isLuxuryHit(item.source, item.title));
@@ -901,14 +1017,15 @@ function scoreShoppingItems(
       productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())
     );
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
+    const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
     let matchScore = 0;
     if (categoryHit) matchScore += 55;
     if (colorHit) matchScore += 25;
     if (fitHit) matchScore += 20;
+    if (genderHit) matchScore += 22;
     if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 12;
     if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
-    if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 15;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
@@ -917,6 +1034,10 @@ function scoreShoppingItems(
     // Require category fidelity when we know the category
     if (productProfile.category_tr && !categoryHit) {
       matchScore = Math.min(matchScore, 35);
+    }
+    // Soft penalty when gender is known but title has no gender cue
+    if (profileGenderSide(productProfile) && !genderHit) {
+      matchScore = Math.max(0, matchScore - 10);
     }
 
     let forYouScore = 0;

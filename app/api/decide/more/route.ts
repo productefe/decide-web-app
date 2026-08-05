@@ -24,7 +24,7 @@ export const maxDuration = 60;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 const VISION_OUTFIT_PROMPT =
-  'Analyze this fashion image. Identify the main fashion product(s) — clothing AND accessories. If the photo focuses on a single product (e.g. glasses, sunglasses, bag, watch, belt, hat, shoes), return THAT item — do NOT invent a t-shirt or other garment. Max 4 items. Be precise about TYPE and FIT — e.g. crop top vs oversized t-shirt vs slim tee; skinny jeans vs wide-leg; glasses vs sunglasses. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Gözlük","category":"exact type like glasses/sunglasses/crop top/t-shirt/jeans/sneaker/hoodie/jacket/bag/watch/hat","colors":["primary color"],"fit":"slim/regular/oversized/loose/cropped/none","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nThe "label" value must be ONLY the item name in Turkish (e.g. Gözlük, Crop Top, Tişört, Pantolon, Ayakkabı, Ceket, Çanta) — no English words, no explanations.\nIf only one item is visible, return one item in the array.';
+  'Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH major visible piece separately (up to 4): typically top, bottom, shoes, and outerwear/accessory. Do NOT collapse a whole look into a single item. Only return ONE item if the photo is clearly a product close-up of a single piece (e.g. only glasses on a table, only one shoe). Be precise about TYPE and FIT — crop top vs oversized t-shirt; skinny vs wide-leg jeans; glasses vs sunglasses. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Tişört","category":"exact type like glasses/sunglasses/crop top/t-shirt/jeans/sneaker/hoodie/jacket/bag/watch/hat","colors":["primary color"],"fit":"slim/regular/oversized/loose/cropped/none","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nOrder items top → bottom → shoes → outerwear/accessory when possible. The "label" must be ONLY the Turkish item name (e.g. Gözlük, Crop Top, Tişört, Pantolon, Ayakkabı, Ceket, Çanta) — no English, no explanations.';
 
 interface OpenAIChatResponse {
   choices?: { message?: { content?: string } }[];
@@ -116,12 +116,14 @@ export async function POST(req: NextRequest) {
     const sizes = parseSizes(userPrefs?.sizes);
     const price_mode: PriceMode =
       parsePriceMode(body?.price_mode) || parsePriceMode(userPrefs?.price_mode) || "karma";
+    const userGender = userPrefs?.gender ?? null;
 
     const user_profile: UserProfile = {
       preferences: userPrefs?.preferences || [],
       sizes,
       price_mode,
       occasion,
+      gender: userGender,
     };
     const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
-      max_tokens: 800,
+      max_tokens: 1200,
     });
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
@@ -150,10 +152,7 @@ export async function POST(req: NextRequest) {
       if (match) target = match;
     }
 
-    let profile = target.profile;
-    if (userPrefs?.gender) {
-      profile = applyUserGender(profile, userPrefs.gender);
-    }
+    const profile = applyUserGender(target.profile, userGender);
 
     const piece = await processPiece(
       profile,
