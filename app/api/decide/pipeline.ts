@@ -377,43 +377,158 @@ function fitToken(fit: string | undefined): string {
 }
 
 /** Hard filter titles that contradict the vision category/fit. */
-export function contradictsCategoryFit(title: string, profile: ProductProfile): boolean {
+export function contradictsCategoryFit(
+  title: string,
+  profile: ProductProfile,
+  opts: { requireType?: boolean } = { requireType: true }
+): boolean {
   const t = title.toLowerCase();
   const cat = (profile.category || "").toLowerCase();
   const catTr = (profile.category_tr || "").toLowerCase();
   const fit = (profile.fit || "").toLowerCase();
+  const blob = `${cat} ${catTr}`;
+  const requireType = opts.requireType !== false;
 
   const isCrop =
     fit.includes("crop") ||
     cat.includes("crop") ||
-    catTr.includes("crop") ||
-    /\bcrop\b/.test(cat) ||
-    /\bcrop\b/.test(catTr);
+    catTr.includes("crop");
 
+  const isOversize = /\b(oversize|oversized)\b/.test(fit) || /\b(oversize|oversized|bol kesim)\b/.test(blob);
+
+  // --- Eyewear (glasses photo must not become t-shirts) ---
+  if (/gözlük|glasses|sunglasses|eyewear|optik/.test(blob)) {
+    const isSun = /güneş|sunglass/.test(blob);
+    if (requireType) {
+      if (isSun && !/\b(güneş gözlüğü|sunglasses?|sun\s*glasses)\b/.test(t) && !/\bgözlük\b/.test(t)) {
+        return true;
+      }
+      if (!/\b(gözlük|güneş gözlüğü|sunglasses?|glasses|eyewear|optik)\b/.test(t)) return true;
+    }
+    if (
+      /\b(tişört|t-?shirt|tshirt|tee|gömlek|pantolon|elbise|sweatshirt|hoodie|ceket|etek|şort|ayakkabı|sneaker|kazak|crop)\b/.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // --- Crop top: only crop ---
   if (isCrop) {
-    if (/\b(oversize|oversized|bol kesim|boyfriend|boxy)\b/.test(t) && !/\bcrop\b/.test(t)) {
+    if (requireType && !/\bcrop\b/.test(t)) return true;
+    if (/\b(oversize|oversized|bol kesim|boyfriend)\b/.test(t) && !/\bcrop\b/.test(t)) return true;
+    if (/\b(pantolon|etek|elbise|ayakkabı|gözlük|bot|çanta|jean|kot pantolon)\b/.test(t)) return true;
+  }
+
+  // --- Oversize fit: only oversize / bol ---
+  if (isOversize && !isCrop) {
+    const hasOversizeWord =
+      /\b(oversize|oversized|bol kesim|boxy|boyfriend|rahat kesim)\b/.test(t) || /\bbol\b/.test(t);
+    if (requireType && !hasOversizeWord) {
+      return true;
+    }
+    if (/\b(crop|cropped|slim fit|dar kesim|skinny)\b/.test(t) && !/\b(oversize|oversized)\b/.test(t)) {
       return true;
     }
   }
 
-  if (/\b(oversize|oversized)\b/.test(fit)) {
-    if (/\b(crop|cropped|slim fit|dar kesim)\b/.test(t) && !/\b(oversize|oversized)\b/.test(t)) {
+  // --- Category family rejects ---
+  if (/tişört|t-shirt|tshirt|\btee\b/.test(blob) && !isCrop) {
+    if (requireType && !/\b(tişört|t-?shirt|tshirt|tee|t şört)\b/.test(t)) {
+      // Allow if clearly a tee synonym without wrong family
+      if (/\b(gömlek|hoodie|sweatshirt|kazak|elbise|pantolon|etek|gözlük|ayakkabı|crop top|polo)\b/.test(t)) {
+        return true;
+      }
+      if (requireType) return true;
+    }
+    if (/\b(gözlük|pantolon|etek|elbise|ayakkabı|bot|çanta|hoodie|sweatshirt|gömlek|kazak)\b/.test(t)) {
       return true;
     }
   }
 
-  // Category family conflicts (very coarse)
-  if ((cat.includes("skirt") || catTr.includes("etek")) && /\b(pantolon|jeans|eşofman)\b/.test(t)) {
+  if (/gömlek|shirt/.test(blob) && !/t-shirt|tişört|sweatshirt|polo/.test(blob)) {
+    if (requireType && !/\b(gömlek|shirt)\b/.test(t)) return true;
+    if (/\b(tişört|t-?shirt|gözlük|pantolon|ayakkabı|hoodie)\b/.test(t)) return true;
+  }
+
+  if (/hoodie|kapüşonlu|sweatshirt/.test(blob)) {
+    if (requireType && !/\b(hoodie|sweatshirt|kapüşonlu|sweat)\b/.test(t)) return true;
+    if (/\b(gözlük|pantolon|etek|ayakkabı|elbise)\b/.test(t)) return true;
+  }
+
+  if ((cat.includes("skirt") || catTr.includes("etek")) && /\b(pantolon|jeans|eşofman|tişört|gözlük)\b/.test(t)) {
     return true;
   }
-  if ((cat.includes("jeans") || catTr.includes("kot pantolon")) && /\b(etek|skirt|elbise)\b/.test(t)) {
+  if ((cat.includes("jeans") || catTr.includes("kot pantolon")) && /\b(etek|skirt|elbise|tişört|gözlük|ayakkabı)\b/.test(t)) {
     return true;
   }
-  if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı")) && /\b(bot|topuklu|sandalet)\b/.test(t)) {
-    return true;
+  if (/pantolon|trousers|chino|jogger|eşofman/.test(blob) && !/kot pantolon|jeans/.test(blob)) {
+    if (/\b(etek|elbise|tişört|gözlük|ayakkabı|crop)\b/.test(t)) return true;
+  }
+  if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı") || /ayakkabı|boot|sandal|loafer/.test(blob))) {
+    if (/\b(tişört|pantolon|gözlük|elbise|etek|gömlek)\b/.test(t)) return true;
+    if (requireType && /sneaker|spor ayakkabı/.test(blob) && !/\b(spor ayakkabı|sneaker|sneakers|koşu)\b/.test(t)) {
+      return true;
+    }
+  }
+  if (/çanta|bag|handbag|backpack/.test(blob)) {
+    if (requireType && !/\b(çanta|bag|handbag|backpack|sırt çantası)\b/.test(t)) return true;
+    if (/\b(tişört|pantolon|gözlük|ayakkabı|elbise)\b/.test(t)) return true;
+  }
+  if (/elbise|dress/.test(blob)) {
+    if (requireType && !/\b(elbise|dress)\b/.test(t)) return true;
+    if (/\b(tişört|pantolon|gözlük|erkek pantolon)\b/.test(t)) return true;
   }
 
   return false;
+}
+
+/** Hard filter opposite-gender products. */
+export function contradictsGender(title: string, profile: ProductProfile): boolean {
+  const t = title.toLowerCase();
+  const gender = (profile.gender || "").toLowerCase();
+  const genderTr = (profile.gender_tr || "").toLowerCase();
+
+  const isMen = gender === "men" || genderTr === "erkek";
+  const isWomen = gender === "women" || genderTr === "kadın";
+
+  if (isMen) {
+    if (/\b(kadın|bayan|women'?s|woman\b|female|ladies|kız çocuk|hanım)\b/.test(t)) return true;
+  }
+  if (isWomen) {
+    if (/\b(erkek|men'?s|menswear|male|oğlan)\b/.test(t) && !/\b(kadın|women'?s|woman)\b/.test(t)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function titleMatchesCategory(title: string, profile: ProductProfile): boolean {
+  const t = title.toLowerCase();
+  const catTr = (profile.category_tr || "").toLowerCase();
+  const cat = (profile.category || "").toLowerCase();
+  if (catTr && t.includes(catTr)) return true;
+
+  const aliases: string[] = [];
+  const blob = `${cat} ${catTr}`;
+  if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) {
+    aliases.push("gözlük", "güneş gözlüğü", "sunglasses", "glasses", "eyewear");
+  } else if (/crop/.test(blob)) {
+    aliases.push("crop top", "crop");
+  } else if (/tişört|t-shirt|tshirt|tee/.test(blob)) {
+    aliases.push("tişört", "t-shirt", "tshirt", "tee");
+  } else if (/gömlek/.test(blob) || (cat === "shirt" && !/t-shirt/.test(cat))) {
+    aliases.push("gömlek", "shirt");
+  } else if (/hoodie|sweatshirt|kapüşonlu/.test(blob)) {
+    aliases.push("hoodie", "sweatshirt", "kapüşonlu");
+  } else if (/kot pantolon|jeans/.test(blob)) {
+    aliases.push("kot", "jean", "denim");
+  } else if (/spor ayakkabı|sneaker/.test(blob)) {
+    aliases.push("spor ayakkabı", "sneaker", "sneakers");
+  }
+  return aliases.some((a) => t.includes(a));
 }
 
 export function buildShortReason(signals: MatchSignals, slot: "recommended" | "cheaper" | "style"): string {
@@ -503,12 +618,15 @@ const categoryTR: Record<string, string> = {
   chino: "chino pantolon", jeans: "kot pantolon", denim: "kot pantolon",
   shorts: "şort", "cargo pants": "kargo pantolon", joggers: "jogger pantolon",
   sweatpants: "eşofman altı", leggings: "tayt", tracksuit: "eşofman",
-  sneaker: "spor ayakkabı", "running shoe": "koşu ayakkabısı",
+  sneaker: "spor ayakkabı", sneakers: "spor ayakkabı", "running shoe": "koşu ayakkabısı",
   boot: "bot", sandal: "sandalet", loafer: "loafer",
   "high heel": "topuklu ayakkabı", oxford: "oxford ayakkabı",
   bag: "çanta", handbag: "el çantası", backpack: "sırt çantası",
   hat: "şapka", cap: "şapka", beanie: "bere",
   scarf: "atkı", belt: "kemer", wallet: "cüzdan",
+  glasses: "gözlük", sunglasses: "güneş gözlüğü", eyewear: "gözlük",
+  "sun glasses": "güneş gözlüğü", "güneş gözlüğü": "güneş gözlüğü",
+  gözlük: "gözlük", watch: "saat", "wrist watch": "saat",
 };
 
 const collarTR: Record<string, string> = {
@@ -686,7 +804,7 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
 
 /** Most specific → broadest; deduplicated. Optional size prepended as extra candidate only. */
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
-  const { gender_tr, color_tr, category_tr, fit_tr, search_query, fallback_query } = productProfile;
+  const { gender_tr, category_tr, fit_tr, search_query, fallback_query } = productProfile;
   const sizes = productProfile.user_profile?.sizes || [];
   const firstSize = sizes[0];
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
@@ -695,24 +813,22 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
     ? [search_query, firstSize].filter(Boolean).join(" ").trim()
     : "";
 
+  // Keep base short — fewer sequential Serp round-trips.
   const base = [
     sizeQuery,
     search_query,
     fallback_query,
     [gender_tr, fit_tr, category_tr].filter(Boolean).join(" "),
     [gender_tr, category_tr].filter(Boolean).join(" "),
-    [color_tr, fit_tr, category_tr].filter(Boolean).join(" "),
-    [color_tr, category_tr].filter(Boolean).join(" "),
   ];
 
   const primary = (search_query || fallback_query || [gender_tr, category_tr].filter(Boolean).join(" ")).trim();
   const luxuryQueries: string[] = [];
   if (priceMode === "luks" && primary) {
-    for (const store of LUXURY_SEARCH_STORES) {
+    // Top stores only — parallelized in run-piece (quality kept, latency cut).
+    for (const store of LUXURY_SEARCH_STORES.slice(0, 4)) {
       luxuryQueries.push(`${primary} ${store}`);
     }
-    luxuryQueries.push(`${primary} lüks`);
-    luxuryQueries.push(`${primary} premium`);
   }
 
   const candidates = [...luxuryQueries, ...base];
@@ -750,7 +866,18 @@ function scoreShoppingItems(
   let validResults = (shoppingResults || [])
     .filter(isValidShoppingItem)
     .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
-    .filter((item) => !contradictsCategoryFit(item.title || "", productProfile));
+    .filter((item) => !contradictsGender(item.title || "", productProfile))
+    .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: true }));
+
+  // If strict type-require emptied the pool, keep family rejects but drop require.
+  if (validResults.length < 3) {
+    const relaxed = (shoppingResults || [])
+      .filter(isValidShoppingItem)
+      .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
+      .filter((item) => !contradictsGender(item.title || "", productProfile))
+      .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: false }));
+    if (relaxed.length > validResults.length) validResults = relaxed;
+  }
 
   // In lüks mode, prefer luxury hits before scoring pool is capped.
   if (priceMode === "luks") {
@@ -769,9 +896,7 @@ function scoreShoppingItems(
     const luxury = isLuxuryHit(item.source, item.title);
     const trustScore = getTrust(item.source, priceMode, item.title);
 
-    const categoryHit = Boolean(
-      productProfile.category_tr && title.includes(productProfile.category_tr.toLowerCase())
-    );
+    const categoryHit = titleMatchesCategory(item.title || "", productProfile);
     const colorHit = Boolean(
       productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())
     );
@@ -783,7 +908,7 @@ function scoreShoppingItems(
     if (fitHit) matchScore += 20;
     if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 12;
     if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
-    if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 10;
+    if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 15;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
@@ -791,7 +916,7 @@ function scoreShoppingItems(
 
     // Require category fidelity when we know the category
     if (productProfile.category_tr && !categoryHit) {
-      matchScore = Math.min(matchScore, 45);
+      matchScore = Math.min(matchScore, 35);
     }
 
     let forYouScore = 0;
