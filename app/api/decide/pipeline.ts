@@ -117,39 +117,170 @@ export function getStyleKeyword(preferences: string[] | undefined): string {
 const BUDGET_STORES = [
   "lc waikiki",
   "lcw",
+  "lc waikiki.com",
   "mavi",
   "defacto",
   "koton",
   "english home",
   "gratis",
+  "flo",
+  "flo.com",
+  "lumberjack",
+  "colin's",
+  "colins",
+  "louis cardin",
+  "koton.com",
+  "defacto.com",
+];
+
+/** Fast fashion + mass marketplaces — blocked in lüks mode. */
+const LUKS_BLOCKED_STORES = [
+  ...BUDGET_STORES,
+  "trendyol",
+  "hepsiburada",
+  "amazon",
+  "amazon.com.tr",
+  "n11",
+  "n11.com",
+  "h&m",
+  "hm.com",
+  "bershka",
+  "pull&bear",
+  "pull and bear",
+  "stradivarius",
+  "zara",
+  "mango",
+  "gap",
+  "uniqlo",
+  "decathlon",
+  "puma",
+  "adidas",
+  "nike",
+  "newyorker",
+  "new yorker",
+  "sinsay",
+  "reserved",
+  "cropp",
 ];
 
 const LUXURY_STORES = [
+  // TR luxury / premium retailers
   "beymen",
+  "beymen.com",
+  "beymen club",
+  "beymen business",
   "vakko",
+  "vakko.com",
   "vakkorama",
+  "les benjamins",
+  "lesbenjamins",
+  "communite",
   "network",
+  "network.com.tr",
   "twist",
+  "twist.com.tr",
+  "matmazel",
+  "i pezzi dipinti",
+  "ipezzidipinti",
+  "derimod",
+  "kemal tanca",
+  "hotiç",
+  "hotic",
+  "desa",
+  "machka",
+  "perspective",
+  "yargıcı",
+  "yargici",
+  "barcin",
+  "barçın",
+  "boyner",
+  "beymen.com.tr",
+  // International premium commonly sold in TR
   "massimo dutti",
   "lacoste",
   "tommy hilfiger",
   "hugo boss",
-  "boss",
   "sandro",
   "maje",
   "ralph lauren",
+  "polo ralph lauren",
   "calvin klein",
   "guess",
   "michael kors",
-  "armâni",
   "armani",
+  "emporio armani",
+  "giorgio armani",
   "diesel",
   "liu jo",
-  "iksv",
-  "matmazel",
-  "i pezzi dipinti",
   "pinko",
   "coach",
+  "karl lagerfeld",
+  "ted baker",
+  "allsaints",
+  "all saints",
+  "the kooples",
+  "thekooples",
+  "isabel marant",
+  "acne studios",
+  "ami paris",
+  "stone island",
+  "moncler",
+  "canada goose",
+  "burberry",
+  "gucci",
+  "prada",
+  "balenciaga",
+  "saint laurent",
+  "valentino",
+  "versace",
+  "dolce & gabbana",
+  "dolce gabbana",
+  "fendi",
+  "givenchy",
+  "balmain",
+  "off-white",
+  "off white",
+  "alexander mcqueen",
+  "bottega veneta",
+  "loewe",
+  "celine",
+  "dior",
+  "chanel",
+  "hermès",
+  "hermes",
+  "max mara",
+  "brunello cucinelli",
+  "loro piana",
+  "& other stories",
+  "other stories",
+  "arket",
+  "paul smith",
+  "hackett",
+  "canali",
+  "ermenegildo zegna",
+  "zegna",
+  "salvatore ferragamo",
+  "ferragamo",
+  "jimmy choo",
+  "manolo blahnik",
+  "stuart weitzman",
+  "common projects",
+  "golden goose",
+  "axel arigato",
+];
+
+/** Stores we explicitly query for in lüks mode (Serp shopping). */
+export const LUXURY_SEARCH_STORES = [
+  "beymen",
+  "vakko",
+  "vakkorama",
+  "les benjamins",
+  "communite",
+  "network",
+  "twist",
+  "machka",
+  "yargıcı",
+  "boyner",
 ];
 
 const MASS_MARKET_STORES = [
@@ -180,14 +311,21 @@ function normalizeStore(source?: string): string {
 function storeMatches(source: string | undefined, names: string[]): boolean {
   const s = normalizeStore(source);
   if (!s) return false;
-  return names.some(
-    (name) =>
+  return names.some((raw) => {
+    const name = normalizeStore(raw);
+    if (!name) return false;
+    if (name.length <= 3) {
+      const re = new RegExp(`(?:^|[^a-z0-9çğıöşü])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z0-9çğıöşü]|$)`, "i");
+      return re.test(s);
+    }
+    return (
       s === name ||
       s.startsWith(name + " ") ||
       s.startsWith(name + ".") ||
       s.includes(name + ".com") ||
       s.includes(name)
-  );
+    );
+  });
 }
 
 export function isBudgetStore(source?: string): boolean {
@@ -198,10 +336,26 @@ export function isLuxuryStore(source?: string): boolean {
   return storeMatches(source, LUXURY_STORES);
 }
 
-export function allowedByPriceMode(source: string | undefined, priceMode: PriceMode | undefined): boolean {
+export function isLuxuryHit(source?: string, title?: string): boolean {
+  return isLuxuryStore(source) || storeMatches(title, LUXURY_STORES);
+}
+
+function isLuksBlockedStore(source?: string): boolean {
+  return storeMatches(source, LUKS_BLOCKED_STORES);
+}
+
+export function allowedByPriceMode(
+  source: string | undefined,
+  priceMode: PriceMode | undefined,
+  title?: string
+): boolean {
   const mode = priceMode || "karma";
-  if (mode === "luks") return !isBudgetStore(source);
-  if (mode === "uygunluk") return !isLuxuryStore(source);
+  if (mode === "luks") {
+    // Never show budget / fast-fashion / mass marketplaces in lüks (source or title).
+    if (isLuksBlockedStore(source) || storeMatches(title, LUKS_BLOCKED_STORES)) return false;
+    return true;
+  }
+  if (mode === "uygunluk") return !isLuxuryHit(source, title);
   return true;
 }
 
@@ -504,14 +658,14 @@ const tier1 = [
   ]),
 ];
 
-function getTrust(source?: string, priceMode?: PriceMode): number {
+function getTrust(source?: string, priceMode?: PriceMode, title?: string): number {
   const s = normalizeStore(source);
   let trust = 70;
   if (tier1.some((name) => s === name || s.startsWith(name + " ") || s.startsWith(name + ".") || s.includes(name + ".com") || s.includes(name))) {
     trust = 92;
   }
-  if (isLuxuryStore(source)) trust = Math.max(trust, 94);
-  if (priceMode === "luks" && isLuxuryStore(source)) trust += 6;
+  if (isLuxuryHit(source, title)) trust = Math.max(trust, 96);
+  if (priceMode === "luks" && isLuxuryHit(source, title)) trust = 100;
   if (priceMode === "uygunluk" && isBudgetStore(source)) trust += 4;
   if (priceMode === "karma" && isLuxuryStore(source)) trust += 3;
   return Math.min(trust, 100);
@@ -535,12 +689,13 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
   const { gender_tr, color_tr, category_tr, fit_tr, search_query, fallback_query } = productProfile;
   const sizes = productProfile.user_profile?.sizes || [];
   const firstSize = sizes[0];
+  const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   const sizeQuery = firstSize
     ? [search_query, firstSize].filter(Boolean).join(" ").trim()
     : "";
 
-  const candidates = [
+  const base = [
     sizeQuery,
     search_query,
     fallback_query,
@@ -549,6 +704,18 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
     [color_tr, fit_tr, category_tr].filter(Boolean).join(" "),
     [color_tr, category_tr].filter(Boolean).join(" "),
   ];
+
+  const primary = (search_query || fallback_query || [gender_tr, category_tr].filter(Boolean).join(" ")).trim();
+  const luxuryQueries: string[] = [];
+  if (priceMode === "luks" && primary) {
+    for (const store of LUXURY_SEARCH_STORES) {
+      luxuryQueries.push(`${primary} ${store}`);
+    }
+    luxuryQueries.push(`${primary} lüks`);
+    luxuryQueries.push(`${primary} premium`);
+  }
+
+  const candidates = [...luxuryQueries, ...base];
   const seen = new Set<string>();
   return candidates
     .map((q) => q.trim().replace(/\s+/g, " "))
@@ -557,6 +724,17 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
       seen.add(q);
       return true;
     });
+}
+
+function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): ScoredProduct[] {
+  if (priceMode !== "luks") return scored;
+  const luxury = scored.filter((p) => isLuxuryHit(p.source, p.title));
+  if (luxury.length >= 3) return luxury;
+  if (luxury.length >= 1) {
+    const rest = scored.filter((p) => !isLuxuryHit(p.source, p.title));
+    return [...luxury, ...rest];
+  }
+  return scored;
 }
 
 function scoreShoppingItems(
@@ -569,15 +747,27 @@ function scoreShoppingItems(
   const styleWords = styleKeyword.toLowerCase().split(/\s+/).filter(Boolean);
   const fitWord = (productProfile.fit_tr || fitToken(productProfile.fit)).toLowerCase();
 
-  const validResults = (shoppingResults || [])
+  let validResults = (shoppingResults || [])
     .filter(isValidShoppingItem)
-    .filter((item) => allowedByPriceMode(item.source, priceMode))
+    .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
     .filter((item) => !contradictsCategoryFit(item.title || "", productProfile));
 
-  const scored = validResults.slice(0, 30).map((item) => {
+  // In lüks mode, prefer luxury hits before scoring pool is capped.
+  if (priceMode === "luks") {
+    const luxuryOnly = validResults.filter((item) => isLuxuryHit(item.source, item.title));
+    if (luxuryOnly.length >= 3) {
+      validResults = luxuryOnly;
+    } else if (luxuryOnly.length > 0) {
+      const rest = validResults.filter((item) => !isLuxuryHit(item.source, item.title));
+      validResults = [...luxuryOnly, ...rest];
+    }
+  }
+
+  const scored = validResults.slice(0, 40).map((item) => {
     const title = (item.title || "").toLowerCase();
     const price = getPrice(item);
-    const trustScore = getTrust(item.source, priceMode);
+    const luxury = isLuxuryHit(item.source, item.title);
+    const trustScore = getTrust(item.source, priceMode, item.title);
 
     const categoryHit = Boolean(
       productProfile.category_tr && title.includes(productProfile.category_tr.toLowerCase())
@@ -596,6 +786,7 @@ function scoreShoppingItems(
     if (productProfile.gender_tr && title.includes(productProfile.gender_tr.toLowerCase())) matchScore += 10;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
+    if (priceMode === "luks" && luxury) matchScore += 18;
     matchScore = Math.min(matchScore, 100);
 
     // Require category fidelity when we know the category
@@ -610,11 +801,20 @@ function scoreShoppingItems(
     } else {
       forYouScore += 30;
     }
-    forYouScore = Math.min(forYouScore, 100);
+    // In lüks mode, do not reward "cheap" — prefer higher-end pricing signals lightly.
+    if (priceMode === "luks" && price > 0) {
+      if (price >= 2500) forYouScore += 20;
+      else if (price >= 1200) forYouScore += 10;
+      else forYouScore -= 15;
+    }
+    forYouScore = Math.max(0, Math.min(forYouScore, 100));
 
-    const recommendationScore = Math.round(
-      0.55 * matchScore + 0.2 * forYouScore + 0.25 * trustScore
+    let recommendationScore = Math.round(
+      0.5 * matchScore + 0.15 * forYouScore + 0.35 * trustScore
     );
+    if (priceMode === "luks" && luxury) recommendationScore += 25;
+    if (priceMode === "luks" && !luxury) recommendationScore -= 20;
+    recommendationScore = Math.max(0, Math.min(recommendationScore, 100));
 
     return {
       title: item.title || "",
@@ -640,7 +840,7 @@ function scoreShoppingItems(
   });
 
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
-  return scored;
+  return preferLuxuryScored(scored, priceMode);
 }
 
 function pickCheaperProduct(

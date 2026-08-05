@@ -7,10 +7,12 @@ import {
   mergeLinks,
   buildResults,
   replaceOutOfStockSlots,
+  isLuxuryHit,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
 import type { PieceResult } from "@/components/analyze/types";
+import type { PriceMode } from "@/lib/preferences";
 
 const SERPAPI_URL = "https://serpapi.com/search";
 
@@ -23,6 +25,10 @@ interface SerpShoppingItem {
   product_id?: string;
   serpapi_immersive_product_api?: string;
   product_link?: string;
+}
+
+function itemKey(item: SerpShoppingItem): string {
+  return item.product_id || item.product_link || item.title || "";
 }
 
 async function serpShoppingSearch(
@@ -56,21 +62,54 @@ async function searchWithFallback(
   apiKey: string
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
   const queries = buildSearchQueries(productProfile);
+  const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   let lastResults: SerpShoppingItem[] = [];
+  const merged: SerpShoppingItem[] = [];
+  const seen = new Set<string>();
 
-  for (const query of queries) {
+  const mergeIn = (results: SerpShoppingItem[]) => {
+    for (const item of results) {
+      const key = itemKey(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+  };
+
+  // Lüks: first store-targeted queries — merge them to build a luxury pool.
+  const queryBudget = priceMode === "luks" ? Math.min(queries.length, 8) : queries.length;
+
+  for (let i = 0; i < queryBudget; i++) {
+    const query = queries[i];
     const results = await serpShoppingSearch(query, apiKey);
     if (results.length === 0) continue;
 
     lastResults = results;
-    const scoring = scoreProducts(results, productProfile);
-    if (!scoring.error) {
-      console.log("SerpAPI matched:", query, `(${results.length} results)`);
-      return { scoring, queryUsed: query };
+    mergeIn(results);
+
+    const pool = priceMode === "luks" ? merged : results;
+    const scoring = scoreProducts(pool, productProfile);
+    if (scoring.error) continue;
+
+    if (priceMode === "luks") {
+      const luxuryCount = scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length;
+      // Keep searching until we have enough luxury hits or queries run out.
+      if (luxuryCount >= 3) {
+        console.log("SerpAPI luxury matched:", query, `(pool=${pool.length}, luxury=${luxuryCount})`);
+        return { scoring, queryUsed: query };
+      }
+      continue;
     }
+
+    console.log("SerpAPI matched:", query, `(${results.length} results)`);
+    return { scoring, queryUsed: query };
   }
 
-  return { scoring: scoreProducts(lastResults, productProfile), queryUsed: queries[0] || "" };
+  const fallbackPool = priceMode === "luks" && merged.length ? merged : lastResults;
+  return {
+    scoring: scoreProducts(fallbackPool, productProfile),
+    queryUsed: queries[0] || "",
+  };
 }
 
 async function fetchImmersive(url: string | null | undefined, serpKey: string) {
@@ -111,9 +150,13 @@ export async function processPiece(
   for (const t of excludeTitles) usedTitles.add(t);
 
   let styleProduct = null;
+  const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   if (occasionKeyword) {
-    const styleQuery = `${queryUsed} ${occasionKeyword}`.trim();
-    const styleResults = await serpShoppingSearch(styleQuery, serpKey);
+    const styleBase =
+      priceMode === "luks"
+        ? `${queryUsed} ${occasionKeyword} beymen`
+        : `${queryUsed} ${occasionKeyword}`;
+    const styleResults = await serpShoppingSearch(styleBase.trim(), serpKey);
     styleProduct = pickStyleProduct(styleResults, productProfile, usedTitles, occasionKeyword);
   }
   if (!styleProduct) {
