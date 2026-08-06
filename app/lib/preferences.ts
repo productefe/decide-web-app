@@ -68,6 +68,15 @@ export function parseSizes(raw: unknown): string[] {
   return raw.filter((s): s is string => typeof s === "string" && SIZE_OPTIONS.includes(s as UserSize));
 }
 
+export function parseGender(raw: unknown): UserGender | null {
+  if (raw === "men" || raw === "women") return raw;
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  if (v === "erkek" || v === "male" || v === "man") return "men";
+  if (v === "kadın" || v === "kadin" || v === "female" || v === "woman") return "women";
+  return null;
+}
+
 export function parsePriceMode(raw: unknown): PriceMode | null {
   if (raw === "luks" || raw === "uygunluk" || raw === "karma") return raw;
   return null;

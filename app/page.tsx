@@ -150,7 +150,7 @@ export default async function Home() {
               Doğru karar, doğru kıyafet
             </p>
             <Link
-              href="/privacy"
+              href="https://decide.shopping/privacy"
               className="text-right text-xs text-muted-foreground transition-colors hover:text-secondary"
             >
               Gizlilik Politikası

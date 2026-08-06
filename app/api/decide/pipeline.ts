@@ -138,6 +138,8 @@ const BUDGET_STORES = [
 const LUKS_BLOCKED_STORES = [
   ...BUDGET_STORES,
   "trendyol",
+  "trendyolmilla",
+  "trendyol milla",
   "hepsiburada",
   "amazon",
   "amazon.com.tr",
@@ -162,6 +164,15 @@ const LUKS_BLOCKED_STORES = [
   "sinsay",
   "reserved",
   "cropp",
+];
+
+/** Mid-fashion (not luxury) — boosted in uygunluk, blocked in lüks. */
+const MID_FASHION_STORES = [
+  "trendyolmilla",
+  "trendyol milla",
+  "koton",
+  "mavi",
+  "defacto",
 ];
 
 const LUXURY_STORES = [
@@ -286,6 +297,8 @@ export const LUXURY_SEARCH_STORES = [
 
 const MASS_MARKET_STORES = [
   "trendyol",
+  "trendyolmilla",
+  "trendyol milla",
   "hepsiburada",
   "amazon",
   "boyner",
@@ -315,22 +328,45 @@ function storeMatches(source: string | undefined, names: string[]): boolean {
   return names.some((raw) => {
     const name = normalizeStore(raw);
     if (!name) return false;
+
+    // "trendyol" must not match "TrendyolMilla"
+    if (name === "trendyol" && /trendyol\s*milla|trendyolmilla/.test(s)) {
+      return false;
+    }
+
     if (name.length <= 3) {
-      const re = new RegExp(`(?:^|[^a-z0-9çğıöşü])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z0-9çğıöşü]|$)`, "i");
+      const re = new RegExp(
+        `(?:^|[^a-z0-9çğıöşü])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z0-9çğıöşü]|$)`,
+        "i"
+      );
       return re.test(s);
     }
-    return (
+
+    // Prefer boundary / prefix / domain matches — avoid naive includes("trendyol").
+    if (
       s === name ||
       s.startsWith(name + " ") ||
       s.startsWith(name + ".") ||
       s.includes(name + ".com") ||
-      s.includes(name)
+      s.includes(name + ".com.tr")
+    ) {
+      return true;
+    }
+
+    const re = new RegExp(
+      `(^|[^a-z0-9çğıöşü])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9çğıöşü]|$)`,
+      "i"
     );
+    return re.test(s);
   });
 }
 
 export function isBudgetStore(source?: string): boolean {
   return storeMatches(source, BUDGET_STORES);
+}
+
+export function isMidFashionStore(source?: string, title?: string): boolean {
+  return storeMatches(source, MID_FASHION_STORES) || storeMatches(title, MID_FASHION_STORES);
 }
 
 export function isLuxuryStore(source?: string): boolean {
@@ -475,9 +511,51 @@ export function contradictsCategoryFit(
     }
   }
   if (/çanta|bag|handbag|backpack/.test(blob)) {
-    if (requireType && !/\b(çanta|bag|handbag|backpack|sırt çantası)\b/.test(t)) return true;
-    if (/\b(tişört|pantolon|gözlük|ayakkabı|elbise)\b/.test(t)) return true;
+    if (requireType && !/\b(çanta|bag|handbag|backpack|sırt çantası|clutch|tote)\b/.test(t)) return true;
+    if (
+      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|etek|hoodie|sweatshirt|kazak|şort|ceket|crop)\b/.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    return false;
   }
+
+  if (/şapka|hat|cap|beanie|bere/.test(blob)) {
+    if (requireType && !/\b(şapka|hat|cap|beanie|bere|bucket)\b/.test(t)) return true;
+    if (
+      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|etek|hoodie|sweatshirt|çanta|kemer)\b/.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  if (/kemer|belt/.test(blob)) {
+    if (requireType && !/\b(kemer|belt)\b/.test(t)) return true;
+    if (
+      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|hoodie|çanta|şapka)\b/.test(t)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  if (/saat|watch|wrist/.test(blob)) {
+    if (requireType && !/\b(saat|watch|wristwatch|kol saati)\b/.test(t)) return true;
+    if (
+      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|hoodie|çanta|şapka|kemer)\b/.test(
+        t
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   if (/elbise|dress/.test(blob)) {
     if (requireType && !/\b(elbise|dress)\b/.test(t)) return true;
     if (/\b(tişört|pantolon|gözlük|erkek pantolon)\b/.test(t)) return true;
@@ -602,12 +680,33 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
   return aliases.some((a) => t.includes(normalizeTr(a)));
 }
 
-export function buildShortReason(signals: MatchSignals, slot: "recommended" | "cheaper" | "style"): string {
-  if (slot === "cheaper" || signals.cheaper) return "Bütçene uygun";
+export function buildShortReason(
+  signals: MatchSignals,
+  slot: "recommended" | "cheaper" | "style",
+  profile?: ProductProfile
+): string {
+  const color = (profile?.color_tr || "").trim();
+  const fit = (profile?.fit_tr || "").trim();
+  const category = (profile?.category_tr || "").trim();
+  const gender = (profile?.gender_tr || "").trim();
+
+  const lookParts = [color, fit, category].filter(Boolean);
+  const look = lookParts.join(" ");
+
+  if (slot === "cheaper" || signals.cheaper) {
+    if (look) return `Daha uygun fiyat · ${look}`;
+    return "Daha uygun fiyat";
+  }
+
+  if (look && gender) return `${look} · ${gender}`;
+  if (look && signals.fit) return `${look} · benzer kesim`;
+  if (look && signals.color) return `${look} · benzer renk`;
+  if (look) return look;
   if (signals.fit) return "Benzer kesim";
   if (signals.color) return "Benzer renk";
+  if (signals.category && category) return category;
   if (signals.category) return "Aynı tür";
-  return "Benzer stil";
+  return gender ? `Benzer stil · ${gender}` : "Benzer stil";
 }
 
 /** Override vision gender with user-stated gender and rebuild search queries. */
@@ -890,7 +989,9 @@ function getTrust(source?: string, priceMode?: PriceMode, title?: string): numbe
   if (isLuxuryHit(source, title)) trust = Math.max(trust, 96);
   if (priceMode === "luks" && isLuxuryHit(source, title)) trust = 100;
   if (priceMode === "uygunluk" && isBudgetStore(source)) trust += 4;
+  if (priceMode === "uygunluk" && isMidFashionStore(source, title)) trust += 6;
   if (priceMode === "karma" && isLuxuryStore(source)) trust += 3;
+  if (priceMode === "karma" && isMidFashionStore(source, title)) trust += 2;
   return Math.min(trust, 100);
 }
 
@@ -1303,7 +1404,8 @@ export function mergeLinks(
   scoring: ScoringResult,
   slots: { slot: Slot; product: ScoredProduct }[],
   immersiveResponses: (ImmersiveResponse | null)[],
-  affiliateTag: string
+  affiliateTag: string,
+  profile?: ProductProfile
 ): MergedResult {
   const result: MergedResult = {
     user_id: scoring.user_id,
@@ -1338,7 +1440,7 @@ export function mergeLinks(
       image: scored.image,
       store: scored.store,
       link,
-      reason: buildShortReason(signals, slot),
+      reason: buildShortReason(signals, slot, profile),
       label: "",
       isDirect: enriched,
       hasAffiliate: link.includes(`tag=${affiliateTag}`),

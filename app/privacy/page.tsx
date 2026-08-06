@@ -5,6 +5,9 @@ import { DecideLogo } from "@/components/decide-logo";
 export const metadata: Metadata = {
   title: "Gizlilik Politikası · DECIDE",
   description: "DECIDE uygulamasının gizlilik politikası ve kişisel verilerin işlenmesi.",
+  alternates: {
+    canonical: "https://decide.shopping/privacy",
+  },
 };
 
 const LAST_UPDATED = "9 Temmuz 2026";

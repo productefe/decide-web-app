@@ -182,7 +182,7 @@ export async function processPiece(
     );
   }
 
-  const merged = mergeLinks(finalScoring, slots, immersiveResponses, affiliateTag);
+  const merged = mergeLinks(finalScoring, slots, immersiveResponses, affiliateTag, productProfile);
   return {
     label: productProfile.category_tr || productProfile.category || "Parça",
     category_tr: productProfile.category_tr,

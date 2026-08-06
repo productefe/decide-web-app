@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseOccasion, parsePriceMode, parseSizes, type Occasion, type PriceMode } from "@/lib/preferences";
+import { parseGender, parseOccasion, parsePriceMode, parseSizes, type Occasion, type PriceMode } from "@/lib/preferences";
 import { isAnonymousUser } from "@/lib/auth-user";
 import { createClient, getBearerToken } from "@/utils/supabase/server";
 import {
@@ -132,9 +132,15 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    const sizes = parseSizes(userPrefs?.sizes);
-    const price_mode: PriceMode = parsePriceMode(userPrefs?.price_mode) || "karma";
-    const userGender = userPrefs?.gender ?? null;
+    // Body prefs win when present — avoids stale DB reads right after profile save.
+    const bodySizes = parseSizes(body?.sizes);
+    const bodyGender = parseGender(body?.gender);
+    const bodyPriceMode = parsePriceMode(body?.price_mode);
+
+    const sizes = bodySizes.length ? bodySizes : parseSizes(userPrefs?.sizes);
+    const price_mode: PriceMode =
+      bodyPriceMode || parsePriceMode(userPrefs?.price_mode) || "karma";
+    const userGender = bodyGender || parseGender(userPrefs?.gender);
 
     const user_profile: UserProfile = {
       preferences: userPrefs?.preferences || [],

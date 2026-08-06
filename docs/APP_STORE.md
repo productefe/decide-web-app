@@ -9,7 +9,7 @@ Kod tarafi (Capacitor + `/privacy`) hazir. Asagidaki adimlar senin panel/Apple t
 | App adi | DECIDE |
 | Bundle ID | `com.productefe.decide` |
 | Production URL | https://decide-web-app-nine.vercel.app |
-| Privacy Policy URL | https://decide-web-app-nine.vercel.app/privacy |
+| Privacy Policy URL | https://decide.shopping/privacy |
 
 ## Faz 5 — Apple hesap ve build
 
