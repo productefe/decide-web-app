@@ -89,7 +89,6 @@ interface SerpShoppingItem {
 const OCCASION_KEYWORDS: Record<Occasion, string> = {
   spor: "spor athleisure",
   gundelik: "günlük casual",
-  luks: "premium lüks şık",
   aksam: "akşam davet şık",
 };
 
@@ -654,6 +653,55 @@ export function titleMatchesUserGender(title: string, profile: ProductProfile): 
     : titleHasGenderToken(title, WOMEN_GENDER_TOKENS);
 }
 
+/** Hard-exclude kids / baby products from adult fashion results. */
+const KIDS_TOKENS = [
+  "çocuk",
+  "cocuk",
+  "kids",
+  "kid",
+  "kid's",
+  "kids'",
+  "bebek",
+  "baby",
+  "junior",
+  "toddler",
+  "infant",
+  "okul öncesi",
+  "okuloncesi",
+  "yenidoğan",
+  "yenidogan",
+  "kız çocuk",
+  "kiz cocuk",
+  "erkek çocuk",
+  "erkek cocuk",
+  "çocuklar",
+  "cocuklar",
+  "0-1 yaş",
+  "1-2 yaş",
+  "2-3 yaş",
+  "3-4 yaş",
+  "4-5 yaş",
+  "5-6 yaş",
+  "6-7 yaş",
+  "7-8 yaş",
+  "8-9 yaş",
+  "9-10 yaş",
+  "10-11 yaş",
+  "11-12 yaş",
+  "12-13 yaş",
+  "13-14 yaş",
+];
+
+export function isKidsProduct(title: string | undefined): boolean {
+  if (!title) return false;
+  const t = normalizeTr(title);
+  if (titleHasGenderToken(title, KIDS_TOKENS)) return true;
+  // Age ranges like "2-3 Yaş" / "2-3 yas"
+  if (/\b\d{1,2}\s*[-–]\s*\d{1,2}\s*ya[sş]\b/i.test(t)) return true;
+  if (/\b(yaş|yas)\s*\d{1,2}\b/i.test(t) && /\b(çocuk|cocuk|bebek|kids|junior)\b/i.test(t)) return true;
+  return false;
+}
+
 export function titleMatchesCategory(title: string, profile: ProductProfile): boolean {
   const t = normalizeTr(title);
   const catTr = normalizeTr(profile.category_tr || "");
@@ -1071,6 +1119,7 @@ function scoreShoppingItems(
 
   let validResults = (shoppingResults || [])
     .filter(isValidShoppingItem)
+    .filter((item) => !isKidsProduct(item.title))
     .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
     .filter((item) => !contradictsGender(item.title || "", productProfile))
     .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: true }));
@@ -1079,6 +1128,7 @@ function scoreShoppingItems(
   if (validResults.length < 3) {
     const relaxed = (shoppingResults || [])
       .filter(isValidShoppingItem)
+      .filter((item) => !isKidsProduct(item.title))
       .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
       .filter((item) => !contradictsGender(item.title || "", productProfile))
       .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: false }));

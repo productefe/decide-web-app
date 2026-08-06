@@ -42,10 +42,9 @@ export const PRICE_MODE_OPTIONS = [
 export type PriceMode = (typeof PRICE_MODE_OPTIONS)[number]["value"];
 
 export const OCCASION_OPTIONS = [
-  { value: "spor", label: "Spor" },
-  { value: "gundelik", label: "Gündelik" },
-  { value: "luks", label: "Lüks" },
-  { value: "aksam", label: "Akşam çıkma" },
+  { value: "spor", label: "Spor", emoji: "🏃" },
+  { value: "gundelik", label: "Gündelik", emoji: "👕" },
+  { value: "aksam", label: "Akşam çıkmalık", emoji: "🌙" },
 ] as const;
 
 export type Occasion = (typeof OCCASION_OPTIONS)[number]["value"];
@@ -83,6 +82,6 @@ export function parsePriceMode(raw: unknown): PriceMode | null {
 }
 
 export function parseOccasion(raw: unknown): Occasion | null {
-  if (raw === "spor" || raw === "gundelik" || raw === "luks" || raw === "aksam") return raw;
+  if (raw === "spor" || raw === "gundelik" || raw === "aksam") return raw;
   return null;
 }
