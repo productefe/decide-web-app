@@ -1,7 +1,6 @@
 import {
   scoreProducts,
   buildSearchQueries,
-  pickStyleProduct,
   pickTrustedFallback,
   getSlots,
   mergeLinks,
@@ -77,47 +76,65 @@ async function searchWithFallback(
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   if (priceMode === "luks") {
-    // Parallel store queries (was sequential ×8) — keeps luxury quality, cuts latency.
+    // Same 4 store-targeted queries in parallel — quality unchanged, latency cut vs sequential.
     const luxuryQs = queries.slice(0, 4);
     const batches = await Promise.all(luxuryQs.map((q) => serpShoppingSearch(q, apiKey)));
     const merged = dedupeItems(batches.flat());
     let scoring = scoreProducts(merged, productProfile);
-    let luxuryCount = scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length;
+    const luxuryCount = scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length;
 
+    // Only expand when the luxury pool is thin — keeps option depth without always paying extra RTT.
     if (scoring.error || luxuryCount < 3) {
       const extraQs = queries.slice(4, 6);
       if (extraQs.length) {
         const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, apiKey)));
-        const merged2 = dedupeItems([...merged, ...extra.flat()]);
-        scoring = scoreProducts(merged2, productProfile);
-        luxuryCount = scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length;
+        scoring = scoreProducts(dedupeItems([...merged, ...extra.flat()]), productProfile);
       }
     }
 
     console.log(
       "SerpAPI luxury parallel:",
       luxuryQs[0],
-      `(pool=${scoring.pool.length}, luxury=${luxuryCount})`
+      `(pool=${scoring.pool.length}, luxury=${scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length})`
     );
     return { scoring, queryUsed: luxuryQs[0] || queries[0] || "" };
   }
 
-  // Non-luks: try primary, then up to 2 fallbacks (max 3 round-trips).
-  let lastResults: SerpShoppingItem[] = [];
-  for (const query of queries.slice(0, 3)) {
-    const results = await serpShoppingSearch(query, apiKey);
-    if (results.length === 0) continue;
-    lastResults = results;
-    const scoring = scoreProducts(results, productProfile);
-    if (!scoring.error) {
-      console.log("SerpAPI matched:", query, `(${results.length} results)`);
-      return { scoring, queryUsed: query };
+  // Happy path: one Serp call. On miss, run remaining fallbacks in parallel and merge
+  // (same or wider pool than sequential 2→3, fewer wall-clock round-trips).
+  const primary = queries[0];
+  let primaryResults: SerpShoppingItem[] = [];
+  if (primary) {
+    primaryResults = await serpShoppingSearch(primary, apiKey);
+    if (primaryResults.length) {
+      const scoring = scoreProducts(primaryResults, productProfile);
+      if (!scoring.error) {
+        console.log("SerpAPI matched:", primary, `(${primaryResults.length} results)`);
+        return { scoring, queryUsed: primary };
+      }
     }
   }
 
+  const fallbackQs = queries.slice(1, 3);
+  if (fallbackQs.length === 0) {
+    return {
+      scoring: scoreProducts(primaryResults, productProfile),
+      queryUsed: primary || "",
+    };
+  }
+
+  const fallbackBatches = await Promise.all(
+    fallbackQs.map((q) => serpShoppingSearch(q, apiKey))
+  );
+  const merged = dedupeItems([...primaryResults, ...fallbackBatches.flat()]);
+  console.log(
+    "SerpAPI fallback parallel:",
+    fallbackQs.join(" | "),
+    `(merged=${merged.length})`
+  );
   return {
-    scoring: scoreProducts(lastResults, productProfile),
-    queryUsed: queries[0] || "",
+    scoring: scoreProducts(merged, productProfile),
+    queryUsed: primary || fallbackQs[0] || "",
   };
 }
 
@@ -139,7 +156,7 @@ export async function processPiece(
   affiliateTag: string,
   excludeTitles: Set<string> = new Set()
 ): Promise<PieceResult | null> {
-  const { scoring, queryUsed } = await searchWithFallback(productProfile, serpKey);
+  const { scoring } = await searchWithFallback(productProfile, serpKey);
   if (scoring.error) return null;
 
   if (excludeTitles.size) {
@@ -158,14 +175,19 @@ export async function processPiece(
   );
   for (const t of excludeTitles) usedTitles.add(t);
 
-  // Prefer pool for style slot (skip extra Serp round-trip when possible).
-  let styleProduct = pickTrustedFallback(scoring.pool, usedTitles);
-  if (occasionKeyword && scoring.pool.length < 4) {
-    const styleQuery = `${queryUsed} ${occasionKeyword}`.trim();
-    const styleResults = await serpShoppingSearch(styleQuery, serpKey);
-    styleProduct =
-      pickStyleProduct(styleResults, productProfile, usedTitles, occasionKeyword) || styleProduct;
-  }
+  // Style slot from the same scored pool — no extra Serp round-trip (options unchanged).
+  const occasionWords = occasionKeyword
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+  const styleProduct =
+    (occasionWords.length
+      ? scoring.pool.find(
+          (p) =>
+            !usedTitles.has(p.title) &&
+            occasionWords.some((w) => p.title.toLowerCase().includes(w))
+        )
+      : null) || pickTrustedFallback(scoring.pool, usedTitles);
 
   const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
   let slots = getSlots(finalScoring);
@@ -173,12 +195,18 @@ export async function processPiece(
     slots.map(({ product }) => fetchImmersive(product.serpapi_immersive_product_api, serpKey))
   );
 
+  const previousSlots = slots;
   const replaced = replaceOutOfStockSlots(finalScoring, slots, immersiveResponses);
-  const needsRefetch = replaced.some((s, i) => s.product.title !== slots[i]?.product.title);
-  if (needsRefetch) {
+  const changed = replaced.map((s, i) => s.product.title !== previousSlots[i]?.product.title);
+  if (changed.some(Boolean)) {
     slots = replaced;
+    // Only re-fetch immersive for replaced products — keep prior payloads for unchanged slots.
     immersiveResponses = await Promise.all(
-      slots.map(({ product }) => fetchImmersive(product.serpapi_immersive_product_api, serpKey))
+      slots.map(({ product }, i) =>
+        changed[i]
+          ? fetchImmersive(product.serpapi_immersive_product_api, serpKey)
+          : Promise.resolve(immersiveResponses[i])
+      )
     );
   }
 
