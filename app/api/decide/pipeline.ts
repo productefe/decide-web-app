@@ -712,6 +712,22 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
   const blob = `${cat} ${catTr}`;
   if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) {
     aliases.push("gözlük", "güneş gözlüğü", "sunglasses", "glasses", "eyewear");
+  } else if (/kolye|necklace|pendant/.test(blob)) {
+    aliases.push("kolye", "necklace", "pendant");
+  } else if (/küpe|kupe|earring/.test(blob)) {
+    aliases.push("küpe", "earring");
+  } else if (/bileklik|bracelet/.test(blob)) {
+    aliases.push("bileklik", "bracelet");
+  } else if (/kemer|belt/.test(blob)) {
+    aliases.push("kemer", "belt");
+  } else if (/çanta|bag|clutch|backpack|tote/.test(blob)) {
+    aliases.push("çanta", "bag", "clutch", "sırt çantası", "backpack", "tote");
+  } else if (/saat|watch/.test(blob)) {
+    aliases.push("saat", "watch");
+  } else if (/şapka|hat|bere|beanie|cap/.test(blob)) {
+    aliases.push("şapka", "hat", "bere", "beanie", "cap");
+  } else if (/atkı|scarf/.test(blob)) {
+    aliases.push("atkı", "scarf");
   } else if (/crop/.test(blob)) {
     aliases.push("crop top", "crop");
   } else if (/tişört|t-shirt|tshirt|tee/.test(blob)) {
