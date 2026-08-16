@@ -137,10 +137,10 @@ export async function POST(req: NextRequest) {
 
     try {
       if (isShowMore) {
-        await enforceRateLimit(supabase, "combine_more", 15);
+        await enforceRateLimit(supabase, "combine_more", 100);
       } else {
-        // Daily combines_used quota intentionally disabled for now — re-enable via enforceCombineQuota.
-        await enforceRateLimit(supabase, "combine", 10);
+        // Soft hourly cap only — daily combines_used quota is off until product gates it.
+        await enforceRateLimit(supabase, "combine", 100);
       }
     } catch (err) {
       if (err instanceof ApiSecurityError) {
