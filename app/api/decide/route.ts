@@ -18,6 +18,7 @@ import {
   enforceGuestAnalysisCap,
   enforceRateLimit,
 } from "@/lib/api-security";
+import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -174,15 +175,27 @@ export async function POST(req: NextRequest) {
       return { label, profile: p };
     });
 
-    const pieceResults = (
-      await Promise.all(
-        profiles.map(({ label, profile }) =>
-          processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
-            piece ? { ...piece, label } : null
-          )
+    const rawPieces = await Promise.all(
+      profiles.map(({ label, profile }) =>
+        processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
+          piece
+            ? ({
+                ...piece,
+                label,
+                category: profile.category,
+                color_tr: profile.color_tr,
+                fit: profile.fit,
+                gender: profile.gender,
+                style_tags: profile.style_tags,
+              } satisfies PieceResult)
+            : null
         )
       )
-    ).filter((p): p is PieceResult => p !== null);
+    );
+    const pieceResults: PieceResult[] = [];
+    for (const p of rawPieces) {
+      if (p) pieceResults.push(p);
+    }
 
     if (pieceResults.length === 0) {
       return NextResponse.json({
@@ -196,14 +209,22 @@ export async function POST(req: NextRequest) {
 
     const stored: StoredResults = { pieces: pieceResults };
     const firstResults = pieceResults[0].results;
+    const context = OCCASION_TO_CONTEXT[occasion];
+    let history_id: string | null = null;
 
     if (!isAnonymousUser(user)) {
-      const { error: insertError } = await supabase.from("search_history").insert({
-        user_id: user.id,
-        photo_url,
-        results: stored,
-      });
+      const { data: inserted, error: insertError } = await supabase
+        .from("search_history")
+        .insert({
+          user_id: user.id,
+          photo_url,
+          results: stored,
+          context,
+        })
+        .select("id")
+        .single();
       if (insertError) console.error("search_history insert:", insertError.message);
+      else history_id = inserted?.id ?? null;
     }
 
     return NextResponse.json({
@@ -213,6 +234,8 @@ export async function POST(req: NextRequest) {
       results: firstResults,
       exclude_titles: pieceResults.flatMap((p) => collectTitles(p.results)),
       occasion,
+      context,
+      history_id,
       price_mode,
     });
   } catch (err: unknown) {

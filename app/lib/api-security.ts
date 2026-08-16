@@ -66,3 +66,39 @@ export async function enforceRateLimit(
     );
   }
 }
+
+/** Daily combine quota via combines_used counter (separate from analysis limits). */
+export async function enforceCombineQuota(
+  supabase: SupabaseClient,
+  dailyLimit = 10
+): Promise<void> {
+  const { data, error } = await supabase.rpc("try_consume_combine", {
+    p_daily_limit: dailyLimit,
+  });
+  if (error) {
+    console.error("try_consume_combine error:", error.message);
+    throw new ApiSecurityError("İstek işlenemedi, lütfen tekrar dene.", 500);
+  }
+  if (data !== true) {
+    throw new ApiSecurityError(
+      "Günlük kombin hakkın doldu. Yarın tekrar dene.",
+      429
+    );
+  }
+}
+
+export async function trackAnalyticsEvent(
+  supabase: SupabaseClient,
+  userId: string,
+  eventName: string,
+  props: Record<string, unknown> = {}
+): Promise<void> {
+  const { error } = await supabase.from("analytics_events").insert({
+    user_id: userId,
+    event_name: eventName,
+    props,
+  });
+  if (error) {
+    console.warn("analytics_events insert:", error.message);
+  }
+}

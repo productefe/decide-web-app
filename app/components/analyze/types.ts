@@ -24,6 +24,12 @@ export interface PieceResult {
   label: string;
   category_tr: string;
   results: Results;
+  /** Vision attributes persisted for Combine (optional on legacy rows). */
+  category?: string;
+  color_tr?: string;
+  fit?: string;
+  gender?: string;
+  style_tags?: string[];
 }
 
 /** Stored in search_history — supports legacy flat Results or outfit pieces. */
