@@ -2,13 +2,13 @@
  * Shared GPT-4o outfit extraction prompt (POST /api/decide and /api/decide/more).
  * Empty string / empty array = not sure. Never invent attributes.
  */
-export const VISION_OUTFIT_PROMPT = `Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH major visible piece separately (up to 4): typically top, bottom, shoes, and outerwear/accessory. Do NOT collapse a whole look into a single item. Only return ONE item if the photo is clearly a product close-up of a single piece.
+export const VISION_OUTFIT_PROMPT = `Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH major visible piece separately (up to 5): top, bottom, outerwear, and ALWAYS shoes and accessories when visible. Shoes, watch, bag, sunglasses, hat, and belt are each their OWN item — never skip them and never merge them into a garment. If a watch or sneakers are visible even partially, include them. Do NOT collapse a whole look into a single item. Only return ONE item if the photo is clearly a product close-up of a single piece.
 
 Be precise about TYPE vs LENGTH vs STRAPS:
 - crop top, t-shirt, blouse, spaghetti-strap top, and dress are DISTINCT subcategories. A crop top is NEVER a dress. A spaghetti-strap crop top is still a crop top (subcategory crop-top, length crop, sleeve_or_strap thin-strap).
 - length is HEM length of the garment (crop / normal / midi / maxi / uzun), NOT sleeve length.
 - sleeve_or_strap is separate: short-sleeve / long-sleeve / sleeveless / thin-strap / thick-strap / strapless.
-- Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
+- Patterns and motifs are CRITICAL for search — never omit them. Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
 - If you are not sure about a field, leave it "" or []. Never guess.
 
 category (family, English): top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
@@ -27,4 +27,4 @@ label must be ONLY the Turkish item name (Tişört, Crop Top, Askılı Üst, Blu
 Return ONLY valid JSON, no markdown:
 {"items":[{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"orange","secondary_colors":["black","white"],"patterns":[{"type":"graphic","colors":["black"],"placement":"chest"},{"type":"striped","colors":["white"],"placement":"shoulder"}],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":["önde siyah motif","omuzlarda beyaz şerit"],"style_tags":["casual"],"has_logo":false}]}
 
-Order items top → bottom → shoes → outerwear/accessory when possible.`;
+Order items top → bottom → shoes → outerwear → accessories (watch/bag/sunglasses) when possible.`;

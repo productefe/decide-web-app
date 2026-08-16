@@ -1553,7 +1553,7 @@ export interface VisionPiece {
   profile: ProductProfile;
 }
 
-const MAX_OUTFIT_PIECES = 4;
+const MAX_OUTFIT_PIECES = 5;
 
 function pieceFamilyKey(category: string, categoryTr: string, subcategory = ""): string {
   const blob = `${category} ${categoryTr} ${subcategory}`.toLowerCase();
@@ -1569,7 +1569,8 @@ function pieceFamilyKey(category: string, categoryTr: string, subcategory = ""):
   if (/ayakkabı|sneaker|bot|sandal|loafer|heel/.test(blob)) return "shoes";
   if (/çanta|bag|backpack/.test(blob)) return "bag";
   if (/şapka|hat|bere|beanie|cap/.test(blob)) return "hat";
-  if (/kemer|belt|saat|watch|atkı|scarf/.test(blob)) return "accessory";
+  if (/saat|watch/.test(blob)) return "watch";
+  if (/kemer|belt|atkı|scarf/.test(blob)) return "accessory";
   return blob.trim() || "other";
 }
 
@@ -1738,14 +1739,26 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
 
   const luxuryQueries: string[] = [];
   if (priceMode === "luks" && primary) {
-    for (const store of LUXURY_SEARCH_STORES.slice(0, 4)) {
+    // Beymen + Les Benjamins are always queried; the other two slots rotate
+    // per item (deterministic hash of the query) so luxury results vary.
+    const fixedStores = ["beymen", "les benjamins"];
+    const rotating = LUXURY_SEARCH_STORES.filter((s) => !fixedStores.includes(s));
+    let seed = 0;
+    for (let i = 0; i < primary.length; i++) {
+      seed = (seed * 31 + primary.charCodeAt(i)) >>> 0;
+    }
+    const first = seed % rotating.length;
+    const second = (first + 1 + (seed % (rotating.length - 1))) % rotating.length;
+    for (const store of [...fixedStores, rotating[first], rotating[second]]) {
       luxuryQueries.push(`${primary} ${store}`);
     }
   }
 
+  // In lüks mode brand queries (Sandro, Maje, Pinko, …) come right after the
+  // store queries so the first search batch already carries brand diversity.
   const candidates =
     priceMode === "luks"
-      ? [...luxuryQueries, ...base, ...brandQueries]
+      ? [...luxuryQueries, ...brandQueries, ...base]
       : [...base, ...brandQueries];
   const typeLc = typeTokenTr(rebuilt).toLocaleLowerCase("tr-TR");
   const seen = new Set<string>();

@@ -92,21 +92,13 @@ async function searchWithFallback(
   }
 
   if (priceMode === "luks") {
-    // Same 4 store-targeted queries in parallel — quality unchanged, latency cut vs sequential.
-    const luxuryQs = queries.slice(0, 4);
+    // One parallel batch: 2 fixed stores (Beymen, Les Benjamins) + 2 rotating
+    // stores + 2 luxury pool-brand queries. Single RTT instead of the old
+    // conditional two-step, and more brand variety in the pool.
+    const luxuryQs = queries.slice(0, 6);
     const batches = await Promise.all(luxuryQs.map((q) => serpShoppingSearch(q, apiKey)));
     const merged = dedupeItems(batches.flat());
-    let scoring = scoreProducts(merged, productProfile);
-    const luxuryCount = scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length;
-
-    // Only expand when the luxury pool is thin — keeps option depth without always paying extra RTT.
-    if (scoring.error || luxuryCount < 3) {
-      const extraQs = queries.slice(4, 6);
-      if (extraQs.length) {
-        const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, apiKey)));
-        scoring = scoreProducts(dedupeItems([...merged, ...extra.flat()]), productProfile);
-      }
-    }
+    const scoring = scoreProducts(merged, productProfile);
 
     console.log(
       "SerpAPI luxury parallel:",
