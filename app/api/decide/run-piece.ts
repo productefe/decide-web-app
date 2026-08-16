@@ -10,6 +10,7 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
+import { pickDecidePoolBrands, normalizeBrandName } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import type { PriceMode } from "@/lib/preferences";
 
@@ -115,12 +116,27 @@ async function searchWithFallback(
     return { scoring, queryUsed: luxuryQs[0] || queries[0] || "" };
   }
 
-  // Happy path: primary + niche brand queries in parallel (same wall-clock, wider marka yelpazesi).
-  const primary = queries[0];
-  const brandQs = queries.filter((q) => q !== primary).slice(0, 3);
-  const parallelQs = [primary, ...brandQs].filter(Boolean);
+  // Happy path: brand-suffixed queries first (Bershka / Pull&Bear / …), then one generic core.
+  const poolBrands = pickDecidePoolBrands(
+    {
+      category: productProfile.category,
+      category_tr: productProfile.category_tr,
+      subcategory: productProfile.subcategory,
+      subcategory_tr: productProfile.subcategory_tr,
+      price_mode: priceMode,
+    },
+    3,
+    queries[0] || ""
+  );
+  const brandQs = queries.filter((q) =>
+    poolBrands.some((b) => q.toLocaleLowerCase("tr-TR").includes(normalizeBrandName(b)) || q.toLowerCase().includes(b.toLowerCase()))
+  );
+  const genericQs = queries.filter((q) => !brandQs.includes(q));
+  const primary = genericQs[0] || queries[0];
+  const parallelQs = [...brandQs.slice(0, 3), primary].filter(Boolean);
+  const uniqueParallel = [...new Set(parallelQs)];
 
-  const batches = await Promise.all(parallelQs.map((q) => serpShoppingSearch(q, apiKey)));
+  const batches = await Promise.all(uniqueParallel.map((q) => serpShoppingSearch(q, apiKey)));
   const mergedPrimary = dedupeItems(batches.flat());
 
   if (mergedPrimary.length) {
@@ -128,14 +144,14 @@ async function searchWithFallback(
     if (!scoring.error) {
       console.log(
         "SerpAPI matched+brands:",
-        parallelQs.join(" | "),
+        uniqueParallel.join(" | "),
         `(${mergedPrimary.length} results)`
       );
-      return { scoring, queryUsed: primary || parallelQs[0] || "" };
+      return { scoring, queryUsed: brandQs[0] || primary || uniqueParallel[0] || "" };
     }
   }
 
-  const fallbackQs = queries.slice(parallelQs.length, parallelQs.length + 2);
+  const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
   if (fallbackQs.length === 0) {
     return {
       scoring: scoreProducts(mergedPrimary, productProfile),

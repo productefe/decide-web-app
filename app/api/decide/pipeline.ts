@@ -1821,6 +1821,11 @@ function scoreShoppingItems(
     if (relaxed.length > validResults.length) validResults = relaxed;
   }
 
+  const brandedOnly = validResults.filter((item) =>
+    textHasPoolBrand(`${item.title || ""} ${item.source || ""}`)
+  );
+  if (brandedOnly.length > 0) validResults = brandedOnly;
+
   // Prefer titles that explicitly mark the user's gender (erkek/kadın) when enough exist.
   if (profileGenderSide(productProfile)) {
     const gendered = validResults.filter((item) => titleMatchesUserGender(item.title || "", productProfile));

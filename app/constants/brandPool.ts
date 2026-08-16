@@ -114,7 +114,7 @@ export const BRAND_POOL: BrandPoolEntry[] = [
   {
     category: "crop",
     tier: "affordable",
-    brands: ["Bershka", "Addax", "Trendyol Milla"],
+    brands: ["Bershka", "Pull&Bear", "Stradivarius", "Addax", "Trendyol Milla"],
     iconicFor: ["crop top"],
   },
   { category: "crop", tier: "affordable", brands: ["Stradivarius", "H&M"], iconicFor: ["askılı basic"] },

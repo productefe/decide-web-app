@@ -1,9 +1,7 @@
 import type { PriceMode } from "@/lib/preferences";
 import {
-  AFFORDABLE_POOL_BRANDS,
   APPROVED_AFFORDABLE_BRANDS,
   LUXURY_POOL_BRANDS,
-  normalizeBrandName,
   textHasPoolBrand,
 } from "@/constants/brandPool";
 
@@ -42,20 +40,21 @@ export const QUALITY_CONFIG = {
     "sweatshirt",
     "gömlek",
   ],
-  /** TRY floors — unnamed sellers only; catalog brands are exempt. */
+  /** TRY floors — hard minimum 200 for every family. */
+  minPriceTry: 200,
   minPriceByFamily: {
-    tops: 99,
-    crop: 99,
-    bottoms: 199,
-    dress: 199,
+    tops: 200,
+    crop: 200,
+    bottoms: 200,
+    dress: 200,
     outerwear: 399,
     sneakers: 399,
     shoes_classic: 299,
-    bag: 199,
+    bag: 200,
     watch: 299,
-    sunglasses: 199,
-    activewear: 149,
-    accessory: 79,
+    sunglasses: 200,
+    activewear: 200,
+    accessory: 200,
   } as Record<string, number>,
   luxuryChannels: ["beymen", "vakko", "vakkorama", "network", "twist"],
 };
@@ -123,8 +122,8 @@ export type QualityFilterInput = {
 
 /**
  * True when the hit should be dropped.
- * Approved catalog brands (Koton/LCW/DeFacto/…) skip title-pile / random-seller / price-floor —
- * replica + supermarket + luxury-tier lock still apply.
+ * Hard rules for everyone: price ≥ 200 TL, no replica, no supermarket.
+ * Unnamed / non-pool sellers are dropped — only catalog pool brands (Bershka, Pull&Bear, …) pass.
  */
 export function failsQualityFilter(input: QualityFilterInput): boolean {
   const title = input.title || "";
@@ -132,16 +131,24 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   const blob = hay(title, source);
   const catalog = isApprovedCatalogBrand(blob) || textHasPoolBrand(blob);
 
+  if (typeof input.priceValue === "number" && input.priceValue > 0 && input.priceValue < QUALITY_CONFIG.minPriceTry) {
+    return true;
+  }
+
   if (hasReplica(title)) return true;
   if (isSupermarket(source, title)) return true;
 
   if (input.priceMode === "luks") {
     const luxuryBrand = textHasPoolBrand(blob, LUXURY_POOL_BRANDS);
     if (!luxuryBrand && !isLuxuryChannel(source, title)) return true;
-    if (textHasPoolBrand(blob, AFFORDABLE_POOL_BRANDS) && !luxuryBrand && !isLuxuryChannel(source, title)) {
-      return true;
-    }
   }
+
+  const familyFloor = priceFloorFor(input.poolFamily);
+  if (familyFloor > QUALITY_CONFIG.minPriceTry && typeof input.priceValue === "number" && input.priceValue > 0 && input.priceValue < familyFloor) {
+    return true;
+  }
+
+  if (!catalog && !isLuxuryChannel(source, title)) return true;
 
   if (catalog) return false;
 
@@ -150,12 +157,5 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   if (keywordPileCount(title) >= QUALITY_CONFIG.maxKeywordPile) return true;
   if (categoryNameCount(title) >= 3) return true;
 
-  const floor = priceFloorFor(input.poolFamily);
-  if (floor > 0 && typeof input.priceValue === "number" && input.priceValue > 0 && input.priceValue < floor) {
-    return true;
-  }
-
   return false;
 }
-
-export { normalizeBrandName };
