@@ -2,6 +2,7 @@ import type { PriceMode } from "@/lib/preferences";
 import {
   APPROVED_AFFORDABLE_BRANDS,
   LUXURY_POOL_BRANDS,
+  allPoolBrandNames,
   textHasPoolBrand,
 } from "@/constants/brandPool";
 
@@ -97,6 +98,21 @@ function hasReplica(title: string): boolean {
   return QUALITY_CONFIG.replicaTokens.some((tok) => t.includes(tok));
 }
 
+const POOL_NAMES_LC = allPoolBrandNames()
+  .map((b) => b.toLocaleLowerCase("tr-TR"))
+  .filter((b) => b.length >= 3);
+
+/**
+ * Knockoff signature: "<brand> model / tarzı / stili" in the title means the
+ * item merely imitates the brand ("Weppa Bershka Model Crop") — hard reject.
+ */
+function isBrandKnockoffTitle(title: string): boolean {
+  const t = title.toLocaleLowerCase("tr-TR");
+  return POOL_NAMES_LC.some(
+    (b) => t.includes(`${b} model`) || t.includes(`${b} tarz`) || t.includes(`${b} stil`)
+  );
+}
+
 function isSupermarket(source: string, title: string): boolean {
   const t = hay(title, source);
   return QUALITY_CONFIG.supermarketStores.some((s) => t.includes(s));
@@ -136,6 +152,7 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   }
 
   if (hasReplica(title)) return true;
+  if (isBrandKnockoffTitle(title)) return true;
   if (isSupermarket(source, title)) return true;
 
   if (input.priceMode === "luks") {

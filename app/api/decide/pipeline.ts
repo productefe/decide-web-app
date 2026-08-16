@@ -1,6 +1,7 @@
 import { Product, Results } from "@/components/analyze/types";
 import type { Occasion, PriceMode } from "@/lib/preferences";
 import {
+  isCropCasualSubcategory,
   pickDecidePoolBrands,
   resolvePoolCategories,
   textHasIconicPoolBrand,
@@ -1688,14 +1689,22 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
   return typeof item.extracted_price === "number" && item.extracted_price > 0;
 }
 
+export interface SearchQueryPlan {
+  /** Final ordered query ladder (most specific → broadest). */
+  queries: string[];
+  /** Subset of `queries` that carry a brand-pool suffix (Bershka, Sandro, …). */
+  brandQueries: string[];
+}
+
 /** Most specific → broadest; core type token never dropped. Empty if low_confidence. */
-export function buildSearchQueries(productProfile: ProductProfile): string[] {
-  if (productProfile.low_confidence) return [];
+export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan {
+  const empty: SearchQueryPlan = { queries: [], brandQueries: [] };
+  if (productProfile.low_confidence) return empty;
 
   const rebuilt = productProfile.core_query
     ? productProfile
     : rebuildProfileQueries(productProfile);
-  if (rebuilt.low_confidence || !rebuilt.core_query) return [];
+  if (rebuilt.low_confidence || !rebuilt.core_query) return empty;
 
   const sizes = rebuilt.user_profile?.sizes || [];
   const firstSize = sizes[0];
@@ -1760,25 +1769,61 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
     priceMode === "luks"
       ? [...luxuryQueries, ...brandQueries, ...base]
       : [...base, ...brandQueries];
+  const normalizeQuery = (q: string) => q.trim().replace(/\s+/g, " ");
+  const brandSet = new Set(brandQueries.map(normalizeQuery));
+
   const typeLc = typeTokenTr(rebuilt).toLocaleLowerCase("tr-TR");
   const seen = new Set<string>();
-  return candidates
-    .map((q) => q.trim().replace(/\s+/g, " "))
-    .filter((q) => {
-      if (!q || seen.has(q)) return false;
-      if (typeLc && !q.toLocaleLowerCase("tr-TR").includes(typeLc)) return false;
-      seen.add(q);
-      return true;
-    });
+  const queries = candidates.map(normalizeQuery).filter((q) => {
+    if (!q || seen.has(q)) return false;
+    if (typeLc && !q.toLocaleLowerCase("tr-TR").includes(typeLc)) return false;
+    seen.add(q);
+    return true;
+  });
+
+  return { queries, brandQueries: queries.filter((q) => brandSet.has(q)) };
+}
+
+export function buildSearchQueries(productProfile: ProductProfile): string[] {
+  return buildSearchPlan(productProfile).queries;
+}
+
+/**
+ * Round-robin the scored list by store so no single seller (Beymen) fills
+ * consecutive slots. Per-store order stays score-sorted; bucket order follows
+ * the first (highest-scored) appearance of each store.
+ */
+function interleaveByStore(scored: ScoredProduct[]): ScoredProduct[] {
+  const buckets = new Map<string, ScoredProduct[]>();
+  for (const p of scored) {
+    const key = p.store || "other";
+    const list = buckets.get(key) || [];
+    list.push(p);
+    buckets.set(key, list);
+  }
+  if (buckets.size <= 1) return scored;
+  const lists = [...buckets.values()];
+  const out: ScoredProduct[] = [];
+  for (let round = 0; out.length < scored.length; round++) {
+    for (const list of lists) {
+      if (round < list.length) out.push(list[round]);
+    }
+  }
+  return out;
 }
 
 function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): ScoredProduct[] {
   if (priceMode !== "luks") return scored;
   const luxury = scored.filter((p) => isLuxuryHit(p.source, p.title));
-  if (luxury.length >= 3) return luxury;
+  // Color-faithful items outrank same-score off-color ones (score caps at 100).
+  const colorFirst = (list: ScoredProduct[]) => [
+    ...list.filter((p) => p.signals.color),
+    ...list.filter((p) => !p.signals.color),
+  ];
+  if (luxury.length >= 3) return interleaveByStore(colorFirst(luxury));
   if (luxury.length >= 1) {
     const rest = scored.filter((p) => !isLuxuryHit(p.source, p.title));
-    return [...luxury, ...rest];
+    return [...interleaveByStore(colorFirst(luxury)), ...rest];
   }
   return scored;
 }
@@ -1837,7 +1882,47 @@ function scoreShoppingItems(
   const brandedOnly = validResults.filter((item) =>
     textHasPoolBrand(`${item.title || ""} ${item.source || ""}`)
   );
-  if (brandedOnly.length > 0) validResults = brandedOnly;
+  if (brandedOnly.length >= 3) {
+    validResults = brandedOnly;
+  } else if (brandedOnly.length > 0) {
+    const rest = validResults.filter((item) => !brandedOnly.includes(item));
+    validResults = [...brandedOnly, ...rest];
+  }
+
+  // Similarity locks: when enough results carry the exact subcategory / pattern /
+  // color token, drop the ones that don't — the pool stays on-model instead of
+  // drifting to loosely related pieces.
+  const lcTitle = (item: SerpShoppingItem) => (item.title || "").toLocaleLowerCase("tr-TR");
+  const subToken = (productProfile.subcategory_tr || "").toLocaleLowerCase("tr-TR").split(" ")[0];
+  const catToken = (productProfile.category_tr || "").toLocaleLowerCase("tr-TR").split(" ")[0];
+  if (subToken.length >= 3 && subToken !== catToken) {
+    const subMatched = validResults.filter((item) => lcTitle(item).includes(subToken));
+    if (subMatched.length >= 3) validResults = subMatched;
+  }
+  const patternTokens = [
+    ...new Set(
+      (productProfile.patterns || [])
+        .map((p) => translatePattern(p.type))
+        .filter(Boolean)
+    ),
+  ];
+  if (patternTokens.length) {
+    const patternMatched = validResults.filter((item) =>
+      patternTokens.some((tok) => lcTitle(item).includes(tok))
+    );
+    if (patternMatched.length >= 3) validResults = patternMatched;
+  }
+  const colorToken = (productProfile.color_tr || "").toLocaleLowerCase("tr-TR");
+  if (colorToken) {
+    const colorMatched = validResults.filter((item) => lcTitle(item).includes(colorToken));
+    if (colorMatched.length >= 3) validResults = colorMatched;
+  }
+  // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
+  if (isCropCasualSubcategory(productProfile)) {
+    const heavyKnit = /sweatshirt|sweat\b|hoodie|kapüşon|kapşon|kazak|hırka|cardigan|triko/;
+    const lightOnly = validResults.filter((item) => !heavyKnit.test(lcTitle(item)));
+    if (lightOnly.length >= 3) validResults = lightOnly;
+  }
 
   // Prefer titles that explicitly mark the user's gender (erkek/kadın) when enough exist.
   if (profileGenderSide(productProfile)) {
@@ -1991,17 +2076,18 @@ function pickCheaperProduct(
   );
   if (otherPrices.length === 0) return null;
 
-  return (
-    pool
-      .filter(
-        (p) =>
-          p.priceValue > 0 &&
-          p.title !== recommended.title &&
-          p.title !== style?.title &&
-          otherPrices.every((price) => p.priceValue <= price)
-      )
-      .sort((a, b) => a.priceValue - b.priceValue)[0] || null
-  );
+  const candidates = pool
+    .filter(
+      (p) =>
+        p.priceValue > 0 &&
+        p.title !== recommended.title &&
+        p.title !== style?.title &&
+        otherPrices.every((price) => p.priceValue <= price)
+    )
+    .sort((a, b) => a.priceValue - b.priceValue);
+
+  // Prefer a different store than the recommended pick to spread sellers.
+  return candidates.find((p) => p.store !== recommended.store) || candidates[0] || null;
 }
 
 export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfile: ProductProfile): ScoringResult {

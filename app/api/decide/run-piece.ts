@@ -1,6 +1,6 @@
 import {
   scoreProducts,
-  buildSearchQueries,
+  buildSearchPlan,
   pickTrustedFallback,
   getSlots,
   mergeLinks,
@@ -10,7 +10,6 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
-import { pickDecidePoolBrands, normalizeBrandName } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import type { PriceMode } from "@/lib/preferences";
 
@@ -54,7 +53,7 @@ async function serpShoppingSearch(
     engine: "google_shopping",
     q: trimmed,
     api_key: apiKey,
-    num: "20",
+    num: "40",
     gl: "tr",
     hl: "tr",
   });
@@ -73,7 +72,7 @@ async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
-  const queries = buildSearchQueries(productProfile);
+  const { queries, brandQueries } = buildSearchPlan(productProfile);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   if (queries.length === 0) {
@@ -109,23 +108,11 @@ async function searchWithFallback(
   }
 
   // Happy path: brand-suffixed queries first (Bershka / Pull&Bear / …), then one generic core.
-  const poolBrands = pickDecidePoolBrands(
-    {
-      category: productProfile.category,
-      category_tr: productProfile.category_tr,
-      subcategory: productProfile.subcategory,
-      subcategory_tr: productProfile.subcategory_tr,
-      price_mode: priceMode,
-    },
-    3,
-    queries[0] || ""
-  );
-  const brandQs = queries.filter((q) =>
-    poolBrands.some((b) => q.toLocaleLowerCase("tr-TR").includes(normalizeBrandName(b)) || q.toLowerCase().includes(b.toLowerCase()))
-  );
-  const genericQs = queries.filter((q) => !brandQs.includes(q));
+  // The plan marks brand queries explicitly — no fragile re-derivation.
+  const brandQs = brandQueries.slice(0, 3);
+  const genericQs = queries.filter((q) => !brandQueries.includes(q));
   const primary = genericQs[0] || queries[0];
-  const parallelQs = [...brandQs.slice(0, 3), primary].filter(Boolean);
+  const parallelQs = [...brandQs, primary].filter(Boolean);
   const uniqueParallel = [...new Set(parallelQs)];
 
   const batches = await Promise.all(uniqueParallel.map((q) => serpShoppingSearch(q, apiKey)));

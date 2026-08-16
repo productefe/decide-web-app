@@ -60,7 +60,7 @@ export const BRAND_POOL: BrandPoolEntry[] = [
       "Beymen Club",
     ],
   },
-  { category: "tops", tier: "affordable", brands: ["Lacoste", "Ralph Lauren"], iconicFor: ["polo yaka"] },
+  { category: "tops", tier: "luxury", brands: ["Lacoste", "Ralph Lauren"], iconicFor: ["polo yaka"] },
   { category: "tops", tier: "affordable", brands: ["Levi's", "Mavi"], iconicFor: ["denim üst"] },
   { category: "tops", tier: "affordable", brands: ["Koton", "LC Waikiki"], iconicFor: ["basic tişört"] },
   {
@@ -594,6 +594,25 @@ export function pickDecidePoolBrands(
   const seen = new Set<string>();
   const out: string[] = [];
 
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash + seed.charCodeAt(i) * (i + 1)) % 997;
+
+  const pushBrand = (brand: string): boolean => {
+    if (out.length >= count) return false;
+    if (out.some((x) => normalizeBrandName(x) === normalizeBrandName(brand))) return true;
+    out.push(brand);
+    return true;
+  };
+  const pickFrom = (list: string[], quota: number) => {
+    let picked = 0;
+    for (let i = 0; i < list.length && out.length < count && picked < quota; i++) {
+      const brand = list[(hash + i * 7) % list.length];
+      if (out.some((x) => normalizeBrandName(x) === normalizeBrandName(brand))) continue;
+      out.push(brand);
+      picked++;
+    }
+  };
+
   for (const category of categories) {
     if (out.length >= count) break;
     const catEntries = BRAND_POOL.filter((e) => e.category === category && tiers.includes(e.tier)).sort((a, b) => {
@@ -601,13 +620,19 @@ export function pickDecidePoolBrands(
       const bi = entryIsIconic(b, needles) ? 0 : 1;
       return ai - bi;
     });
-    const catBrands: string[] = [];
+    const affordableCat: string[] = [];
+    const luxuryCat: string[] = [];
     for (const entry of catEntries) {
+      // Designer brands enter the karma rotation only via iconic tags; in pure
+      // lüks mode they stay in the general rotation (doc: designer ⊂ lüks).
+      const designerBlockedInMix = entry.designer && tiers.length > 1;
       for (const brand of entry.brands) {
         const key = normalizeBrandName(brand);
         if (!key || seen.has(key)) continue;
         seen.add(key);
-        catBrands.push(brand);
+        if (designerBlockedInMix) continue;
+        if (entry.tier === "affordable") affordableCat.push(brand);
+        else luxuryCat.push(brand);
       }
     }
     const iconic = catEntries
@@ -615,16 +640,21 @@ export function pickDecidePoolBrands(
       .flatMap((e) => e.brands)
       .filter((b, i, arr) => arr.findIndex((x) => normalizeBrandName(x) === normalizeBrandName(b)) === i);
     for (const b of iconic) {
-      if (out.length >= count) break;
-      if (out.some((x) => normalizeBrandName(x) === normalizeBrandName(b))) continue;
-      out.push(b);
+      if (!pushBrand(b)) break;
     }
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) hash = (hash + seed.charCodeAt(i) * (i + 1)) % 997;
-    for (let i = 0; i < catBrands.length && out.length < count; i++) {
-      const brand = catBrands[(hash + i * 7) % catBrands.length];
-      if (out.some((x) => normalizeBrandName(x) === normalizeBrandName(brand))) continue;
-      out.push(brand);
+
+    const remaining = count - out.length;
+    if (remaining <= 0) break;
+    if (tiers.length > 1) {
+      // Karma: affordable-first (Bershka, Stradivarius, Mavi, …) with at most
+      // one luxury pick — mirrors how users actually shop mixed budgets.
+      const luxQuota = Math.min(1, remaining);
+      pickFrom(affordableCat, remaining - luxQuota);
+      pickFrom(luxuryCat, luxQuota);
+      pickFrom(affordableCat, count - out.length);
+      pickFrom(luxuryCat, count - out.length);
+    } else {
+      pickFrom([...affordableCat, ...luxuryCat], remaining);
     }
   }
   return out.slice(0, count);
