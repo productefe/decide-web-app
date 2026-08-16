@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     const anonymous = isAnonymousUser(user);
     try {
       await enforceGuestAnalysisCap(supabase, anonymous);
-      await enforceRateLimit(supabase, "decide", anonymous ? 2 : 10);
+      await enforceRateLimit(supabase, "decide", anonymous ? 10 : 100);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });

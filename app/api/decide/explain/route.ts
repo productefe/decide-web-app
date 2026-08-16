@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await enforceRateLimit(supabase, "explain", 20);
+      await enforceRateLimit(supabase, "explain", 100);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });

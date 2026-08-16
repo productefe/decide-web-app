@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     try {
       assertOwnStoragePath(user.id, storage_path);
-      await enforceRateLimit(supabase, "decide_more", isAnonymousUser(user) ? 3 : 15);
+      await enforceRateLimit(supabase, "decide_more", isAnonymousUser(user) ? 10 : 100);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });
