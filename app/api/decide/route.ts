@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseGender, parseOccasion, parsePriceMode, parseSizes, type Occasion, type PriceMode } from "@/lib/preferences";
 import { isAnonymousUser } from "@/lib/auth-user";
 import { createClient, getBearerToken } from "@/utils/supabase/server";
+import { VISION_OUTFIT_PROMPT } from "./vision-prompt";
 import {
   parseVisionOutfit,
   getOccasionKeyword,
   applyUserGender,
+  pieceAttrsFromProfile,
   type RequestContext,
   type UserProfile,
 } from "./pipeline";
@@ -24,9 +26,6 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-
-const VISION_OUTFIT_PROMPT =
-  'Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH major visible piece separately (up to 4): typically top, bottom, shoes, and outerwear/accessory. Do NOT collapse a whole look into a single item. Only return ONE item if the photo is clearly a product close-up of a single piece (e.g. only glasses on a table, only one shoe). Be precise about TYPE and FIT — crop top vs oversized t-shirt; skinny vs wide-leg jeans; glasses vs sunglasses. Return ONLY valid JSON, no markdown:\n{"items":[{"label":"Tişört","category":"exact type like glasses/sunglasses/crop top/t-shirt/jeans/sneaker/hoodie/jacket/bag/watch/hat","colors":["primary color"],"fit":"slim/regular/oversized/loose/cropped/none","collar":"crew neck/v-neck/polo/turtleneck/none","pattern":"plain/striped/floral/graphic/logo/checkered/none","has_logo":false,"style_tags":["casual"],"gender":"men/women/unisex"}]}\nOrder items top → bottom → shoes → outerwear/accessory when possible. The "label" must be ONLY the Turkish item name (e.g. Gözlük, Crop Top, Tişört, Pantolon, Ayakkabı, Ceket, Çanta) — no English, no explanations.';
 
 interface OpenAIChatResponse {
   choices?: { message?: { content?: string } }[];
@@ -166,7 +165,7 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
-      max_tokens: 1200,
+      max_tokens: 2000,
     });
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
@@ -176,21 +175,18 @@ export async function POST(req: NextRequest) {
     });
 
     const rawPieces = await Promise.all(
-      profiles.map(({ label, profile }) =>
-        processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
+      profiles.map(({ label, profile }) => {
+        if (profile.low_confidence) return Promise.resolve(null);
+        return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
           piece
             ? ({
                 ...piece,
                 label,
-                category: profile.category,
-                color_tr: profile.color_tr,
-                fit: profile.fit,
-                gender: profile.gender,
-                style_tags: profile.style_tags,
+                ...pieceAttrsFromProfile(profile),
               } satisfies PieceResult)
             : null
-        )
-      )
+        );
+      })
     );
     const pieceResults: PieceResult[] = [];
     for (const p of rawPieces) {

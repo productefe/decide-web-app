@@ -347,6 +347,20 @@ function buildSlotProductProfile(
     gender_tr: gTr,
     search_query,
     fallback_query,
+    subcategory: "",
+    subcategory_tr: "",
+    secondary_colors: [],
+    length: "",
+    length_tr: "",
+    neckline: "",
+    sleeve_or_strap: "",
+    sleeve_or_strap_tr: "",
+    patterns: [],
+    material_impression: "",
+    material_tr: "",
+    distinctive_details: [],
+    core_query: fallback_query,
+    low_confidence: !categoryTr,
   };
 }
 

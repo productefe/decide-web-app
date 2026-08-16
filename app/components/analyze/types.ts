@@ -30,6 +30,15 @@ export interface PieceResult {
   fit?: string;
   gender?: string;
   style_tags?: string[];
+  subcategory?: string;
+  length?: string;
+  neckline?: string;
+  sleeve_or_strap?: string;
+  secondary_colors?: string[];
+  patterns?: { type: string; colors: string[]; placement: string }[];
+  material_impression?: string;
+  distinctive_details?: string[];
+  low_confidence?: boolean;
 }
 
 /** Stored in search_history — supports legacy flat Results or outfit pieces. */

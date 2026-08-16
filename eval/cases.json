@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "notes": "Only asserted fields are scored. Photos live in eval/photos/; missing files are skipped. case-01 and case-02 run SerpAPI must_not_match_title checks by default.",
+  "cases": [
+    {
+      "id": "case-01",
+      "photo": "photos/case-01.jpg",
+      "label": "Motifli turuncu tişört — siyah motif + omuzlarda beyaz çizgi",
+      "expected": {
+        "category": ["top"],
+        "subcategory": ["t-shirt", "tshirt", "tee", "tişört"],
+        "primary_color": ["orange", "turuncu"],
+        "secondary_colors": ["black", "siyah", "white", "beyaz"],
+        "length": ["normal", "regular", ""],
+        "patterns": [
+          {
+            "type": ["graphic", "print", "printed", "baskılı", "motif"],
+            "placement": ["chest", "göğüs", "all-over", "genel", ""]
+          },
+          {
+            "type": ["striped", "stripes", "çizgili"],
+            "placement": ["shoulder", "omuz"]
+          }
+        ],
+        "must_not_subcategory": ["dress", "elbise", "crop-top", "crop top"]
+      },
+      "search": {
+        "must_not_match_title": ["elbise", "dress", "etek", "tulum"]
+      }
+    },
+    {
+      "id": "case-02",
+      "photo": "photos/case-02.jpg",
+      "label": "Askılı crop top — elbise ile eşleşmemeli",
+      "expected": {
+        "category": ["top"],
+        "subcategory": ["crop-top", "crop top", "crop", "askili-ust", "askılı üst"],
+        "length": ["crop", "cropped"],
+        "sleeve_or_strap": [
+          "thin-strap",
+          "thin strap",
+          "spaghetti",
+          "ince askılı",
+          "askılı",
+          "sleeveless"
+        ],
+        "must_not_subcategory": ["dress", "elbise", "jumpsuit", "tulum"]
+      },
+      "search": {
+        "must_not_match_title": ["elbise", "dress", "tulum", "jumpsuit"]
+      }
+    },
+    { "id": "case-03", "photo": "photos/case-03.jpg", "label": "", "expected": {} },
+    { "id": "case-04", "photo": "photos/case-04.jpg", "label": "", "expected": {} },
+    { "id": "case-05", "photo": "photos/case-05.jpg", "label": "", "expected": {} },
+    { "id": "case-06", "photo": "photos/case-06.jpg", "label": "", "expected": {} },
+    { "id": "case-07", "photo": "photos/case-07.jpg", "label": "", "expected": {} },
+    { "id": "case-08", "photo": "photos/case-08.jpg", "label": "", "expected": {} },
+    { "id": "case-09", "photo": "photos/case-09.jpg", "label": "", "expected": {} },
+    { "id": "case-10", "photo": "photos/case-10.jpg", "label": "", "expected": {} },
+    { "id": "case-11", "photo": "photos/case-11.jpg", "label": "", "expected": {} },
+    { "id": "case-12", "photo": "photos/case-12.jpg", "label": "", "expected": {} },
+    { "id": "case-13", "photo": "photos/case-13.jpg", "label": "", "expected": {} },
+    { "id": "case-14", "photo": "photos/case-14.jpg", "label": "", "expected": {} },
+    { "id": "case-15", "photo": "photos/case-15.jpg", "label": "", "expected": {} },
+    { "id": "case-16", "photo": "photos/case-16.jpg", "label": "", "expected": {} },
+    { "id": "case-17", "photo": "photos/case-17.jpg", "label": "", "expected": {} },
+    { "id": "case-18", "photo": "photos/case-18.jpg", "label": "", "expected": {} },
+    { "id": "case-19", "photo": "photos/case-19.jpg", "label": "", "expected": {} },
+    { "id": "case-20", "photo": "photos/case-20.jpg", "label": "", "expected": {} },
+    { "id": "case-21", "photo": "photos/case-21.jpg", "label": "", "expected": {} },
+    { "id": "case-22", "photo": "photos/case-22.jpg", "label": "", "expected": {} },
+    { "id": "case-23", "photo": "photos/case-23.jpg", "label": "", "expected": {} },
+    { "id": "case-24", "photo": "photos/case-24.jpg", "label": "", "expected": {} },
+    { "id": "case-25", "photo": "photos/case-25.jpg", "label": "", "expected": {} }
+  ]
+}

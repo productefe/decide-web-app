@@ -75,6 +75,21 @@ async function searchWithFallback(
   const queries = buildSearchQueries(productProfile);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
+  if (queries.length === 0) {
+    return {
+      scoring: {
+        user_id: productProfile.user_id,
+        photo_url: productProfile.photo_url,
+        recommended: null,
+        cheaper: null,
+        style: null,
+        pool: [],
+        error: "Bu ürün için sonuç bulunamadı.",
+      },
+      queryUsed: "",
+    };
+  }
+
   if (priceMode === "luks") {
     // Same 4 store-targeted queries in parallel — quality unchanged, latency cut vs sequential.
     const luxuryQs = queries.slice(0, 4);
@@ -174,6 +189,7 @@ export async function processPiece(
   excludeTitles: Set<string> = new Set(),
   options: ProcessPieceOptions = {}
 ): Promise<PieceResult | null> {
+  if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
   const { scoring } = await searchWithFallback(productProfile, serpKey);
   if (scoring.error) return null;

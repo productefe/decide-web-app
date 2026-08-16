@@ -24,23 +24,43 @@ export interface UserProfile {
   [key: string]: unknown;
 }
 
+export interface VisionPattern {
+  type: string;
+  colors: string[];
+  placement: string;
+}
+
 export interface ProductProfile extends RequestContext {
   category: string;
   category_tr: string;
+  subcategory: string;
+  subcategory_tr: string;
   color_tr: string;
   colors: string[];
+  secondary_colors: string[];
   fit: string;
   fit_tr: string;
+  length: string;
+  length_tr: string;
   collar: string;
   collar_tr: string;
+  neckline: string;
+  sleeve_or_strap: string;
+  sleeve_or_strap_tr: string;
   pattern: string;
   pattern_tr: string;
+  patterns: VisionPattern[];
+  material_impression: string;
+  material_tr: string;
+  distinctive_details: string[];
   has_logo: boolean;
   style_tags: string[];
   gender: string;
   gender_tr: string;
   search_query: string;
   fallback_query: string;
+  core_query: string;
+  low_confidence: boolean;
 }
 
 export interface MatchSignals {
@@ -440,10 +460,12 @@ export function allowedByPriceMode(
 
 const FIT_TR: Record<string, string> = {
   slim: "slim fit",
-  regular: "regular fit",
+  regular: "",
+  "regular fit": "",
   oversized: "oversize",
   oversize: "oversize",
   loose: "bol kesim",
+  bodycon: "bodycon",
   cropped: "crop",
   crop: "crop",
   "crop top": "crop",
@@ -451,8 +473,63 @@ const FIT_TR: Record<string, string> = {
 
 function fitToken(fit: string | undefined): string {
   const raw = (fit || "").toLowerCase().trim();
-  if (!raw) return "";
-  return FIT_TR[raw] || raw;
+  if (!raw || raw === "none") return "";
+  if (raw in FIT_TR) return FIT_TR[raw];
+  return raw;
+}
+
+function profileTypeBlob(profile: ProductProfile): string {
+  return [
+    profile.subcategory,
+    profile.subcategory_tr,
+    profile.category,
+    profile.category_tr,
+    profile.length,
+    profile.length_tr,
+    profile.sleeve_or_strap,
+    profile.sleeve_or_strap_tr,
+    profile.fit,
+    profile.fit_tr,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/**
+ * Never relaxed — even when requireType is false.
+ * Subcategory empty → apply at category-family level (top must not match dress).
+ */
+export function contradictsAbsoluteType(title: string, profile: ProductProfile): boolean {
+  const t = title.toLowerCase();
+  const blob = profileTypeBlob(profile);
+  const family = (profile.category || "").toLowerCase();
+  const familyTr = (profile.category_tr || "").toLowerCase();
+
+  const isTopFamily =
+    family === "top" ||
+    familyTr === "üst" ||
+    /\b(tişört|t-shirt|tshirt|tee|crop|bluz|blouse|askılı|askili|atlet|tank|gömlek|hoodie|sweatshirt|polo)\b/.test(
+      blob
+    );
+  const isCrop = /\bcrop\b/.test(blob);
+  const isAskiliTop =
+    isTopFamily && /\b(askılı|askili|spaghetti|thin-strap|ince askı|cami)\b/.test(blob);
+  const isDressFamily = family === "dress" || /elbise|dress|jumpsuit|tulum/.test(blob);
+
+  if ((isCrop || isAskiliTop || isTopFamily) && !isDressFamily) {
+    if (/\b(elbise|dress|tulum|jumpsuit)\b/.test(t)) return true;
+  }
+
+  const length = (profile.length || profile.length_tr || "").toLowerCase();
+  if (length === "crop" || isCrop) {
+    if (/\b(midi|maxi)\b/.test(t)) return true;
+    if (/\b(uzun boy|maxi boy|midi boy|uzun üst|uzun bluz|uzun elbise)\b/.test(t)) return true;
+  }
+  if (length === "maxi") {
+    if (/\b(crop|mini)\b/.test(t) && !/\bmaxi\b/.test(t)) return true;
+  }
+
+  return false;
 }
 
 /** Hard filter titles that contradict the vision category/fit. */
@@ -464,14 +541,18 @@ export function contradictsCategoryFit(
   const t = title.toLowerCase();
   const cat = (profile.category || "").toLowerCase();
   const catTr = (profile.category_tr || "").toLowerCase();
+  const sub = `${profile.subcategory || ""} ${profile.subcategory_tr || ""}`.toLowerCase();
   const fit = (profile.fit || "").toLowerCase();
-  const blob = `${cat} ${catTr}`;
+  const blob = `${cat} ${catTr} ${sub}`;
   const requireType = opts.requireType !== false;
 
   const isCrop =
     fit.includes("crop") ||
     cat.includes("crop") ||
-    catTr.includes("crop");
+    catTr.includes("crop") ||
+    sub.includes("crop") ||
+    (profile.length || "").toLowerCase() === "crop" ||
+    (profile.length_tr || "").toLowerCase() === "crop";
 
   const isOversize = /\b(oversize|oversized)\b/.test(fit) || /\b(oversize|oversized|bol kesim)\b/.test(blob);
 
@@ -792,10 +873,13 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
   const t = normalizeTr(title);
   const catTr = normalizeTr(profile.category_tr || "");
   const cat = normalizeTr(profile.category || "");
+  const subTr = normalizeTr(profile.subcategory_tr || "");
+  const sub = normalizeTr(profile.subcategory || "");
+  if (subTr && t.includes(subTr)) return true;
   if (catTr && t.includes(catTr)) return true;
 
   const aliases: string[] = [];
-  const blob = `${cat} ${catTr}`;
+  const blob = `${cat} ${catTr} ${sub} ${subTr}`;
   if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) {
     aliases.push("gözlük", "güneş gözlüğü", "sunglasses", "glasses", "eyewear");
   } else if (/kolye|necklace|pendant/.test(blob)) {
@@ -816,6 +900,10 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
     aliases.push("atkı", "scarf");
   } else if (/crop/.test(blob)) {
     aliases.push("crop top", "crop");
+  } else if (/bluz|blouse/.test(blob)) {
+    aliases.push("bluz", "blouse");
+  } else if (/askılı|askili|cami|spaghetti/.test(blob)) {
+    aliases.push("askılı", "askılı üst", "crop top");
   } else if (/tişört|t-shirt|tshirt|tee/.test(blob)) {
     aliases.push("tişört", "t-shirt", "tshirt", "tee");
   } else if (/gömlek/.test(blob) || (cat === "shirt" && !/t-shirt/.test(cat))) {
@@ -859,6 +947,106 @@ export function buildShortReason(
   return gender ? `Benzer stil · ${gender}` : "Benzer stil";
 }
 
+/** Type token: subcategory if present, else category. Empty → low confidence. */
+export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "category_tr">): string {
+  return (profile.subcategory_tr || profile.category_tr || "").trim();
+}
+
+function uniqueJoin(parts: Array<string | undefined>): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of parts) {
+    const token = (raw || "").trim();
+    if (!token) continue;
+    const key = token.toLocaleLowerCase("tr-TR");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(token);
+  }
+  return out.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function strapInCore(strapTr: string): string {
+  if (!strapTr) return "";
+  if (/askı|straplez|kolsuz|halter/.test(strapTr.toLowerCase())) return strapTr;
+  return "";
+}
+
+function patternQueryTokens(profile: ProductProfile): string[] {
+  const tokens: string[] = [];
+  for (const p of profile.patterns || []) {
+    const typeTr = translatePattern(p.type);
+    if (!typeTr) continue;
+    const placeTr = translatePlacement(p.placement);
+    tokens.push(placeTr ? `${placeTr} ${typeTr}` : typeTr);
+    if (tokens.length >= 2) break;
+  }
+  if (!tokens.length && profile.pattern_tr) tokens.push(profile.pattern_tr);
+  return tokens;
+}
+
+function detailQueryTokens(details: string[]): string[] {
+  return details
+    .slice(0, 2)
+    .map((d) =>
+      d
+        .trim()
+        .split(/\s+/)
+        .slice(0, 4)
+        .join(" ")
+    )
+    .filter((d) => d.length >= 4);
+}
+
+export function rebuildProfileQueries(profile: ProductProfile): ProductProfile {
+  const type = typeTokenTr(profile);
+  const low_confidence = !type;
+  if (low_confidence) {
+    return {
+      ...profile,
+      low_confidence: true,
+      core_query: "",
+      search_query: "",
+      fallback_query: "",
+    };
+  }
+
+  const lengthTr =
+    profile.length_tr && !type.toLowerCase().includes(profile.length_tr.toLowerCase())
+      ? profile.length_tr
+      : "";
+  const core = uniqueJoin([
+    profile.gender_tr,
+    strapInCore(profile.sleeve_or_strap_tr),
+    lengthTr,
+    profile.fit_tr,
+    type,
+  ]);
+  const strong = uniqueJoin([
+    core,
+    profile.color_tr,
+    profile.collar_tr,
+    profile.sleeve_or_strap_tr && !strapInCore(profile.sleeve_or_strap_tr)
+      ? profile.sleeve_or_strap_tr
+      : "",
+    ...patternQueryTokens(profile),
+  ]);
+  const soft = uniqueJoin([
+    strong,
+    profile.material_tr,
+    profile.secondary_colors[0] || "",
+    ...detailQueryTokens(profile.distinctive_details),
+  ]);
+
+  return {
+    ...profile,
+    low_confidence: false,
+    core_query: core,
+    search_query: soft,
+    fallback_query: core,
+  };
+}
+
 /** Override vision gender with user-stated gender and rebuild search queries. */
 export function applyUserGender(
   profile: ProductProfile,
@@ -868,30 +1056,15 @@ export function applyUserGender(
   if (!parsed) return profile;
 
   const gender_tr = parsed === "women" ? "kadın" : "erkek";
-
-  const search_query = [gender_tr, profile.color_tr, profile.fit_tr, profile.collar_tr, profile.pattern_tr, profile.category_tr]
-    .filter(Boolean)
-    .join(" ")
-    .trim()
-    .replace(/\s+/g, " ");
-
-  const fallback_query = [gender_tr, profile.color_tr, profile.fit_tr, profile.category_tr]
-    .filter(Boolean)
-    .join(" ")
-    .trim()
-    .replace(/\s+/g, " ");
-
-  return {
+  return rebuildProfileQueries({
     ...profile,
     gender: parsed,
     gender_tr,
-    search_query,
-    fallback_query,
     user_profile: {
       ...profile.user_profile,
       gender: parsed,
     },
-  };
+  });
 }
 
 /** Check if product title mentions one of the user's preferred sizes (soft match). */
@@ -914,8 +1087,22 @@ export function getSizeMatchBoost(title: string, sizes: string[] | undefined): n
 }
 
 // ---------------------------------------------------------------------------
-// Parse Vision1 (n8n "Code" node)
+// Parse Vision (v2 schema; v1 colors/pattern/collar/gender still accepted)
 // ---------------------------------------------------------------------------
+
+const FAMILY_TR: Record<string, string> = {
+  top: "üst",
+  bottom: "alt",
+  dress: "elbise",
+  outerwear: "dış giyim",
+  shoes: "ayakkabı",
+  bag: "çanta",
+  hat: "şapka",
+  eyewear: "gözlük",
+  accessory: "aksesuar",
+};
+
+const FAMILIES = new Set(Object.keys(FAMILY_TR));
 
 const colorTR: Record<string, string> = {
   red: "kırmızı", blue: "mavi", black: "siyah", white: "beyaz",
@@ -928,6 +1115,9 @@ const colorTR: Record<string, string> = {
   maroon: "bordo", cyan: "turkuaz", lime: "yeşil",
   magenta: "fuşya", violet: "mor", rose: "pembe",
   tan: "bej", camel: "camel", mustard: "hardal", rust: "kiremit",
+  kırmızı: "kırmızı", mavi: "mavi", siyah: "siyah", beyaz: "beyaz",
+  yeşil: "yeşil", sarı: "sarı", pembe: "pembe", turuncu: "turuncu",
+  mor: "mor", kahverengi: "kahverengi", gri: "gri",
 };
 
 const categoryTR: Record<string, string> = {
@@ -952,97 +1142,409 @@ const categoryTR: Record<string, string> = {
   glasses: "gözlük", sunglasses: "güneş gözlüğü", eyewear: "gözlük",
   "sun glasses": "güneş gözlüğü", "güneş gözlüğü": "güneş gözlüğü",
   gözlük: "gözlük", watch: "saat", "wrist watch": "saat",
+  top: "üst", bottom: "alt", outerwear: "dış giyim", shoes: "ayakkabı",
+  accessory: "aksesuar",
 };
 
-const collarTR: Record<string, string> = {
-  "v-neck": "v yaka", "v neck": "v yaka",
-  "crew neck": "bisiklet yaka", crewneck: "bisiklet yaka", "round neck": "bisiklet yaka",
-  polo: "polo yaka", "polo collar": "polo yaka",
-  turtleneck: "boğazlı", "mock neck": "yarım boğazlı",
-  collar: "yakalı", "button down": "düğmeli yaka",
+const subcategoryTR: Record<string, string> = {
+  "t-shirt": "tişört",
+  tshirt: "tişört",
+  tee: "tişört",
+  tişört: "tişört",
+  "crop-top": "crop top",
+  "crop top": "crop top",
+  croptop: "crop top",
+  crop: "crop top",
+  blouse: "bluz",
+  bluz: "bluz",
+  "askili-ust": "askılı üst",
+  "askılı üst": "askılı üst",
+  "askılı": "askılı üst",
+  cami: "askılı üst",
+  "cami top": "askılı üst",
+  "spaghetti strap": "askılı üst",
+  "tank-top": "atlet",
+  "tank top": "atlet",
+  tank: "atlet",
+  atlet: "atlet",
+  polo: "polo tişört",
+  "polo shirt": "polo tişört",
+  shirt: "gömlek",
+  gömlek: "gömlek",
+  hoodie: "kapüşonlu sweatshirt",
+  sweatshirt: "sweatshirt",
+  sweater: "kazak",
+  cardigan: "hırka",
+  jacket: "ceket",
+  coat: "kaban",
+  blazer: "blazer",
+  jeans: "kot pantolon",
+  trousers: "pantolon",
+  pants: "pantolon",
+  shorts: "şort",
+  skirt: "etek",
+  dress: "elbise",
+  elbise: "elbise",
+  jumpsuit: "tulum",
+  sneaker: "spor ayakkabı",
+  sneakers: "spor ayakkabı",
+  boot: "bot",
+  sandal: "sandalet",
+  bag: "çanta",
+  hat: "şapka",
+  glasses: "gözlük",
+  sunglasses: "güneş gözlüğü",
+  watch: "saat",
+  belt: "kemer",
+  scarf: "atkı",
+};
+
+const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
+  "t-shirt": "top",
+  "crop-top": "top",
+  blouse: "top",
+  "askili-ust": "top",
+  "tank-top": "top",
+  polo: "top",
+  shirt: "top",
+  hoodie: "top",
+  sweatshirt: "top",
+  sweater: "top",
+  cardigan: "top",
+  jacket: "outerwear",
+  coat: "outerwear",
+  blazer: "outerwear",
+  jeans: "bottom",
+  trousers: "bottom",
+  pants: "bottom",
+  shorts: "bottom",
+  skirt: "bottom",
+  dress: "dress",
+  jumpsuit: "dress",
+  sneaker: "shoes",
+  sneakers: "shoes",
+  boot: "shoes",
+  sandal: "shoes",
+  bag: "bag",
+  hat: "hat",
+  glasses: "eyewear",
+  sunglasses: "eyewear",
+  watch: "accessory",
+  belt: "accessory",
+  scarf: "accessory",
+};
+
+const lengthTR: Record<string, string> = {
+  crop: "crop",
+  cropped: "crop",
+  normal: "",
+  regular: "",
+  uzun: "uzun",
+  long: "uzun",
+  midi: "midi",
+  maxi: "maxi",
+  mini: "mini",
+  none: "",
+};
+
+const necklineTR: Record<string, string> = {
+  "v-neck": "v yaka",
+  "v neck": "v yaka",
+  "crew-neck": "bisiklet yaka",
+  "crew neck": "bisiklet yaka",
+  crewneck: "bisiklet yaka",
+  "round neck": "bisiklet yaka",
+  polo: "polo yaka",
+  "polo collar": "polo yaka",
+  turtleneck: "boğazlı",
+  "mock neck": "yarım boğazlı",
+  halter: "halter yaka",
+  square: "kare yaka",
+  strapless: "straplez",
+  collar: "yakalı",
+  "button down": "düğmeli yaka",
+  none: "",
+};
+
+const strapTR: Record<string, string> = {
+  "short-sleeve": "kısa kol",
+  "short sleeve": "kısa kol",
+  "long-sleeve": "uzun kol",
+  "long sleeve": "uzun kol",
+  sleeveless: "kolsuz",
+  "thin-strap": "ince askılı",
+  "thin strap": "ince askılı",
+  spaghetti: "ince askılı",
+  "thick-strap": "kalın askılı",
+  "thick strap": "kalın askılı",
+  strapless: "straplez",
   none: "",
 };
 
 const patternTR: Record<string, string> = {
-  striped: "çizgili", stripes: "çizgili",
-  floral: "çiçekli", checkered: "ekoseli", plaid: "ekoseli",
-  graphic: "baskılı", print: "baskılı", printed: "baskılı",
-  plain: "", none: "",
+  striped: "çizgili",
+  stripes: "çizgili",
+  floral: "çiçekli",
+  checkered: "ekoseli",
+  plaid: "ekoseli",
+  graphic: "baskılı",
+  print: "baskılı",
+  printed: "baskılı",
+  logo: "logolu",
+  batik: "batik",
+  plain: "",
+  none: "",
+};
+
+const placementTR: Record<string, string> = {
+  chest: "göğüs",
+  göğüs: "göğüs",
+  shoulder: "omuz",
+  omuz: "omuz",
+  sleeve: "kol",
+  kol: "kol",
+  hem: "paça",
+  "all-over": "",
+  allover: "",
+  genel: "",
+  none: "",
+};
+
+const materialTR: Record<string, string> = {
+  cotton: "pamuklu",
+  pamuklu: "pamuklu",
+  knit: "triko",
+  triko: "triko",
+  denim: "denim",
+  satin: "saten",
+  saten: "saten",
+  "leather-look": "deri görünümlü",
+  leather: "deri",
+  linen: "keten",
+  keten: "keten",
+  none: "",
 };
 
 const genderTR: Record<string, string> = { men: "erkek", women: "kadın", unisex: "" };
 
-const collarCategories = ["t-shirt", "tshirt", "shirt", "polo", "hoodie", "sweatshirt", "sweater", "dress", "cardigan", "knitwear"];
-const detailCategories = ["t-shirt", "tshirt", "shirt", "hoodie", "sweatshirt", "jacket", "bomber jacket", "sweater"];
+const collarTR = necklineTR;
+
+function canonKey(raw: string | undefined): string {
+  return (raw || "")
+    .toLowerCase()
+    .trim()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+function lookupTr(map: Record<string, string>, raw: string | undefined): string {
+  const key = canonKey(raw);
+  if (!key || key === "none") return "";
+  if (key in map) return map[key];
+  const dashed = key.replace(/ /g, "-");
+  if (dashed in map) return map[dashed];
+  const spaced = key.replace(/-/g, " ");
+  if (spaced in map) return map[spaced];
+  return "";
+}
+
+function translateColor(raw: string | undefined): string {
+  const key = canonKey(raw);
+  if (!key) return "";
+  return colorTR[key] || raw!.trim();
+}
+
+function translatePattern(raw: string | undefined): string {
+  return lookupTr(patternTR, raw);
+}
+
+function translatePlacement(raw: string | undefined): string {
+  return lookupTr(placementTR, raw);
+}
+
+function canonicalSubcategory(raw: string): string {
+  const key = canonKey(raw);
+  if (!key) return "";
+  if (key === "crop" || key === "crop top" || key === "croptop") return "crop-top";
+  if (key === "tshirt" || key === "tee" || key === "tişört" || key === "t-shirt") return "t-shirt";
+  if (key === "bluz") return "blouse";
+  if (key.includes("askı") || key === "cami" || key === "cami top" || key.includes("spaghetti")) {
+    return "askili-ust";
+  }
+  if (key === "tank" || key === "tank top" || key === "atlet") return "tank-top";
+  if (SUBCATEGORY_TO_FAMILY[key]) return key;
+  if (SUBCATEGORY_TO_FAMILY[key.replace(/ /g, "-")]) return key.replace(/ /g, "-");
+  return key;
+}
+
+function inferFamily(sub: string, cat: string): string {
+  if (FAMILIES.has(cat)) return cat;
+  if (SUBCATEGORY_TO_FAMILY[sub]) return SUBCATEGORY_TO_FAMILY[sub];
+  const blob = `${sub} ${cat}`.toLowerCase();
+  if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
+  if (/crop|tişört|t-shirt|bluz|askı|gömlek|hoodie|sweat|polo|tank/.test(blob)) return "top";
+  if (/pantolon|jean|etek|şort|short|tayt/.test(blob)) return "bottom";
+  if (/ayakkabı|sneaker|bot|sandal/.test(blob)) return "shoes";
+  if (/çanta|bag/.test(blob)) return "bag";
+  if (/gözlük|glasses/.test(blob)) return "eyewear";
+  if (/şapka|hat|bere/.test(blob)) return "hat";
+  if (/ceket|jacket|kaban|coat|blazer/.test(blob)) return "outerwear";
+  return cat;
+}
+
+function splitCategoryFields(
+  rawCategory: string,
+  rawSubcategory: string
+): { category: string; subcategory: string } {
+  const subCanon = canonicalSubcategory(rawSubcategory);
+  const catCanon = canonKey(rawCategory);
+
+  if (subCanon) {
+    const family = inferFamily(subCanon, FAMILIES.has(catCanon) ? catCanon : "");
+    return { category: family, subcategory: subCanon };
+  }
+
+  if (FAMILIES.has(catCanon)) {
+    return { category: catCanon, subcategory: "" };
+  }
+
+  if (catCanon) {
+    const asSub = canonicalSubcategory(catCanon);
+    const family = inferFamily(asSub, "");
+    return { category: family || catCanon, subcategory: asSub };
+  }
+
+  return { category: "", subcategory: "" };
+}
 
 interface VisionProduct {
   label?: string;
   category?: string;
+  subcategory?: string;
   colors?: string[];
+  primary_color?: string;
+  secondary_colors?: string[];
   fit?: string;
+  silhouette_fit?: string;
+  length?: string;
   collar?: string;
+  neckline?: string;
+  sleeve_or_strap?: string;
   pattern?: string;
+  patterns?: VisionPattern[];
+  material_impression?: string;
+  gender_presentation?: string;
+  distinctive_details?: string[];
   has_logo?: boolean;
   style_tags?: string[];
   gender?: string;
 }
 
+function normalizePatterns(product: VisionProduct, hasLogo: boolean): VisionPattern[] {
+  if (Array.isArray(product.patterns) && product.patterns.length > 0) {
+    return product.patterns
+      .map((p) => ({
+        type: canonKey(p?.type),
+        colors: Array.isArray(p?.colors) ? p.colors.filter(Boolean) : [],
+        placement: canonKey(p?.placement),
+      }))
+      .filter((p) => p.type && p.type !== "plain" && p.type !== "none");
+  }
+  const single = canonKey(product.pattern);
+  const out: VisionPattern[] = [];
+  if (single && single !== "plain" && single !== "none") {
+    out.push({ type: single, colors: [], placement: "all-over" });
+  }
+  if (hasLogo && !out.some((p) => p.type === "logo")) {
+    out.push({ type: "logo", colors: [], placement: "chest" });
+  }
+  return out;
+}
+
 function visionProductToProfile(product: VisionProduct, ctx: RequestContext): ProductProfile {
-  const rawColor = (product.colors || [])[0] || "";
-  const rawCategory = (product.category || "").toLowerCase();
-  const rawCollar = (product.collar || "").toLowerCase();
-  const rawPattern = (product.pattern || "").toLowerCase();
-  const rawGender = (product.gender || "").toLowerCase();
+  const { category: family, subcategory } = splitCategoryFields(
+    product.category || "",
+    product.subcategory || ""
+  );
+
+  const primaryRaw = product.primary_color || (product.colors || [])[0] || "";
+  const secondaryRaw = (
+    product.secondary_colors?.length
+      ? product.secondary_colors
+      : (product.colors || []).slice(1)
+  ).filter(Boolean);
+
   const hasLogo = product.has_logo === true;
+  const patterns = normalizePatterns(product, hasLogo);
+  const silhouette = product.silhouette_fit || product.fit || "";
+  const neckline = product.neckline || product.collar || "";
+  const genderRaw = product.gender_presentation || product.gender || "";
 
-  const color = colorTR[rawColor.toLowerCase()] || rawColor;
-  const category = categoryTR[rawCategory] || rawCategory;
-  const gender = genderTR[rawGender] || "";
-  const fitWord = fitToken(product.fit);
+  const color = translateColor(primaryRaw);
+  const secondary_colors = secondaryRaw.map(translateColor).filter(Boolean);
+  const subcategory_tr = lookupTr(subcategoryTR, subcategory) || subcategoryTR[subcategory] || "";
+  const category_tr =
+    FAMILY_TR[family] ||
+    lookupTr(categoryTR, family) ||
+    lookupTr(categoryTR, product.category) ||
+    "";
+  // If we only have a family name like "üst", prefer a more specific leftover category_tr from v1 maps
+  const typeTr = subcategory_tr || lookupTr(categoryTR, product.category) || category_tr;
 
-  const collarWord = collarCategories.some((c) => rawCategory.includes(c))
-    ? collarTR[rawCollar] || ""
-    : "";
-
-  const patternWord = detailCategories.some((c) => rawCategory.includes(c))
-    ? hasLogo
+  const fitWord = fitToken(silhouette);
+  const length_tr = lookupTr(lengthTR, product.length);
+  const collarWord = lookupTr(necklineTR, neckline);
+  const sleeve_or_strap_tr = lookupTr(strapTR, product.sleeve_or_strap);
+  const material_tr = lookupTr(materialTR, product.material_impression);
+  const gender = genderTR[canonKey(genderRaw)] ?? "";
+  const patternWord = patterns[0]
+    ? translatePattern(patterns[0].type)
+    : hasLogo
       ? "logolu"
-      : patternTR[rawPattern] || ""
-    : "";
+      : "";
 
-  const search_query = [gender, color, fitWord, collarWord, patternWord, category]
+  const distinctive_details = (product.distinctive_details || [])
+    .map((d) => (typeof d === "string" ? d.trim() : ""))
     .filter(Boolean)
-    .join(" ")
-    .trim()
-    .replace(/\s+/g, " ");
+    .slice(0, 5);
 
-  const fallback_query = [gender, color, fitWord, category]
-    .filter(Boolean)
-    .join(" ")
-    .trim()
-    .replace(/\s+/g, " ");
-
-  return {
+  const profile: ProductProfile = {
     photo_url: ctx.photo_url,
     user_id: ctx.user_id,
     user_profile: ctx.user_profile || {},
-    category: product.category || "",
-    category_tr: category,
+    category: family || product.category || "",
+    category_tr: typeTr,
+    subcategory,
+    subcategory_tr,
     color_tr: color,
-    colors: product.colors || [],
-    fit: product.fit || "",
+    colors: [primaryRaw, ...secondaryRaw].filter(Boolean),
+    secondary_colors,
+    fit: silhouette,
     fit_tr: fitWord,
-    collar: product.collar || "",
+    length: canonKey(product.length),
+    length_tr,
+    collar: neckline,
     collar_tr: collarWord,
-    pattern: product.pattern || "",
+    neckline,
+    sleeve_or_strap: canonKey(product.sleeve_or_strap),
+    sleeve_or_strap_tr,
+    pattern: patterns[0]?.type || product.pattern || "",
     pattern_tr: patternWord,
-    has_logo: !!product.has_logo,
+    patterns,
+    material_impression: canonKey(product.material_impression),
+    material_tr,
+    distinctive_details,
+    has_logo: hasLogo || patterns.some((p) => p.type === "logo"),
     style_tags: product.style_tags || [],
-    gender: product.gender || "",
+    gender: canonKey(genderRaw),
     gender_tr: gender,
-    search_query,
-    fallback_query,
+    search_query: "",
+    fallback_query: "",
+    core_query: "",
+    low_confidence: false,
   };
+
+  return rebuildProfileQueries(profile);
 }
 
 export interface VisionPiece {
@@ -1052,8 +1554,8 @@ export interface VisionPiece {
 
 const MAX_OUTFIT_PIECES = 4;
 
-function pieceFamilyKey(category: string, categoryTr: string): string {
-  const blob = `${category} ${categoryTr}`.toLowerCase();
+function pieceFamilyKey(category: string, categoryTr: string, subcategory = ""): string {
+  const blob = `${category} ${categoryTr} ${subcategory}`.toLowerCase();
   if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) return "eyewear";
   if (/crop/.test(blob)) return "crop";
   if (/tişört|t-shirt|tshirt|tee|polo/.test(blob)) return "tee";
@@ -1082,7 +1584,7 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
   let items: VisionProduct[];
   if (Array.isArray(parsed.items) && parsed.items.length > 0) {
     items = parsed.items.slice(0, MAX_OUTFIT_PIECES);
-  } else if (parsed.category) {
+  } else if (parsed.category || parsed.subcategory) {
     items = [parsed];
   } else {
     throw new Error("Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.");
@@ -1092,17 +1594,21 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
     const profile = visionProductToProfile(item, ctx);
     const label =
       item.label?.trim() ||
+      profile.subcategory_tr ||
       profile.category_tr ||
       item.category ||
       "Parça";
     return { label, profile };
   });
 
-  // Keep one item per garment family so outfit slots stay distinct (top/bottom/shoes…).
   const seen = new Set<string>();
   const deduped: VisionPiece[] = [];
   for (const piece of pieces) {
-    const key = pieceFamilyKey(piece.profile.category, piece.profile.category_tr);
+    const key = pieceFamilyKey(
+      piece.profile.category,
+      piece.profile.category_tr,
+      piece.profile.subcategory
+    );
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(piece);
@@ -1112,6 +1618,28 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
 
 export function parseVision(visionContent: string, ctx: RequestContext): ProductProfile {
   return parseVisionOutfit(visionContent, ctx)[0].profile;
+}
+
+export function pieceAttrsFromProfile(profile: ProductProfile) {
+  return {
+    category: profile.category,
+    category_tr: profile.category_tr,
+    subcategory: profile.subcategory || undefined,
+    color_tr: profile.color_tr,
+    fit: profile.fit,
+    gender: profile.gender,
+    style_tags: profile.style_tags,
+    length: profile.length || undefined,
+    neckline: profile.neckline || undefined,
+    sleeve_or_strap: profile.sleeve_or_strap || undefined,
+    secondary_colors: profile.secondary_colors.length ? profile.secondary_colors : undefined,
+    patterns: profile.patterns.length ? profile.patterns : undefined,
+    material_impression: profile.material_impression || undefined,
+    distinctive_details: profile.distinctive_details.length
+      ? profile.distinctive_details
+      : undefined,
+    low_confidence: profile.low_confidence || undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1158,45 +1686,45 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
   return typeof item.extracted_price === "number" && item.extracted_price > 0;
 }
 
-/** Most specific → broadest; deduplicated. Optional size prepended as extra candidate only. */
+/** Most specific → broadest; core type token never dropped. Empty if low_confidence. */
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
-  const { gender_tr, category_tr, fit_tr, collar_tr, pattern_tr, search_query, fallback_query } =
-    productProfile;
-  const sizes = productProfile.user_profile?.sizes || [];
+  if (productProfile.low_confidence) return [];
+
+  const rebuilt = productProfile.core_query
+    ? productProfile
+    : rebuildProfileQueries(productProfile);
+  if (rebuilt.low_confidence || !rebuilt.core_query) return [];
+
+  const sizes = rebuilt.user_profile?.sizes || [];
   const firstSize = sizes[0];
-  const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
+  const priceMode = (rebuilt.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
-  // Layered attribute query — collar / cut / pattern when known
-  const layered = [gender_tr, productProfile.color_tr, fit_tr, collar_tr, pattern_tr, category_tr]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  const core = rebuilt.core_query;
+  const strong = uniqueJoin([
+    core,
+    rebuilt.color_tr,
+    rebuilt.collar_tr,
+    rebuilt.sleeve_or_strap_tr && !strapInCore(rebuilt.sleeve_or_strap_tr)
+      ? rebuilt.sleeve_or_strap_tr
+      : "",
+    ...patternQueryTokens(rebuilt),
+  ]);
+  const full = uniqueJoin([
+    strong,
+    rebuilt.material_tr,
+    rebuilt.secondary_colors[0] || "",
+    ...detailQueryTokens(rebuilt.distinctive_details),
+  ]);
+  const colorCore = uniqueJoin([core, rebuilt.color_tr]);
 
-  const sizeQuery = firstSize
-    ? [search_query || layered, firstSize].filter(Boolean).join(" ").trim()
-    : "";
+  const sizeQuery = firstSize ? uniqueJoin([full || strong, firstSize]) : "";
 
-  const base = [
-    sizeQuery,
-    search_query,
-    layered,
-    fallback_query,
-    [gender_tr, fit_tr, category_tr].filter(Boolean).join(" "),
-    [gender_tr, category_tr].filter(Boolean).join(" "),
-  ];
+  const base = [sizeQuery, full, strong, colorCore, core];
 
-  const primary = (
-    search_query ||
-    layered ||
-    fallback_query ||
-    [gender_tr, category_tr].filter(Boolean).join(" ")
-  ).trim();
-
-  const family = resolveBrandFamily(productProfile.category, productProfile.category_tr);
+  const primary = (strong || core).trim();
+  const family = resolveBrandFamily(rebuilt.category, rebuilt.category_tr);
   const brandSuffixes = pickBrandQuerySuffixes(family, 3, primary);
-  const brandQueries = primary
-    ? brandSuffixes.map((brand) => `${primary} ${brand}`)
-    : [];
+  const brandQueries = primary ? brandSuffixes.map((brand) => `${primary} ${brand}`) : [];
 
   const luxuryQueries: string[] = [];
   if (priceMode === "luks" && primary) {
@@ -1205,16 +1733,17 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
     }
   }
 
-  // Core match first; brand/luxury expand yelpaze without displacing primary.
   const candidates =
     priceMode === "luks"
       ? [...luxuryQueries, ...base, ...brandQueries]
       : [...base, ...brandQueries];
+  const typeLc = typeTokenTr(rebuilt).toLocaleLowerCase("tr-TR");
   const seen = new Set<string>();
   return candidates
     .map((q) => q.trim().replace(/\s+/g, " "))
     .filter((q) => {
       if (!q || seen.has(q)) return false;
+      if (typeLc && !q.toLocaleLowerCase("tr-TR").includes(typeLc)) return false;
       seen.add(q);
       return true;
     });
@@ -1246,15 +1775,18 @@ function scoreShoppingItems(
     .filter((item) => !isKidsProduct(item.title))
     .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
     .filter((item) => !contradictsGender(item.title || "", productProfile))
+    .filter((item) => !contradictsAbsoluteType(item.title || "", productProfile))
     .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: true }));
 
   // If strict type-require emptied the pool, keep family rejects but drop require.
+  // Absolute denylist (crop/askılı → never dress) still applies.
   if (validResults.length < 3) {
     const relaxed = (shoppingResults || [])
       .filter(isValidShoppingItem)
       .filter((item) => !isKidsProduct(item.title))
       .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
       .filter((item) => !contradictsGender(item.title || "", productProfile))
+      .filter((item) => !contradictsAbsoluteType(item.title || "", productProfile))
       .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: false }));
     if (relaxed.length > validResults.length) validResults = relaxed;
   }
@@ -1291,6 +1823,20 @@ function scoreShoppingItems(
     const brandHit = titleOrSourceHasBrand(`${item.title || ""} ${item.source || ""}`, nicheBrands);
 
     const categoryHit = titleMatchesCategory(item.title || "", productProfile);
+    const subTr = (productProfile.subcategory_tr || "").toLowerCase();
+    const subcategoryHit = Boolean(
+      subTr &&
+        subTr !== (productProfile.category_tr || "").toLowerCase() &&
+        title.includes(subTr)
+    );
+    const lengthTr = (productProfile.length_tr || "").toLowerCase();
+    const lengthHit = Boolean(lengthTr && title.includes(lengthTr));
+    const patternPlacementHit = (productProfile.patterns || []).some((p) => {
+      const typeTr = translatePattern(p.type);
+      const placeTr = translatePlacement(p.placement);
+      if (!typeTr || !placeTr) return false;
+      return title.includes(typeTr) && title.includes(placeTr);
+    });
     const colorHit = Boolean(
       productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())
     );
@@ -1312,6 +1858,9 @@ function scoreShoppingItems(
 
     let matchScore = 0;
     if (categoryHit) matchScore += 55;
+    if (subcategoryHit) matchScore += 25;
+    if (lengthHit) matchScore += 15;
+    if (patternPlacementHit) matchScore += 8;
     if (colorHit) matchScore += 25;
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;

@@ -45,3 +45,10 @@ ios/DerivedData
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# extraction eval outputs / local photos
+/eval/runs
+/eval/photos/*.jpg
+/eval/photos/*.jpeg
+/eval/photos/*.png
+/eval/photos/*.webp

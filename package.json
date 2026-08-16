@@ -11,7 +11,8 @@
     "clean-win": "rmdir /s /q .next",
     "cap:sync": "npx cap sync",
     "cap:ios": "npx cap open ios",
-    "generate:splash": "node scripts/generate-splash.mjs"
+    "generate:splash": "node scripts/generate-splash.mjs",
+    "eval": "node scripts/eval-extraction.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
