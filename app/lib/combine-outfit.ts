@@ -132,7 +132,8 @@ Rules:
 - searchQuery must be Turkish shopping keywords (gender + color + style + garment type), 3–8 words.
 - Keep suggestions consistent with the context (${contextTr}) and the source piece color.
 - Prefer safe, widely-wearable combinations over adventurous color theory.
-- styleDescriptor: short Turkish phrase (e.g. "dar kesim lacivert chino").`;
+- styleDescriptor: short Turkish phrase (e.g. "dar kesim lacivert chino").
+- If "accessory" is among the slots: pick ONE concrete accessory type that fits the look and context (e.g. kemer, çanta, saat, gözlük, şapka, atkı) — put that type in searchQuery; do not use the vague word "aksesuar" alone.`;
 }
 
 function parseCombineSuggestions(

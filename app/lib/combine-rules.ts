@@ -3,7 +3,7 @@
  * The LLM must ONLY fill slots returned by resolveCombineSlots — never invent slots.
  */
 
-export const COMBINE_OUTFIT_SLOTS = ["top", "bottom", "shoes", "outerwear"] as const;
+export const COMBINE_OUTFIT_SLOTS = ["top", "bottom", "shoes", "outerwear", "accessory"] as const;
 export type CombineOutfitSlot = (typeof COMBINE_OUTFIT_SLOTS)[number];
 
 export const COMBINE_PIECE_CATEGORIES = [
@@ -17,12 +17,12 @@ export const COMBINE_PIECE_CATEGORIES = [
 export type CombinePieceCategory = (typeof COMBINE_PIECE_CATEGORIES)[number];
 
 export const COMBINE_RULES: Record<CombinePieceCategory, readonly CombineOutfitSlot[]> = {
-  top: ["bottom", "shoes"],
-  bottom: ["top", "shoes"],
-  dress: ["shoes", "outerwear"],
-  shoes: ["top", "bottom"],
-  outerwear: ["top", "bottom", "shoes"],
-  // Accessory style drives filters for a full base outfit
+  top: ["bottom", "shoes", "accessory"],
+  bottom: ["top", "shoes", "accessory"],
+  dress: ["shoes", "outerwear", "accessory"],
+  shoes: ["top", "bottom", "accessory"],
+  outerwear: ["top", "bottom", "shoes", "accessory"],
+  // Accessory style drives filters for a full base outfit (no second accessory slot)
   accessory: ["top", "bottom", "shoes"],
 };
 
@@ -31,6 +31,7 @@ export const COMBINE_SLOT_LABEL_TR: Record<CombineOutfitSlot, string> = {
   bottom: "Alt",
   shoes: "Ayakkabı",
   outerwear: "Dış giyim",
+  accessory: "Aksesuar",
 };
 
 export const COMBINE_SLOT_CATEGORY_TR: Record<CombineOutfitSlot, string> = {
@@ -38,6 +39,7 @@ export const COMBINE_SLOT_CATEGORY_TR: Record<CombineOutfitSlot, string> = {
   bottom: "pantolon",
   shoes: "ayakkabı",
   outerwear: "ceket",
+  accessory: "aksesuar",
 };
 
 export type AnalysisContext = "sport" | "casual" | "evening";
