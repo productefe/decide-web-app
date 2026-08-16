@@ -25,6 +25,7 @@ function parseArgs(argv) {
   return {
     search: argv.includes("--search"),
     noSearch: argv.includes("--no-search"),
+    luks: argv.includes("--luks"),
   };
 }
 
@@ -195,7 +196,7 @@ function parseItems(content) {
   throw new Error("No items in vision JSON");
 }
 
-async function searchTitles(apiKey, query) {
+async function searchHits(apiKey, query) {
   if (!query) return [];
   const params = new URLSearchParams({
     engine: "google_shopping",
@@ -211,25 +212,59 @@ async function searchTitles(apiKey, query) {
     console.warn("SerpAPI:", data.error);
     return [];
   }
-  return (data.shopping_results || []).slice(0, 3).map((r) => r.title || "");
+  return (data.shopping_results || []).slice(0, 3).map((r) => ({
+    title: r.title || "",
+    source: r.source || "",
+  }));
 }
 
-function searchPass(titles, banned) {
-  const bans = (banned || []).map(norm).filter(Boolean);
+function searchPass(hits, searchSpec, flags) {
   const leaked = [];
+  const titles = (hits || []).map((h) => h.title || h);
+  const sources = (hits || []).map((h) => (typeof h === "string" ? "" : h.source || ""));
+
   for (const title of titles) {
     const t = norm(title);
-    for (const ban of bans) {
-      if (t.includes(ban)) leaked.push({ title, ban });
+    for (const ban of searchSpec.must_not_match_title || []) {
+      if (norm(ban) && t.includes(norm(ban))) leaked.push({ title, ban, kind: "title" });
     }
   }
-  return { ok: leaked.length === 0, leaked };
+
+  const sourceBans = searchSpec.must_not_match_source || [];
+  for (let i = 0; i < titles.length; i++) {
+    const blob = norm(`${titles[i]} ${sources[i]}`);
+    for (const ban of sourceBans) {
+      if (norm(ban) && blob.includes(norm(ban))) {
+        leaked.push({ title: titles[i], source: sources[i], ban, kind: "supermarket" });
+      }
+    }
+  }
+
+  const checkLuxury =
+    searchSpec.luxury_brands_only &&
+    (flags.luks || searchSpec.price_mode === "luks") &&
+    titles.length > 0;
+  if (checkLuxury) {
+    const allowed = (searchSpec.luxury_brand_substrings || []).map(norm).filter(Boolean);
+    for (let i = 0; i < titles.length; i++) {
+      const blob = norm(`${titles[i]} ${sources[i]}`);
+      if (allowed.length && !allowed.some((b) => blob.includes(b))) {
+        leaked.push({ title: titles[i], source: sources[i], ban: "non-luxury-brand", kind: "luxury" });
+      }
+    }
+  }
+
+  return { ok: leaked.length === 0, leaked, titles, sources };
 }
 
-function shouldSearch(caseId, hasSearchBlock, flags) {
+function shouldSearch(caseId, searchSpec, flags) {
   if (flags.noSearch) return false;
-  if (DEFAULT_SEARCH_IDS.has(caseId) && hasSearchBlock) return true;
-  return Boolean(flags.search && hasSearchBlock);
+  const has =
+    Boolean(searchSpec?.must_not_match_title) ||
+    Boolean(searchSpec?.must_not_match_source) ||
+    Boolean(searchSpec?.luxury_brands_only);
+  if (DEFAULT_SEARCH_IDS.has(caseId) && has) return true;
+  return Boolean(flags.search && has);
 }
 
 async function main() {
@@ -295,14 +330,14 @@ async function main() {
       extraction: `${scored.hit}/${scored.total}`,
     };
 
-    if (shouldSearch(c.id, Boolean(c.search?.must_not_match_title), flags)) {
+    if (shouldSearch(c.id, c.search, flags)) {
       if (!serpKey) {
         row.search = { skipped: true, reason: "no_SERPAPI_KEY" };
       } else {
         const q = coreQuery(item);
-        const titles = await searchTitles(serpKey, q);
-        const check = searchPass(titles, c.search.must_not_match_title);
-        row.search = { query: q, titles, ...check };
+        const hits = await searchHits(serpKey, q);
+        const check = searchPass(hits, c.search || {}, flags);
+        row.search = { query: q, titles: check.titles, sources: check.sources, ok: check.ok, leaked: check.leaked };
         if (!check.ok) searchFail += 1;
       }
     }

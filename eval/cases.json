@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "notes": "Only asserted fields are scored. Photos live in eval/photos/; missing files are skipped. case-01 and case-02 run SerpAPI must_not_match_title checks by default.",
+  "notes": "Only asserted fields are scored. Photos live in eval/photos/; missing files are skipped. case-01 and case-02 run SerpAPI checks by default (must_not_match_title + supermarket sources). case-02 also asserts luxury-pool brands when luxury_brands_only is set — skip that assertion if Serp returns no hits.",
   "cases": [
     {
       "id": "case-01",
@@ -25,7 +25,8 @@
         "must_not_subcategory": ["dress", "elbise", "crop-top", "crop top"]
       },
       "search": {
-        "must_not_match_title": ["elbise", "dress", "etek", "tulum"]
+        "must_not_match_title": ["elbise", "dress", "etek", "tulum"],
+        "must_not_match_source": ["migros", "a101", "bim", "şok", "sok"]
       }
     },
     {
@@ -47,7 +48,25 @@
         "must_not_subcategory": ["dress", "elbise", "jumpsuit", "tulum"]
       },
       "search": {
-        "must_not_match_title": ["elbise", "dress", "tulum", "jumpsuit"]
+        "must_not_match_title": ["elbise", "dress", "tulum", "jumpsuit"],
+        "must_not_match_source": ["migros", "a101", "bim", "şok", "sok"],
+        "luxury_brands_only": true,
+        "luxury_brand_substrings": [
+          "sandro",
+          "maje",
+          "pinko",
+          "elisabetta franchi",
+          "the kooples",
+          "guess",
+          "calvin klein",
+          "tommy jeans",
+          "miss sixty",
+          "nocturne",
+          "raisa vanessa",
+          "zeynep arçay",
+          "beymen",
+          "vakko"
+        ]
       }
     },
     { "id": "case-03", "photo": "photos/case-03.jpg", "label": "", "expected": {} },

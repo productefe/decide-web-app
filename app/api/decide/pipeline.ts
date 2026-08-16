@@ -1,11 +1,12 @@
 import { Product, Results } from "@/components/analyze/types";
 import type { Occasion, PriceMode } from "@/lib/preferences";
 import {
-  getNicheBrands,
-  pickBrandQuerySuffixes,
-  resolveBrandFamily,
-  titleOrSourceHasBrand,
-} from "./brand-catalog";
+  pickDecidePoolBrands,
+  resolvePoolCategories,
+  textHasIconicPoolBrand,
+  textHasPoolBrand,
+} from "@/constants/brandPool";
+import { failsQualityFilter } from "@/lib/qualityFilter";
 
 export interface RequestContext {
   photo_url: string;
@@ -1722,8 +1723,17 @@ export function buildSearchQueries(productProfile: ProductProfile): string[] {
   const base = [sizeQuery, full, strong, colorCore, core];
 
   const primary = (strong || core).trim();
-  const family = resolveBrandFamily(rebuilt.category, rebuilt.category_tr);
-  const brandSuffixes = pickBrandQuerySuffixes(family, 3, primary);
+  const brandSuffixes = pickDecidePoolBrands(
+    {
+      category: rebuilt.category,
+      category_tr: rebuilt.category_tr,
+      subcategory: rebuilt.subcategory,
+      subcategory_tr: rebuilt.subcategory_tr,
+      price_mode: priceMode,
+    },
+    3,
+    primary
+  );
   const brandQueries = primary ? brandSuffixes.map((brand) => `${primary} ${brand}`) : [];
 
   const luxuryQueries: string[] = [];
@@ -1776,7 +1786,17 @@ function scoreShoppingItems(
     .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
     .filter((item) => !contradictsGender(item.title || "", productProfile))
     .filter((item) => !contradictsAbsoluteType(item.title || "", productProfile))
-    .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: true }));
+    .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: true }))
+    .filter(
+      (item) =>
+        !failsQualityFilter({
+          title: item.title || "",
+          source: item.source,
+          priceValue: getPrice(item),
+          priceMode,
+          poolFamily: resolvePoolCategories(productProfile)[0],
+        })
+    );
 
   // If strict type-require emptied the pool, keep family rejects but drop require.
   // Absolute denylist (crop/askılı → never dress) still applies.
@@ -1787,7 +1807,17 @@ function scoreShoppingItems(
       .filter((item) => allowedByPriceMode(item.source, priceMode, item.title))
       .filter((item) => !contradictsGender(item.title || "", productProfile))
       .filter((item) => !contradictsAbsoluteType(item.title || "", productProfile))
-      .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: false }));
+      .filter((item) => !contradictsCategoryFit(item.title || "", productProfile, { requireType: false }))
+      .filter(
+        (item) =>
+          !failsQualityFilter({
+            title: item.title || "",
+            source: item.source,
+            priceValue: getPrice(item),
+            priceMode,
+            poolFamily: resolvePoolCategories(productProfile)[0],
+          })
+      );
     if (relaxed.length > validResults.length) validResults = relaxed;
   }
 
@@ -1818,9 +1848,9 @@ function scoreShoppingItems(
     const price = getPrice(item);
     const luxury = isLuxuryHit(item.source, item.title);
     const trustScore = getTrust(item.source, priceMode, item.title);
-    const brandFamily = resolveBrandFamily(productProfile.category, productProfile.category_tr);
-    const nicheBrands = getNicheBrands(brandFamily);
-    const brandHit = titleOrSourceHasBrand(`${item.title || ""} ${item.source || ""}`, nicheBrands);
+    const hay = `${item.title || ""} ${item.source || ""}`;
+    const poolBrandHit = textHasPoolBrand(hay);
+    const iconicBrandHit = textHasIconicPoolBrand(hay, productProfile);
 
     const categoryHit = titleMatchesCategory(item.title || "", productProfile);
     const subTr = (productProfile.subcategory_tr || "").toLowerCase();
@@ -1868,7 +1898,8 @@ function scoreShoppingItems(
     if (patternHit) matchScore += 12;
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
-    if (brandHit) matchScore += 8;
+    if (poolBrandHit) matchScore += 15;
+    if (iconicBrandHit) matchScore += 8;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
