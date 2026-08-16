@@ -107,7 +107,7 @@ export default function AnalyzeModal({
                     : "border-border bg-muted text-foreground hover:border-accent/50"
                 }`}
               >
-                {opt.emoji} {opt.label}
+                {opt.label}
               </button>
             ))}
           </div>

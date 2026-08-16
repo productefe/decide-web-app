@@ -29,12 +29,12 @@ export const PRICE_MODE_OPTIONS = [
   },
   {
     value: "uygunluk",
-    label: "Uygunluk",
+    label: "Uygun bütçeli",
     desc: "Bütçe dostu seçenekler; pahalı ve lüks markalardan kaçın.",
   },
   {
     value: "karma",
-    label: "Karma",
+    label: "Karışık dağılım",
     desc: "Hem uygun hem premium alternatifleri karışık getir.",
   },
 ] as const;
@@ -42,9 +42,9 @@ export const PRICE_MODE_OPTIONS = [
 export type PriceMode = (typeof PRICE_MODE_OPTIONS)[number]["value"];
 
 export const OCCASION_OPTIONS = [
-  { value: "spor", label: "Spor", emoji: "🏃" },
-  { value: "gundelik", label: "Gündelik", emoji: "👕" },
-  { value: "aksam", label: "Akşam çıkmalık", emoji: "🌙" },
+  { value: "spor", label: "Spor" },
+  { value: "gundelik", label: "Gündelik" },
+  { value: "aksam", label: "Akşam çıkmalık" },
 ] as const;
 
 export type Occasion = (typeof OCCASION_OPTIONS)[number]["value"];
