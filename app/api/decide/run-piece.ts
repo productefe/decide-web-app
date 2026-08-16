@@ -100,25 +100,30 @@ async function searchWithFallback(
     return { scoring, queryUsed: luxuryQs[0] || queries[0] || "" };
   }
 
-  // Happy path: one Serp call. On miss, run remaining fallbacks in parallel and merge
-  // (same or wider pool than sequential 2→3, fewer wall-clock round-trips).
+  // Happy path: primary + niche brand queries in parallel (same wall-clock, wider marka yelpazesi).
   const primary = queries[0];
-  let primaryResults: SerpShoppingItem[] = [];
-  if (primary) {
-    primaryResults = await serpShoppingSearch(primary, apiKey);
-    if (primaryResults.length) {
-      const scoring = scoreProducts(primaryResults, productProfile);
-      if (!scoring.error) {
-        console.log("SerpAPI matched:", primary, `(${primaryResults.length} results)`);
-        return { scoring, queryUsed: primary };
-      }
+  const brandQs = queries.filter((q) => q !== primary).slice(0, 3);
+  const parallelQs = [primary, ...brandQs].filter(Boolean);
+
+  const batches = await Promise.all(parallelQs.map((q) => serpShoppingSearch(q, apiKey)));
+  const mergedPrimary = dedupeItems(batches.flat());
+
+  if (mergedPrimary.length) {
+    const scoring = scoreProducts(mergedPrimary, productProfile);
+    if (!scoring.error) {
+      console.log(
+        "SerpAPI matched+brands:",
+        parallelQs.join(" | "),
+        `(${mergedPrimary.length} results)`
+      );
+      return { scoring, queryUsed: primary || parallelQs[0] || "" };
     }
   }
 
-  const fallbackQs = queries.slice(1, 3);
+  const fallbackQs = queries.slice(parallelQs.length, parallelQs.length + 2);
   if (fallbackQs.length === 0) {
     return {
-      scoring: scoreProducts(primaryResults, productProfile),
+      scoring: scoreProducts(mergedPrimary, productProfile),
       queryUsed: primary || "",
     };
   }
@@ -126,7 +131,7 @@ async function searchWithFallback(
   const fallbackBatches = await Promise.all(
     fallbackQs.map((q) => serpShoppingSearch(q, apiKey))
   );
-  const merged = dedupeItems([...primaryResults, ...fallbackBatches.flat()]);
+  const merged = dedupeItems([...mergedPrimary, ...fallbackBatches.flat()]);
   console.log(
     "SerpAPI fallback parallel:",
     fallbackQs.join(" | "),

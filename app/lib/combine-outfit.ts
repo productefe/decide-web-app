@@ -34,9 +34,13 @@ const ACCESSORY_KINDS: { type: string; re: RegExp }[] = [
   { type: "atkı", re: /atkı|atki|scarf/i },
 ];
 
-/** Garments / shoes that must never fill an accessory result. */
+/** Garments / shoes / cufflink noise that must never fill an accessory result. */
 const NON_ACCESSORY_TITLE_RE =
-  /yelek|vest|ceket|jacket|blazer|kaban|coat|trenç|trench|tişört|t[- ]?shirt|gömlek|hoodie|sweatshirt|kazak|sweater|hırka|cardigan|pantolon|jeans|chino|şort|shorts|etek|skirt|elbise|dress|ayakkabı|sneaker|bot|loafer|sandal/i;
+  /yelek|vest|ceket|jacket|blazer|kaban|coat|trenç|trench|tişört|t[- ]?shirt|gömlek|hoodie|sweatshirt|kazak|sweater|hırka|cardigan|pantolon|jeans|chino|şort|shorts|etek|skirt|elbise|dress|ayakkabı|sneaker|bot|loafer|sandal|kol\s*düğme|kol\s*dugme|cuff\s*link|cufflink/i;
+
+/** Extra deny when searching watches specifically. */
+const WATCH_DENY_TITLE_RE =
+  /kol\s*düğme|kol\s*dugme|cuff\s*link|cufflink|düğme\s*kapağı|button\s*cover|saat\s*desenli\s*kol|watch\s*print\s*cuff/i;
 
 export type CombinePieceAttributes = {
   category: string;
@@ -169,15 +173,20 @@ Return ONLY valid JSON (no markdown) with exactly these keys under "slots":
 Rules:
 - Only fill the given slots — never add other slots.
 - Never invent product names, brands, or store names.
-- searchQuery must be Turkish shopping keywords (gender + color + style + garment/accessory type), 3–8 words.
+- searchQuery must be Turkish shopping keywords, 4–10 words, and MUST encode layered product attributes when relevant:
+  - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
+  - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
+  - shoes: tip (sneaker/bot/loafer) + renk
+  - accessory: concrete type only (kemer/çanta/saat/gözlük/şapka…)
 - Keep suggestions consistent with the context (${contextTr}) and the source piece color.
 - Prefer safe, widely-wearable combinations over adventurous color theory.
-- styleDescriptor: short Turkish phrase describing THE SAME item as searchQuery (e.g. "dar kesim lacivert chino").
+- styleDescriptor: short Turkish phrase describing THE SAME item as searchQuery (include the same cut/collar/type words).
 - For non-accessory slots: never suggest jewelry, bags, belts, watches, hats — only that garment/shoe type.
 - For accessory slot (if present):
   - Pick ONE type from: ${accessoryKinds}
   - accessoryType, styleDescriptor, and searchQuery MUST all refer to that SAME type.
   - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
+  - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons.
   - Match metal/color to the source piece when suggesting jewelry; otherwise prefer bag/belt/watch/glasses for casual sport looks.${accessoryField}`;
 }
 
@@ -374,6 +383,11 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         profile.user_profile.price_mode = "karma" as PriceMode;
       }
 
+      const isWatchSlot =
+        suggestion.accessoryType === "saat" ||
+        /saat|watch/i.test(suggestion.searchQuery) ||
+        /saat|watch/i.test(profile.category_tr);
+
       const piece = await processPiece(
         profile,
         occasionKeyword,
@@ -381,10 +395,15 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         input.affiliateTag,
         exclude,
         {
-          // One immersive RTT per slot instead of three — same product pick, faster links.
           immersiveMode: "recommended",
-          denyTitlePattern:
-            suggestion.slot === "accessory" ? NON_ACCESSORY_TITLE_RE : undefined,
+          denyTitlePattern: isWatchSlot
+            ? new RegExp(
+                `(?:${NON_ACCESSORY_TITLE_RE.source})|(?:${WATCH_DENY_TITLE_RE.source})`,
+                "i"
+              )
+            : suggestion.slot === "accessory"
+              ? NON_ACCESSORY_TITLE_RE
+              : undefined,
         }
       );
 

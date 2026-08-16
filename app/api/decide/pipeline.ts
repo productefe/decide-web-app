@@ -1,5 +1,11 @@
 import { Product, Results } from "@/components/analyze/types";
 import type { Occasion, PriceMode } from "@/lib/preferences";
+import {
+  getNicheBrands,
+  pickBrandQuerySuffixes,
+  resolveBrandFamily,
+  titleOrSourceHasBrand,
+} from "./brand-catalog";
 
 export interface RequestContext {
   photo_url: string;
@@ -278,6 +284,28 @@ const LUXURY_STORES = [
   "common projects",
   "golden goose",
   "axel arigato",
+  // Niche / category specialists also recognized for trust
+  "casio",
+  "seiko",
+  "tissot",
+  "swatch",
+  "fossil",
+  "daniel wellington",
+  "garmin",
+  "ray-ban",
+  "rayban",
+  "oakley",
+  "new era",
+  "new balance",
+  "converse",
+  "vans",
+  "dr. martens",
+  "dr martens",
+  "birkenstock",
+  "veja",
+  "eastpak",
+  "kipling",
+  "ipekyol",
 ];
 
 /** Stores we explicitly query for in lüks mode (Serp shopping). */
@@ -315,6 +343,21 @@ const MASS_MARKET_STORES = [
   "adidas",
   "decathlon",
   "puma",
+  "uniqlo",
+  "reserved",
+  "sinsay",
+  "colin's",
+  "colins",
+  "under armour",
+  "new balance",
+  "converse",
+  "vans",
+  "skechers",
+  "jack & jones",
+  "only",
+  "vero moda",
+  "ipekyol",
+  "oysho",
 ];
 
 function normalizeStore(source?: string): string {
@@ -472,21 +515,29 @@ export function contradictsCategoryFit(
 
   // --- Category family rejects ---
   if (/tişört|t-shirt|tshirt|\btee\b/.test(blob) && !isCrop) {
-    if (requireType && !/\b(tişört|t-?shirt|tshirt|tee|t şört)\b/.test(t)) {
-      // Allow if clearly a tee synonym without wrong family
-      if (/\b(gömlek|hoodie|sweatshirt|kazak|elbise|pantolon|etek|gözlük|ayakkabı|crop top|polo)\b/.test(t)) {
+    const wantsAtlet = /\b(atlet|tank\s*top|undershirt)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
+    const wantsAskili = /\b(askılı|askili|spaghetti|strap)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
+
+    if (requireType && !/\b(tişört|t-?shirt|tshirt|tee|t şört|atlet|tank)\b/.test(t)) {
+      if (/\b(gömlek|hoodie|sweatshirt|kazak|elbise|pantolon|etek|gözlük|ayakkabı|crop top|polo|yelek)\b/.test(t)) {
         return true;
       }
       if (requireType) return true;
     }
-    if (/\b(gözlük|pantolon|etek|elbise|ayakkabı|bot|çanta|hoodie|sweatshirt|gömlek|kazak)\b/.test(t)) {
+    if (/\b(gözlük|pantolon|etek|elbise|ayakkabı|bot|çanta|hoodie|sweatshirt|gömlek|kazak|yelek|ceket)\b/.test(t)) {
       return true;
+    }
+    // Atlet / askılı / regular tee mutual exclusion when profile is specific
+    if (wantsAtlet && requireType && !/\b(atlet|tank\s*top|undershirt)\b/.test(t)) return true;
+    if (wantsAskili && requireType && !/\b(askılı|askili|spaghetti|strap|ip askı)\b/.test(t)) return true;
+    if (!wantsAtlet && !wantsAskili && /\b(atlet|tank\s*top)\b/.test(t) && !/\b(tişört|t-?shirt)\b/.test(t)) {
+      if (requireType) return true;
     }
   }
 
   if (/gömlek|shirt/.test(blob) && !/t-shirt|tişört|sweatshirt|polo/.test(blob)) {
     if (requireType && !/\b(gömlek|shirt)\b/.test(t)) return true;
-    if (/\b(tişört|t-?shirt|gözlük|pantolon|ayakkabı|hoodie)\b/.test(t)) return true;
+    if (/\b(tişört|t-?shirt|gözlük|pantolon|ayakkabı|hoodie|atlet)\b/.test(t)) return true;
   }
 
   if (/hoodie|kapüşonlu|sweatshirt/.test(blob)) {
@@ -500,9 +551,34 @@ export function contradictsCategoryFit(
   if ((cat.includes("jeans") || catTr.includes("kot pantolon")) && /\b(etek|skirt|elbise|tişört|gözlük|ayakkabı)\b/.test(t)) {
     return true;
   }
-  if (/pantolon|trousers|chino|jogger|eşofman/.test(blob) && !/kot pantolon|jeans/.test(blob)) {
-    if (/\b(etek|elbise|tişört|gözlük|ayakkabı|crop)\b/.test(t)) return true;
+
+  // Pants subtypes: chino / jogger / eşofman / wide / skinny
+  if (/pantolon|trousers|chino|jogger|eşofman|şort|shorts|tayt|leggings/.test(blob)) {
+    if (/\b(etek|elbise|tişört|gözlük|ayakkabı|crop|gömlek)\b/.test(t) && !/şort|shorts/.test(blob)) {
+      return true;
+    }
+    const wantsChino = /chino/.test(blob);
+    const wantsJogger = /jogger|eşofman/.test(blob);
+    const wantsJeans = /kot|jeans|denim/.test(blob);
+    const wantsWide = /\b(wide|bol paça|wide[- ]?leg|palazzo)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
+    const wantsSkinny = /\b(skinny|dar paça|slim)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
+    if (wantsChino && requireType && !/\b(chino|gabardin)\b/.test(t) && /\b(jogger|eşofman|kot|jean)\b/.test(t)) {
+      return true;
+    }
+    if (wantsJogger && requireType && !/\b(jogger|eşofman|sweatpants)\b/.test(t) && /\b(chino|kot|jean|klasik pantolon)\b/.test(t)) {
+      return true;
+    }
+    if (wantsJeans && requireType && !/\b(kot|jean|denim)\b/.test(t) && /\b(chino|jogger|eşofman)\b/.test(t)) {
+      return true;
+    }
+    if (wantsWide && wantsSkinny === false && /\b(skinny|dar paça|dar kesim)\b/.test(t) && !/\b(wide|bol paça|wide[- ]?leg)\b/.test(t)) {
+      return true;
+    }
+    if (wantsSkinny && !wantsWide && /\b(wide|bol paça|wide[- ]?leg|palazzo)\b/.test(t) && !/\b(skinny|dar)\b/.test(t)) {
+      return true;
+    }
   }
+
   if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı") || /ayakkabı|boot|sandal|loafer/.test(blob))) {
     if (/\b(tişört|pantolon|gözlük|elbise|etek|gömlek)\b/.test(t)) return true;
     if (requireType && /sneaker|spor ayakkabı/.test(blob) && !/\b(spor ayakkabı|sneaker|sneakers|koşu)\b/.test(t)) {
@@ -544,9 +620,19 @@ export function contradictsCategoryFit(
   }
 
   if (/saat|watch|wrist/.test(blob)) {
-    if (requireType && !/\b(saat|watch|wristwatch|kol saati)\b/.test(t)) return true;
+    // Cufflinks / "saat desenli kol düğmesi" must never pass as watches
     if (
-      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|hoodie|çanta|şapka|kemer)\b/.test(
+      /\b(kol\s*düğme|kol dugme|cuff\s*link|cufflink|düğme|dugme|button\s*cover|kolon\s*düğme)\b/.test(t)
+    ) {
+      return true;
+    }
+    if (/\b(saat\s*desen|watch\s*print|watch\s*pattern)\b/.test(t) && !/\b(kol\s*saati|wristwatch|wrist\s*watch)\b/.test(t)) {
+      return true;
+    }
+    if (requireType && !/\b(saat|watch|wristwatch|kol saati|akıllı saat|smartwatch)\b/.test(t)) return true;
+    // Must look like a wearable timepiece, not jewelry-adjacent noise without watch cue
+    if (
+      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|hoodie|çanta|şapka|kemer|yelek|ceket)\b/.test(
         t
       )
     ) {
@@ -1074,34 +1160,56 @@ export function isValidShoppingItem(item: SerpShoppingItem): boolean {
 
 /** Most specific → broadest; deduplicated. Optional size prepended as extra candidate only. */
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
-  const { gender_tr, category_tr, fit_tr, search_query, fallback_query } = productProfile;
+  const { gender_tr, category_tr, fit_tr, collar_tr, pattern_tr, search_query, fallback_query } =
+    productProfile;
   const sizes = productProfile.user_profile?.sizes || [];
   const firstSize = sizes[0];
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
+  // Layered attribute query — collar / cut / pattern when known
+  const layered = [gender_tr, productProfile.color_tr, fit_tr, collar_tr, pattern_tr, category_tr]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
   const sizeQuery = firstSize
-    ? [search_query, firstSize].filter(Boolean).join(" ").trim()
+    ? [search_query || layered, firstSize].filter(Boolean).join(" ").trim()
     : "";
 
-  // Keep base short — fewer sequential Serp round-trips.
   const base = [
     sizeQuery,
     search_query,
+    layered,
     fallback_query,
     [gender_tr, fit_tr, category_tr].filter(Boolean).join(" "),
     [gender_tr, category_tr].filter(Boolean).join(" "),
   ];
 
-  const primary = (search_query || fallback_query || [gender_tr, category_tr].filter(Boolean).join(" ")).trim();
+  const primary = (
+    search_query ||
+    layered ||
+    fallback_query ||
+    [gender_tr, category_tr].filter(Boolean).join(" ")
+  ).trim();
+
+  const family = resolveBrandFamily(productProfile.category, productProfile.category_tr);
+  const brandSuffixes = pickBrandQuerySuffixes(family, 3, primary);
+  const brandQueries = primary
+    ? brandSuffixes.map((brand) => `${primary} ${brand}`)
+    : [];
+
   const luxuryQueries: string[] = [];
   if (priceMode === "luks" && primary) {
-    // Top stores only — parallelized in run-piece (quality kept, latency cut).
     for (const store of LUXURY_SEARCH_STORES.slice(0, 4)) {
       luxuryQueries.push(`${primary} ${store}`);
     }
   }
 
-  const candidates = [...luxuryQueries, ...base];
+  // Core match first; brand/luxury expand yelpaze without displacing primary.
+  const candidates =
+    priceMode === "luks"
+      ? [...luxuryQueries, ...base, ...brandQueries]
+      : [...base, ...brandQueries];
   const seen = new Set<string>();
   return candidates
     .map((q) => q.trim().replace(/\s+/g, " "))
@@ -1178,6 +1286,9 @@ function scoreShoppingItems(
     const price = getPrice(item);
     const luxury = isLuxuryHit(item.source, item.title);
     const trustScore = getTrust(item.source, priceMode, item.title);
+    const brandFamily = resolveBrandFamily(productProfile.category, productProfile.category_tr);
+    const nicheBrands = getNicheBrands(brandFamily);
+    const brandHit = titleOrSourceHasBrand(`${item.title || ""} ${item.source || ""}`, nicheBrands);
 
     const categoryHit = titleMatchesCategory(item.title || "", productProfile);
     const colorHit = Boolean(
@@ -1186,13 +1297,29 @@ function scoreShoppingItems(
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
+    // Layered attribute hits from collar / pattern / extra tokens in search_query
+    const collarHit = Boolean(
+      productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())
+    );
+    const patternHit = Boolean(
+      productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())
+    );
+    const queryTokens = (productProfile.search_query || "")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !["erkek", "kadın", "kadin", "için"].includes(w));
+    const layeredTokenHits = queryTokens.filter((w) => title.includes(w)).length;
+
     let matchScore = 0;
     if (categoryHit) matchScore += 55;
     if (colorHit) matchScore += 25;
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
-    if (productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())) matchScore += 12;
-    if (productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())) matchScore += 10;
+    if (collarHit) matchScore += 14;
+    if (patternHit) matchScore += 12;
+    if (layeredTokenHits >= 2) matchScore += 10;
+    else if (layeredTokenHits === 1) matchScore += 5;
+    if (brandHit) matchScore += 8;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
