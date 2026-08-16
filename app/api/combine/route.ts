@@ -4,7 +4,6 @@ import { isAnonymousUser } from "@/lib/auth-user";
 import { createClient, getBearerToken } from "@/utils/supabase/server";
 import {
   ApiSecurityError,
-  enforceCombineQuota,
   enforceRateLimit,
   trackAnalyticsEvent,
 } from "@/lib/api-security";
@@ -140,7 +139,7 @@ export async function POST(req: NextRequest) {
       if (isShowMore) {
         await enforceRateLimit(supabase, "combine_more", 15);
       } else {
-        await enforceCombineQuota(supabase, 10);
+        // Daily combines_used quota intentionally disabled for now — re-enable via enforceCombineQuota.
         await enforceRateLimit(supabase, "combine", 10);
       }
     } catch (err) {
