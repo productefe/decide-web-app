@@ -8,6 +8,7 @@ import {
   type CombineOutfitSlot,
   type CombinePieceCategory,
 } from "@/lib/combine-rules";
+import { truncateForPrompt } from "@/lib/api-security";
 import { asLower, asStringList } from "@/lib/text";
 import type { PriceMode } from "@/lib/preferences";
 import {
