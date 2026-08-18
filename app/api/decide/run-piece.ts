@@ -12,6 +12,7 @@ import {
   typeTokenTr,
   sanitizeAccessoryQuery,
   productDedupeKeys,
+  LUXURY_SEARCH_STORES,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
@@ -126,7 +127,7 @@ async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
-  const { queries, brandQueries } = buildSearchPlan(productProfile);
+  const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   if (queries.length === 0) {
@@ -134,14 +135,42 @@ async function searchWithFallback(
   }
 
   if (priceMode === "luks") {
-    const result = await searchQueries(queries.slice(0, 4), productProfile, apiKey);
-    return { scoring: result.scoring, queryUsed: result.queryUsed };
+    // Store-scoped luxury queries plus one generic query — luxury stores alone
+    // often return too few (or already-shown) items and "3 alternatif daha"
+    // used to dead-end with "yeni alternatif bulunamadı".
+    const genericLuks = queries.filter(
+      (q) => !luxuryQueries.includes(q) && !brandQueries.includes(q)
+    );
+    const firstBatch = [
+      ...new Set([...luxuryQueries.slice(0, 4), genericLuks[0]].filter(Boolean)),
+    ];
+    const result = await searchQueries(firstBatch, productProfile, apiKey);
+    if (!result.scoring.error && result.scoring.recommended) {
+      return { scoring: result.scoring, queryUsed: result.queryUsed };
+    }
+
+    const luksFallback = genericLuks.filter((q) => !firstBatch.includes(q)).slice(0, 3);
+    if (luksFallback.length === 0) {
+      return { scoring: result.scoring, queryUsed: result.queryUsed };
+    }
+    const luksBatches = await Promise.all(luksFallback.map((q) => serpShoppingSearch(q, apiKey)));
+    const scoring = scoreProducts(
+      dedupeItems([...result.items, ...luksBatches.flat()]),
+      productProfile
+    );
+    console.log("SerpAPI lüks fallback:", luksFallback.join(" | "), `(pool=${scoring.pool.length})`);
+    return { scoring, queryUsed: result.queryUsed || luksFallback[0] || "" };
   }
 
   const brandQs = brandQueries.slice(0, 2);
-  const genericQs = queries.filter((q) => !brandQueries.includes(q));
+  const genericQs = queries.filter(
+    (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
+  );
   const primary = genericQs[0] || queries[0];
-  const uniqueParallel = [...new Set([...brandQs, primary].filter(Boolean))];
+  // Karma fires luxury store queries alongside budget/brand ones so the pool
+  // is a genuine price mix instead of an all-mass-market dump.
+  const luxQs = priceMode === "karma" ? luxuryQueries.slice(0, 2) : [];
+  const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
 
   const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey);
   if (!firstPass.scoring.error) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
@@ -249,17 +278,37 @@ export async function processPiece(
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
+    const priceMode =
+      (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const broaden = [
       productProfile.search_query,
       productProfile.fallback_query,
-      [productProfile.gender_tr, accessoryType || productProfile.subcategory_tr || productProfile.category_tr]
+      // Keep the color in the broadest query — a broadened "şapka" search must
+      // still look for the orange one.
+      [
+        productProfile.gender_tr,
+        productProfile.color_tr,
+        accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
+      ]
         .filter(Boolean)
         .join(" "),
     ]
       .map((q) => (q || "").trim().replace(/\s+/g, " "))
       .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
       .filter(Boolean);
-    const extraQs = [...new Set(broaden)].slice(0, 2);
+    if (priceMode === "luks") {
+      // Rotate through different luxury stores on each "3 alternatif daha"
+      // click (excludeTitles grows every round) so new items keep appearing.
+      const seedQuery = (productProfile.fallback_query || productProfile.search_query || "").trim();
+      if (seedQuery) {
+        const offset = excludeTitles.size % LUXURY_SEARCH_STORES.length;
+        for (let i = 0; i < 2; i++) {
+          const store = LUXURY_SEARCH_STORES[(offset + i) % LUXURY_SEARCH_STORES.length];
+          broaden.unshift(`${seedQuery} ${store}`);
+        }
+      }
+    }
+    const extraQs = [...new Set(broaden)].slice(0, priceMode === "luks" ? 4 : 2);
     if (extraQs.length) {
       const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
       const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);

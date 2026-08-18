@@ -1814,6 +1814,31 @@ function translateColor(raw: unknown): string {
   return colorTR[key] || asText(raw).trim();
 }
 
+/** TR color words that clearly identify a different colorway in a listing title. */
+const TITLE_COLOR_WORDS = [
+  "siyah", "beyaz", "mavi", "lacivert", "kırmızı", "turuncu", "sarı", "yeşil",
+  "mor", "pembe", "fuşya", "gri", "antrasit", "kahverengi", "bej", "krem",
+  "ekru", "bordo", "haki", "hardal", "turkuaz", "lila",
+];
+
+/**
+ * True when the profile has a color, the title does NOT carry it, and the
+ * title clearly names a different color (orange cap must not lose to a
+ * "mavi şapka" listing on brand/trust points).
+ */
+function titleColorConflicts(lowerTitle: string, profile: ProductProfile): boolean {
+  const want = asLower(profile.color_tr);
+  if (!want || lowerTitle.includes(want)) return false;
+  const allowed = new Set(
+    [want, ...(profile.secondary_colors || []).map((c) => asLower(c))].filter(Boolean)
+  );
+  return TITLE_COLOR_WORDS.some(
+    (c) =>
+      !allowed.has(c) &&
+      new RegExp(`(^|[^a-zçğıöşü])${c}`).test(lowerTitle)
+  );
+}
+
 function translatePattern(raw: string | undefined): string {
   return lookupTr(patternTR, raw);
 }
@@ -2165,11 +2190,13 @@ export interface SearchQueryPlan {
   queries: string[];
   /** Subset of `queries` that carry a brand-pool suffix (Bershka, Sandro, …). */
   brandQueries: string[];
+  /** Subset of `queries` scoped to luxury stores (Beymen, Vakko, …). */
+  luxuryQueries: string[];
 }
 
 /** Most specific → broadest; core type token never dropped. Empty if low_confidence. */
 export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan {
-  const empty: SearchQueryPlan = { queries: [], brandQueries: [] };
+  const empty: SearchQueryPlan = { queries: [], brandQueries: [], luxuryQueries: [] };
   if (productProfile.low_confidence) return empty;
 
   const rebuilt = productProfile.core_query
@@ -2243,10 +2270,11 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
   const brandQueries = primary ? brandSuffixes.map((brand) => `${primary} ${brand}`) : [];
 
   const luxuryQueries: string[] = [];
-  if (priceMode === "luks" && primary) {
-    // Beymen + Les Benjamins are always queried; the other two slots rotate
+  if ((priceMode === "luks" || priceMode === "karma") && primary) {
+    // Beymen + Les Benjamins are always queried in lüks; the other slots rotate
     // per item (deterministic hash of the query) so luxury results vary.
-    const fixedStores = ["beymen", "les benjamins"];
+    // Karma gets 2 luxury store queries so the pool is a genuine price mix.
+    const fixedStores = priceMode === "luks" ? ["beymen", "les benjamins"] : ["beymen"];
     const rotating = LUXURY_SEARCH_STORES.filter((s) => !fixedStores.includes(s));
     let seed = 0;
     for (let i = 0; i < primary.length; i++) {
@@ -2254,7 +2282,11 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
     }
     const first = seed % rotating.length;
     const second = (first + 1 + (seed % (rotating.length - 1))) % rotating.length;
-    for (const store of [...fixedStores, rotating[first], rotating[second]]) {
+    const stores =
+      priceMode === "luks"
+        ? [...fixedStores, rotating[first], rotating[second]]
+        : [...fixedStores, rotating[first]];
+    for (const store of stores) {
       luxuryQueries.push(`${primary} ${store}`);
     }
   }
@@ -2264,9 +2296,10 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
   const candidates =
     priceMode === "luks"
       ? [...luxuryQueries, ...brandQueries, ...base]
-      : [...base, ...brandQueries];
+      : [...base, ...brandQueries, ...luxuryQueries];
   const normalizeQuery = (q: string) => q.trim().replace(/\s+/g, " ");
   const brandSet = new Set(brandQueries.map(normalizeQuery));
+  const luxurySet = new Set(luxuryQueries.map(normalizeQuery));
 
   const typeLc = typeTokenTr(rebuilt).toLocaleLowerCase("tr-TR");
   const seen = new Set<string>();
@@ -2288,10 +2321,19 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
       return true;
     });
     const brandClean = new Set(queries.filter((q) => brandSet.has(q)).map(clean));
-    return { queries: accQueries, brandQueries: accQueries.filter((q) => brandClean.has(q)) };
+    const luxuryClean = new Set(queries.filter((q) => luxurySet.has(q)).map(clean));
+    return {
+      queries: accQueries,
+      brandQueries: accQueries.filter((q) => brandClean.has(q)),
+      luxuryQueries: accQueries.filter((q) => luxuryClean.has(q)),
+    };
   }
 
-  return { queries, brandQueries: queries.filter((q) => brandSet.has(q)) };
+  return {
+    queries,
+    brandQueries: queries.filter((q) => brandSet.has(q)),
+    luxuryQueries: queries.filter((q) => luxurySet.has(q)),
+  };
 }
 
 export function buildSearchQueries(productProfile: ProductProfile): string[] {
@@ -2320,6 +2362,28 @@ function interleaveByStore(scored: ScoredProduct[]): ScoredProduct[] {
     }
   }
   return out;
+}
+
+/**
+ * Karma must be a real price mix: when the top-3 is all budget/mass-market and
+ * a category-faithful luxury item exists deeper in the pool, lift it into the
+ * visible slots.
+ */
+function mixKarmaScored(scored: ScoredProduct[], priceMode: PriceMode): ScoredProduct[] {
+  if (priceMode !== "karma" || scored.length < 4) return scored;
+  const top = scored.slice(0, 3);
+  if (top.some((p) => isLuxuryHit(p.source, p.title))) return scored;
+  const idx = scored.findIndex(
+    (p, i) =>
+      i >= 3 &&
+      isLuxuryHit(p.source, p.title) &&
+      p.signals.category &&
+      p.matchScore >= 45
+  );
+  if (idx < 0) return scored;
+  const [lux] = scored.splice(idx, 1);
+  scored.splice(2, 0, lux);
+  return scored;
 }
 
 function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): ScoredProduct[] {
@@ -2422,7 +2486,13 @@ function scoreShoppingItems(
   const colorToken = asLower(productProfile.color_tr);
   if (colorToken) {
     const colorMatched = validResults.filter((item) => lcTitle(item).includes(colorToken));
-    if (colorMatched.length >= 3) validResults = colorMatched;
+    if (colorMatched.length >= 3) {
+      validResults = colorMatched;
+    } else if (colorMatched.length > 0) {
+      // Even 1-2 color-faithful hits should outrank off-color listings.
+      const rest = validResults.filter((item) => !colorMatched.includes(item));
+      validResults = [...colorMatched, ...rest];
+    }
   }
   // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
   if (isCropCasualSubcategory(productProfile)) {
@@ -2492,6 +2562,7 @@ function scoreShoppingItems(
     const colorHit = Boolean(
       asText(productProfile.color_tr) && title.includes(asLower(productProfile.color_tr))
     );
+    const wrongColorHit = !colorHit && titleColorConflicts(title, productProfile);
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
@@ -2516,6 +2587,7 @@ function scoreShoppingItems(
     if (lengthHit) matchScore += 15;
     if (patternPlacementHit) matchScore += 8;
     if (colorHit) matchScore += 25;
+    if (wrongColorHit) matchScore = Math.max(0, matchScore - 25);
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
     if (collarHit) matchScore += 14;
@@ -2588,7 +2660,7 @@ function scoreShoppingItems(
   });
 
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
-  return preferLuxuryScored(scored, priceMode);
+  return preferLuxuryScored(mixKarmaScored(scored, priceMode), priceMode);
 }
 
 function pickCheaperProduct(
