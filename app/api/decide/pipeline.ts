@@ -970,7 +970,13 @@ export function contradictsCategoryFit(
   }
 
   // --- Category family rejects ---
-  if (/tişört|t-shirt|tshirt|\btee\b/.test(blob) && !isCrop) {
+  if (/\bpolo\b/.test(blob) && !isCrop) {
+    // Polo profile: alternatives must actually be polos, not plain tees.
+    if (requireType && !/\bpolo\b/.test(t)) return true;
+    if (/\b(gömlek|hoodie|sweatshirt|kazak|elbise|pantolon|etek|gözlük|ayakkabı|çanta|yelek)\b/.test(t)) {
+      return true;
+    }
+  } else if (/tişört|t-shirt|tshirt|\btee\b/.test(blob) && !isCrop) {
     const wantsAtlet = /\b(atlet|tank\s*top|undershirt)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
     const wantsAskili = /\b(askılı|askili|spaghetti|strap)\b/.test(`${fit} ${blob} ${profile.search_query || ""}`);
 
@@ -983,6 +989,8 @@ export function contradictsCategoryFit(
     if (/\b(gözlük|pantolon|etek|elbise|ayakkabı|bot|çanta|hoodie|sweatshirt|gömlek|kazak|yelek|ceket)\b/.test(t)) {
       return true;
     }
+    // Profile is a plain tee (no polo collar) — polo listings are a different piece.
+    if (requireType && /\bpolo\b/.test(t)) return true;
     // Atlet / askılı / regular tee mutual exclusion when profile is specific
     if (wantsAtlet && requireType && !/\b(atlet|tank\s*top|undershirt)\b/.test(t)) return true;
     if (wantsAskili && requireType && !/\b(askılı|askili|spaghetti|strap|ip askı)\b/.test(t)) return true;
@@ -1378,16 +1386,32 @@ function strapInCore(strapTr: unknown): string {
   return "";
 }
 
-function patternQueryTokens(profile: ProductProfile): string[] {
+/** "baskılı"/"logolu" describe the tee even for a chest print; "çizgili" etc. only when all-over. */
+const PATTERN_OK_WHEN_LOCALIZED = new Set(["baskılı", "logolu"]);
+
+/**
+ * Pattern words safe to use for queries and scoring. A shoulder-only stripe is
+ * a local accent — searching/boosting "çizgili tişört" for it returns fully
+ * striped tees, so localized striped/floral/checkered patterns are skipped.
+ */
+function queryPatternTokens(profile: ProductProfile): string[] {
   const tokens: string[] = [];
   for (const p of profile.patterns || []) {
     const typeTr = translatePattern(p.type);
     if (!typeTr) continue;
-    const placeTr = translatePlacement(p.placement);
-    tokens.push(placeTr ? `${placeTr} ${typeTr}` : typeTr);
+    const localized = Boolean(translatePlacement(p.placement));
+    if (localized && !PATTERN_OK_WHEN_LOCALIZED.has(typeTr)) continue;
+    if (!tokens.includes(typeTr)) tokens.push(typeTr);
     if (tokens.length >= 2) break;
   }
-  if (!tokens.length && profile.pattern_tr) tokens.push(profile.pattern_tr);
+  return tokens;
+}
+
+function patternQueryTokens(profile: ProductProfile): string[] {
+  const tokens = queryPatternTokens(profile);
+  if (!tokens.length && !(profile.patterns || []).length && profile.pattern_tr) {
+    tokens.push(profile.pattern_tr);
+  }
   return tokens;
 }
 
@@ -1710,6 +1734,10 @@ const strapTR: Record<string, string> = {
   "thick-strap": "kalın askılı",
   "thick strap": "kalın askılı",
   strapless: "straplez",
+  tube: "straplez",
+  "tube-top": "straplez",
+  "tube top": "straplez",
+  bandeau: "straplez",
   none: "",
 };
 
@@ -1912,7 +1940,23 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
 
   const color = translateColor(primaryRaw);
   const secondary_colors = secondaryRaw.map(translateColor).filter(Boolean);
-  const subcategory_tr = lookupTr(subcategoryTR, subcategory) || subcategoryTR[subcategory] || "";
+
+  const collarWord = lookupTr(necklineTR, neckline);
+  let sleeve_or_strap_tr = lookupTr(strapTR, product.sleeve_or_strap);
+  // Vision may report strapless on either field; mirror it so the core query carries "straplez".
+  if (collarWord === "straplez" && !sleeve_or_strap_tr) sleeve_or_strap_tr = "straplez";
+
+  // A polo collar means the piece IS a polo — vision often still labels it "t-shirt".
+  let subcategoryFixed = subcategory;
+  if (
+    collarWord === "polo yaka" &&
+    (!subcategoryFixed || canonicalSubcategory(subcategoryFixed) === "t-shirt")
+  ) {
+    subcategoryFixed = "polo";
+  }
+
+  const subcategory_tr =
+    lookupTr(subcategoryTR, subcategoryFixed) || subcategoryTR[subcategoryFixed] || "";
   const category_tr =
     FAMILY_TR[family] ||
     lookupTr(categoryTR, family) ||
@@ -1923,8 +1967,6 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
 
   const fitWord = fitToken(silhouette);
   const length_tr = lookupTr(lengthTR, product.length);
-  const collarWord = lookupTr(necklineTR, neckline);
-  const sleeve_or_strap_tr = lookupTr(strapTR, product.sleeve_or_strap);
   const material_tr = lookupTr(materialTR, product.material_impression);
   const gender = genderTR[canonKey(genderRaw)] ?? "";
   const patternWord = patterns[0]
@@ -1944,7 +1986,7 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     user_profile: ctx.user_profile || {},
     category: family || asText(product.category),
     category_tr: typeTr,
-    subcategory,
+    subcategory: subcategoryFixed,
     subcategory_tr,
     color_tr: color,
     colors: [primaryRaw, ...secondaryRaw].filter(Boolean),
@@ -2370,13 +2412,7 @@ function scoreShoppingItems(
     const subMatched = validResults.filter((item) => lcTitle(item).includes(subToken));
     if (subMatched.length >= 3) validResults = subMatched;
   }
-  const patternTokens = [
-    ...new Set(
-      (productProfile.patterns || [])
-        .map((p) => translatePattern(p.type))
-        .filter(Boolean)
-    ),
-  ];
+  const patternTokens = queryPatternTokens(productProfile);
   if (patternTokens.length) {
     const patternMatched = validResults.filter((item) =>
       patternTokens.some((tok) => lcTitle(item).includes(tok))
@@ -2463,8 +2499,11 @@ function scoreShoppingItems(
     const collarHit = Boolean(
       asText(productProfile.collar_tr) && title.includes(asLower(productProfile.collar_tr))
     );
-    const patternHit = Boolean(
-      asText(productProfile.pattern_tr) && title.includes(asLower(productProfile.pattern_tr))
+    // Only whole-garment pattern words count; a shoulder-only stripe must not
+    // boost "çizgili tişört" listings.
+    const patternHit = patternTokens.some((tok) => title.includes(asLower(tok)));
+    const strayPatternHit = ["çizgili", "ekoseli", "çiçekli", "batik"].some(
+      (w) => title.includes(w) && !patternTokens.includes(w)
     );
     const queryTokens = asLower(productProfile.search_query)
       .split(/\s+/)
@@ -2481,6 +2520,7 @@ function scoreShoppingItems(
     if (genderHit) matchScore += 22;
     if (collarHit) matchScore += 14;
     if (patternHit) matchScore += 12;
+    if (strayPatternHit) matchScore = Math.max(0, matchScore - 15);
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
     if (poolBrandHit) matchScore += 15;

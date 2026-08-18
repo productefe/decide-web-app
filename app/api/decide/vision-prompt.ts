@@ -11,7 +11,10 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - crop top, t-shirt, blouse, spaghetti-strap top, and dress are DISTINCT subcategories. A crop top is NEVER a dress. A spaghetti-strap crop top is still a crop top (subcategory crop-top, length crop, sleeve_or_strap thin-strap).
 - length is HEM length of the garment (crop / normal / midi / maxi / uzun), NOT sleeve length.
 - sleeve_or_strap is separate: short-sleeve / long-sleeve / sleeveless / thin-strap / thick-strap / strapless.
+- POLO check comes FIRST for every top: if the tee has a soft fold-over collar (with or without a 2-3 button placket), subcategory MUST be polo and neckline MUST be polo — NEVER t-shirt, NEVER shirt. Only use t-shirt when the neckline is collarless (crew/v-neck).
+- STRAPLESS check: if the shoulders are completely bare with NO straps at all (tube top, bandeau, strapless dress), sleeve_or_strap MUST be strapless AND neckline MUST be strapless. "sleeveless" means it still has shoulder coverage or straps — never use it for a strapless piece.
 - Patterns and motifs are CRITICAL for search — never omit them. Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
+- placement PRECISION: use all-over ONLY when the pattern covers the whole garment. A stripe only on the shoulders or sleeves is placement shoulder/sleeve — the garment is NOT a "striped t-shirt". A mostly plain garment with one local accent stays visually plain; report the accent with its exact placement.
 - Shoes: sneaker, boot, sandal, loafer, and heel are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
 - Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
 - Glasses/sunglasses: distinctive_details MUST include frame shape + color when visible (yuvarlak çerçeve, siyah kare çerçeve, aviator).

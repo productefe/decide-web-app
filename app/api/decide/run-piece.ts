@@ -19,7 +19,6 @@ import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
 import { occasionTitleFit, pieceBlobForOccasion } from "@/lib/occasion-guide";
-import { allPoolBrandNames, normalizeBrandName } from "@/constants/brandPool";
 
 const SERPAPI_URL = "https://serpapi.com/search";
 
@@ -103,31 +102,6 @@ export function linkNeedsImmersive(link: string | null | undefined): boolean {
   }
 }
 
-const POOL_BRAND_NEEDLES = allPoolBrandNames()
-  .map((b) => ({ raw: b.toLowerCase(), key: normalizeBrandName(b) }))
-  .filter((b) => b.key.length >= 3);
-
-function distinctPoolBrandCount(pool: ScoringResult["pool"]): number {
-  const found = new Set<string>();
-  for (const p of pool) {
-    const hay = `${p.title || ""} ${p.source || ""}`.toLocaleLowerCase("tr-TR");
-    for (const b of POOL_BRAND_NEEDLES) {
-      if (hay.includes(b.key) || hay.includes(b.raw)) found.add(b.key);
-    }
-  }
-  return found.size;
-}
-
-/**
- * Stop after the first query only when the filtered pool is deep *and* not a
- * single-brand dump (8 Bershka listings from 3 marketplaces still expands).
- */
-function poolIsRichEnough(scoring: ScoringResult): boolean {
-  if (scoring.error || !scoring.recommended) return false;
-  if (scoring.pool.length < 8) return false;
-  return distinctPoolBrandCount(scoring.pool) >= 2;
-}
-
 async function searchQueries(
   queries: string[],
   productProfile: ProductProfile,
@@ -138,30 +112,12 @@ async function searchQueries(
     return { scoring: emptyScoring(productProfile), queryUsed: "", items: [] };
   }
 
-  const firstItems = await serpShoppingSearch(ordered[0], apiKey);
-  let merged = dedupeItems(firstItems);
-  let scoring = scoreProducts(merged, productProfile);
-
-  if (poolIsRichEnough(scoring)) {
-    console.log(
-      "SerpAPI adaptive stop@1:",
-      ordered[0],
-      `(pool=${scoring.pool.length}, brands=${distinctPoolBrandCount(scoring.pool)})`
-    );
-    return { scoring, queryUsed: ordered[0], items: merged };
-  }
-
-  const rest = ordered.slice(1);
-  if (rest.length) {
-    const extra = await Promise.all(rest.map((q) => serpShoppingSearch(q, apiKey)));
-    merged = dedupeItems([...merged, ...extra.flat()]);
-    scoring = scoreProducts(merged, productProfile);
-    console.log(
-      "SerpAPI adaptive expand:",
-      [ordered[0], ...rest].join(" | "),
-      `(pool=${scoring.pool.length})`
-    );
-  }
+  // Fire the whole (already small) query ladder at once: one network round-trip
+  // instead of sequential adaptive expansion.
+  const batches = await Promise.all(ordered.map((q) => serpShoppingSearch(q, apiKey)));
+  const merged = dedupeItems(batches.flat());
+  const scoring = scoreProducts(merged, productProfile);
+  console.log("SerpAPI parallel:", ordered.join(" | "), `(pool=${scoring.pool.length})`);
 
   return { scoring, queryUsed: ordered[0], items: merged };
 }
