@@ -90,6 +90,10 @@ function parseReuseSuggestion(raw: unknown): CombineSlotSuggestion | null {
     color: typeof obj.color === "string" ? obj.color : "",
     styleDescriptor: typeof obj.styleDescriptor === "string" ? obj.styleDescriptor : "",
     searchQuery: obj.searchQuery.trim(),
+    accessoryType:
+      typeof obj.accessoryType === "string" && obj.accessoryType.trim()
+        ? obj.accessoryType.trim()
+        : undefined,
   };
 }
 

@@ -9,10 +9,13 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - length is HEM length of the garment (crop / normal / midi / maxi / uzun), NOT sleeve length.
 - sleeve_or_strap is separate: short-sleeve / long-sleeve / sleeveless / thin-strap / thick-strap / strapless.
 - Patterns and motifs are CRITICAL for search — never omit them. Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
+- Shoes: sneaker, boot, sandal, loafer, and heel are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
+- Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
+- Glasses/sunglasses: distinctive_details MUST include frame shape + color when visible (yuvarlak çerçeve, siyah kare çerçeve, aviator).
 - If you are not sure about a field, leave it "" or []. Never guess.
 
 category (family, English): top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
-subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | sneaker | boot | sandal | bag | hat | glasses | sunglasses | watch | belt | scarf
+subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | sneaker | boot | sandal | loafer | heel | bag | hat | glasses | sunglasses | watch | belt | scarf
 silhouette_fit: oversize | regular | slim | bodycon | loose | ""
 length: crop | normal | uzun | midi | maxi | mini | ""
 neckline: crew-neck | v-neck | polo | turtleneck | halter | square | strapless | ""

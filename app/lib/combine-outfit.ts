@@ -176,8 +176,10 @@ Rules:
 - searchQuery must be Turkish shopping keywords, 4–10 words, and MUST encode layered product attributes when relevant:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
-  - shoes: tip (sneaker/bot/loafer) + renk
-  - accessory: concrete type only (kemer/çanta/saat/gözlük/şapka…)
+- shoes: tip (sneaker/bot/loafer/topuklu) + renk — NEVER write generic "ayakkabı" alone; sport → sneaker, evening → loafer or topuklu as appropriate
+- accessory: concrete type only (kemer/çanta/saat/gözlük/şapka…)
+  - saat: include kayış (deri/metal/silikon) + renk
+  - gözlük: include çerçeve şekli (yuvarlak/kare/aviator) + renk
 - Keep suggestions consistent with the context (${contextTr}) and the source piece color.
 - Prefer safe, widely-wearable combinations over adventurous color theory.
 - styleDescriptor: short Turkish phrase describing THE SAME item as searchQuery (include the same cut/collar/type words).
@@ -186,7 +188,8 @@ Rules:
   - Pick ONE type from: ${accessoryKinds}
   - accessoryType, styleDescriptor, and searchQuery MUST all refer to that SAME type.
   - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
-  - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons.
+  - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons. Always mention strap (deri kayış / metal kordon / silikon kayış).
+  - For gözlük: always mention frame shape (yuvarlak/kare/aviator) and frame color.
   - Match metal/color to the source piece when suggesting jewelry; otherwise prefer bag/belt/watch/glasses for casual sport looks.${accessoryField}`;
 }
 
@@ -307,16 +310,53 @@ function genderTr(gender: string | null | undefined): string {
   return "";
 }
 
+function inferShoeSubcategory(blob: string, context: AnalysisContext): {
+  subcategory: string;
+  subcategory_tr: string;
+} {
+  const t = blob.toLowerCase();
+  if (/\b(topuk|stiletto|heel|pump)\b/.test(t)) return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  if (/\b(bot|boot|chelsea)\b/.test(t)) return { subcategory: "boot", subcategory_tr: "bot" };
+  if (/\b(sandal|sandalet)\b/.test(t)) return { subcategory: "sandal", subcategory_tr: "sandalet" };
+  if (/\b(loafer|mokasen|oxford)\b/.test(t)) return { subcategory: "loafer", subcategory_tr: "loafer" };
+  if (/\b(sneaker|spor ayakkabı|koşu)\b/.test(t) || context === "sport") {
+    return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
+  }
+  if (context === "evening") return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
+}
+
+function accessoryDetailsFromText(text: string, accessoryType?: string): string[] {
+  const t = text.toLowerCase();
+  const out: string[] = [];
+  if (accessoryType === "saat" || /saat|watch/.test(t)) {
+    if (/\b(deri|leather|nato)\b/.test(t)) out.push("deri kayış");
+    else if (/\b(silikon|silicone|kauçuk)\b/.test(t)) out.push("silikon kayış");
+    else if (/\b(metal|çelik|hasır)\b/.test(t)) out.push("metal kordon");
+  }
+  if (accessoryType === "gözlük" || /gözlük|glasses|sunglasses/.test(t)) {
+    if (/\b(yuvarlak|round|oval)\b/.test(t)) out.push("yuvarlak çerçeve");
+    else if (/\b(kare|square|dikdörtgen)\b/.test(t)) out.push("kare çerçeve");
+    else if (/\b(aviator|damla|pilot)\b/.test(t)) out.push("aviator çerçeve");
+    else if (/\b(kedi|cat[- ]?eye)\b/.test(t)) out.push("kedi gözü çerçeve");
+  }
+  return out;
+}
+
 function buildSlotProductProfile(
   input: CombineOutfitInput,
   suggestion: CombineSlotSuggestion
 ): ProductProfile {
   const isAccessory = suggestion.slot === "accessory";
+  const shoe =
+    suggestion.slot === "shoes"
+      ? inferShoeSubcategory(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, input.context)
+      : { subcategory: "", subcategory_tr: "" };
+  const accessoryType =
+    suggestion.accessoryType || detectAccessoryType(suggestion.searchQuery) || undefined;
   const categoryTr = isAccessory
-    ? suggestion.accessoryType ||
-      detectAccessoryType(suggestion.searchQuery) ||
-      COMBINE_SLOT_CATEGORY_TR.accessory
-    : COMBINE_SLOT_CATEGORY_TR[suggestion.slot];
+    ? accessoryType || COMBINE_SLOT_CATEGORY_TR.accessory
+    : shoe.subcategory_tr || COMBINE_SLOT_CATEGORY_TR[suggestion.slot];
   const genderFromUser = input.userProfile.gender || null;
   const genderFromPiece = input.attributes.gender || "";
   const gTr = genderTr(genderFromUser || genderFromPiece);
@@ -326,12 +366,15 @@ function buildSlotProductProfile(
 
   const search_query = suggestion.searchQuery;
   const fallback_query = [gTr, color, categoryTr].filter(Boolean).join(" ").trim();
+  const distinctive_details = isAccessory
+    ? accessoryDetailsFromText(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, accessoryType)
+    : [];
 
   return {
     photo_url: input.photoUrl,
     user_id: input.userId,
     user_profile: input.userProfile,
-    category: isAccessory ? suggestion.accessoryType || "accessory" : suggestion.slot,
+    category: isAccessory ? accessoryType || "accessory" : suggestion.slot === "shoes" ? "shoes" : suggestion.slot,
     category_tr: categoryTr,
     color_tr: color,
     colors: color ? [color] : [],
@@ -347,8 +390,8 @@ function buildSlotProductProfile(
     gender_tr: gTr,
     search_query,
     fallback_query,
-    subcategory: "",
-    subcategory_tr: "",
+    subcategory: isAccessory ? accessoryType || "" : shoe.subcategory,
+    subcategory_tr: isAccessory ? accessoryType || categoryTr : shoe.subcategory_tr,
     secondary_colors: [],
     length: "",
     length_tr: "",
@@ -358,8 +401,8 @@ function buildSlotProductProfile(
     patterns: [],
     material_impression: "",
     material_tr: "",
-    distinctive_details: [],
-    core_query: fallback_query,
+    distinctive_details,
+    core_query: search_query || fallback_query,
     low_confidence: !categoryTr,
   };
 }
@@ -409,7 +452,8 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         input.affiliateTag,
         exclude,
         {
-          immersiveMode: "recommended",
+          immersiveMode: input.onlySlot ? "none" : "recommended",
+          mustFind: true,
           denyTitlePattern: isWatchSlot
             ? new RegExp(
                 `(?:${NON_ACCESSORY_TITLE_RE.source})|(?:${WATCH_DENY_TITLE_RE.source})`,
@@ -421,9 +465,10 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         }
       );
 
+      const accessoryLabel = suggestion.accessoryType || profile.subcategory_tr;
       const labelTr =
-        suggestion.slot === "accessory" && suggestion.accessoryType
-          ? suggestion.accessoryType.charAt(0).toUpperCase() + suggestion.accessoryType.slice(1)
+        suggestion.slot === "accessory" && accessoryLabel
+          ? accessoryLabel.charAt(0).toUpperCase() + accessoryLabel.slice(1)
           : COMBINE_SLOT_LABEL_TR[suggestion.slot];
 
       return {

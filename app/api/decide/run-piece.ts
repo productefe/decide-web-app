@@ -5,8 +5,9 @@ import {
   getSlots,
   mergeLinks,
   buildResults,
-  replaceOutOfStockSlots,
   isLuxuryHit,
+  titleIsExcluded,
+  productIdentityKey,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
@@ -53,7 +54,7 @@ async function serpShoppingSearch(
     engine: "google_shopping",
     q: trimmed,
     api_key: apiKey,
-    num: "40",
+    num: "20",
     gl: "tr",
     hl: "tr",
   });
@@ -94,7 +95,7 @@ async function searchWithFallback(
     // One parallel batch: 2 fixed stores (Beymen, Les Benjamins) + 2 rotating
     // stores + 2 luxury pool-brand queries. Single RTT instead of the old
     // conditional two-step, and more brand variety in the pool.
-    const luxuryQs = queries.slice(0, 6);
+    const luxuryQs = queries.slice(0, 4);
     const batches = await Promise.all(luxuryQs.map((q) => serpShoppingSearch(q, apiKey)));
     const merged = dedupeItems(batches.flat());
     const scoring = scoreProducts(merged, productProfile);
@@ -109,7 +110,7 @@ async function searchWithFallback(
 
   // Happy path: brand-suffixed queries first (Bershka / Pull&Bear / …), then one generic core.
   // The plan marks brand queries explicitly — no fragile re-derivation.
-  const brandQs = brandQueries.slice(0, 3);
+  const brandQs = brandQueries.slice(0, 2);
   const genericQs = queries.filter((q) => !brandQueries.includes(q));
   const primary = genericQs[0] || queries[0];
   const parallelQs = [...brandQs, primary].filter(Boolean);
@@ -174,7 +175,48 @@ export type ProcessPieceOptions = {
   immersiveMode?: "all" | "recommended" | "none";
   /** Drop shopping titles matching this pattern before scoring slots. */
   denyTitlePattern?: RegExp;
+  /** Keep searching with broader queries until at least one unique product remains. */
+  mustFind?: boolean;
 };
+
+function applyPoolFilters(
+  scoring: ScoringResult,
+  excludeTitles: Set<string>,
+  denyTitlePattern?: RegExp
+): ScoringResult {
+  let pool = scoring.pool;
+  if (denyTitlePattern) {
+    pool = pool.filter((p) => !denyTitlePattern.test(p.title));
+  }
+  if (excludeTitles.size) {
+    pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles));
+  }
+  const used = new Set<string>();
+  const unique: typeof pool = [];
+  for (const p of pool) {
+    const key = productIdentityKey(p);
+    if (!key || used.has(key)) continue;
+    used.add(key);
+    unique.push(p);
+  }
+  const recommended = unique[0] || null;
+  const cheaper =
+    unique.find(
+      (p) =>
+        recommended &&
+        productIdentityKey(p) !== productIdentityKey(recommended) &&
+        p.priceValue > 0 &&
+        p.priceValue <= (recommended.priceValue || Infinity)
+    ) || unique[1] || null;
+  return {
+    ...scoring,
+    pool: unique,
+    recommended,
+    cheaper,
+    style: scoring.style && unique.some((p) => p.title === scoring.style?.title) ? scoring.style : null,
+    error: unique.length ? undefined : scoring.error || "Bu ürün için sonuç bulunamadı.",
+  };
+}
 
 export async function processPiece(
   productProfile: ProductProfile,
@@ -186,41 +228,48 @@ export async function processPiece(
 ): Promise<PieceResult | null> {
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
-  const { scoring } = await searchWithFallback(productProfile, serpKey);
-  if (scoring.error) return null;
+  let { scoring } = await searchWithFallback(productProfile, serpKey);
+  scoring = applyPoolFilters(scoring, excludeTitles, options.denyTitlePattern);
 
-  if (options.denyTitlePattern) {
-    const deny = options.denyTitlePattern;
-    scoring.pool = scoring.pool.filter((p) => !deny.test(p.title));
-    if (scoring.recommended && deny.test(scoring.recommended.title)) {
-      scoring.recommended = scoring.pool[0] || null;
+  if ((!scoring.recommended || scoring.pool.length < 3) && options.mustFind) {
+    const broaden = [
+      productProfile.search_query,
+      productProfile.fallback_query,
+      [productProfile.gender_tr, productProfile.subcategory_tr || productProfile.category_tr]
+        .filter(Boolean)
+        .join(" "),
+    ]
+      .map((q) => (q || "").trim().replace(/\s+/g, " "))
+      .filter(Boolean);
+    const extraQs = [...new Set(broaden)].slice(0, 2);
+    if (extraQs.length) {
+      const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
+      const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);
+      const seen = new Set(scoring.pool.map((p) => productIdentityKey(p)));
+      const mergedPool = [...scoring.pool];
+      for (const p of extraScoring.pool) {
+        const key = productIdentityKey(p);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        mergedPool.push(p);
+      }
+      scoring = applyPoolFilters(
+        { ...scoring, pool: mergedPool, error: undefined },
+        excludeTitles,
+        options.denyTitlePattern
+      );
     }
-    if (scoring.cheaper && deny.test(scoring.cheaper.title)) {
-      scoring.cheaper = null;
-    }
-    if (scoring.style && deny.test(scoring.style.title)) {
-      scoring.style = null;
-    }
+  }
+
+  if (scoring.error || !scoring.recommended) {
+    if (!options.mustFind) return null;
     if (!scoring.recommended) return null;
   }
 
-  if (excludeTitles.size) {
-    scoring.pool = scoring.pool.filter((p) => !excludeTitles.has(p.title));
-    if (scoring.recommended && excludeTitles.has(scoring.recommended.title)) {
-      scoring.recommended = scoring.pool[0] || null;
-    }
-    if (scoring.cheaper && excludeTitles.has(scoring.cheaper.title)) {
-      scoring.cheaper = null;
-    }
-    if (!scoring.recommended) return null;
-  }
+  const usedTitles = new Set<string>(excludeTitles);
+  if (scoring.recommended) usedTitles.add(scoring.recommended.title);
+  if (scoring.cheaper) usedTitles.add(scoring.cheaper.title);
 
-  const usedTitles = new Set(
-    [scoring.recommended?.title, scoring.cheaper?.title].filter(Boolean) as string[]
-  );
-  for (const t of excludeTitles) usedTitles.add(t);
-
-  // Style slot from the same scored pool — no extra Serp round-trip (options unchanged).
   const occasionWords = occasionKeyword
     .toLowerCase()
     .split(/\s+/)
@@ -229,15 +278,17 @@ export async function processPiece(
     (occasionWords.length
       ? scoring.pool.find(
           (p) =>
-            !usedTitles.has(p.title) &&
+            !titleIsExcluded(p.title, usedTitles) &&
+            productIdentityKey(p) !== (scoring.recommended ? productIdentityKey(scoring.recommended) : "") &&
+            productIdentityKey(p) !== (scoring.cheaper ? productIdentityKey(scoring.cheaper) : "") &&
             occasionWords.some((w) => p.title.toLowerCase().includes(w))
         )
       : null) || pickTrustedFallback(scoring.pool, usedTitles);
 
   const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
-  let slots = getSlots(finalScoring);
+  const slots = getSlots(finalScoring);
 
-  if (immersiveMode === "none") {
+  if (immersiveMode === "none" || slots.length === 0) {
     const merged = mergeLinks(finalScoring, slots, slots.map(() => null), affiliateTag, productProfile);
     return {
       label: productProfile.category_tr || productProfile.category || "Parça",
@@ -248,29 +299,12 @@ export async function processPiece(
 
   const immersiveTargets =
     immersiveMode === "recommended" ? slots.slice(0, 1) : slots;
-  let immersiveResponses = await Promise.all(
+  const immersiveResponses = await Promise.all(
     immersiveTargets.map(({ product }) =>
       fetchImmersive(product.serpapi_immersive_product_api, serpKey)
     )
   );
-  // Pad so mergeLinks index aligns when only recommended was fetched.
   while (immersiveResponses.length < slots.length) immersiveResponses.push(null);
-
-  if (immersiveMode === "all") {
-    const previousSlots = slots;
-    const replaced = replaceOutOfStockSlots(finalScoring, slots, immersiveResponses);
-    const changed = replaced.map((s, i) => s.product.title !== previousSlots[i]?.product.title);
-    if (changed.some(Boolean)) {
-      slots = replaced;
-      immersiveResponses = await Promise.all(
-        slots.map(({ product }, i) =>
-          changed[i]
-            ? fetchImmersive(product.serpapi_immersive_product_api, serpKey)
-            : Promise.resolve(immersiveResponses[i])
-        )
-      );
-    }
-  }
 
   const merged = mergeLinks(finalScoring, slots, immersiveResponses, affiliateTag, productProfile);
   return {

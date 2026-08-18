@@ -177,7 +177,9 @@ export async function POST(req: NextRequest) {
     const rawPieces = await Promise.all(
       profiles.map(({ label, profile }) => {
         if (profile.low_confidence) return Promise.resolve(null);
-        return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG).then((piece) =>
+        return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
+          mustFind: true,
+        }).then((piece) =>
           piece
             ? ({
                 ...piece,

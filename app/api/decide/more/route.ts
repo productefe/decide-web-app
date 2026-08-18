@@ -168,7 +168,8 @@ export async function POST(req: NextRequest) {
       occasionKeyword,
       SERPAPI_KEY,
       AFFILIATE_TAG,
-      excludeTitles
+      excludeTitles,
+      { mustFind: true, immersiveMode: "recommended" }
     );
 
     if (!piece) {

@@ -99,6 +99,38 @@ export interface ScoringResult {
   error?: string;
 }
 
+/** Collapse title noise so "Bershka Crop Kadın" and "Bershka Crop" count as one product. */
+export function normalizeProductTitle(title: string): string {
+  return (title || "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[^a-z0-9çğıöşü\s]/gi, " ")
+    .replace(/\b(kadın|kadin|erkek|bayan|unisex|yeni|sezon|orijinal)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function productIdentityKey(p: {
+  title?: string;
+  product_id?: string | null;
+  image?: string;
+}): string {
+  if (p.product_id) return `id:${p.product_id}`;
+  const img = (p.image || "").split("?")[0];
+  if (img && /https?:\/\//.test(img)) return `img:${img}`;
+  return `t:${normalizeProductTitle(p.title || "")}`;
+}
+
+export function titleIsExcluded(title: string, exclude: Set<string>): boolean {
+  if (!title || exclude.size === 0) return false;
+  if (exclude.has(title)) return true;
+  const n = normalizeProductTitle(title);
+  if (!n) return false;
+  for (const e of exclude) {
+    if (normalizeProductTitle(e) === n) return true;
+  }
+  return false;
+}
+
 interface SerpShoppingItem {
   title?: string;
   price?: string;
@@ -531,6 +563,34 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     if (/\b(crop|mini)\b/.test(t) && !/\bmaxi\b/.test(t)) return true;
   }
 
+  // Shoe subtypes are never relaxed — a sneaker search must not surface heels.
+  const isSneaker = /\b(sneaker|spor ayakkabı|koşu ayakkabı)\b/.test(blob);
+  const isHeel = /\b(topuk|stiletto|heel|pump|kitten)\b/.test(blob);
+  const isBoot = /\b(bot|boot|chelsea|combat)\b/.test(blob) && !isSneaker;
+  const isSandal = /\b(sandal|sandalet)\b/.test(blob);
+  const isLoafer = /\b(loafer|mokasen|oxford)\b/.test(blob);
+  if (isSneaker) {
+    if (
+      /\b(topuklu|topuk|stiletto|pump|kitten|high[- ]?heel|klasik ayakkabı|deri ayakkabı|mokasen|loafer|oxford)\b/.test(
+        t
+      ) &&
+      !/\b(sneaker|spor ayakkabı|koşu)\b/.test(t)
+    ) {
+      return true;
+    }
+    if (/\b(bot|boot|sandalet|sandal)\b/.test(t) && !/\b(sneaker|spor ayakkabı)\b/.test(t)) return true;
+  }
+  if (isHeel) {
+    if (/\b(sneaker|spor ayakkabı|koşu|bot|sandalet)\b/.test(t) && !/\b(topuk|stiletto|heel)\b/.test(t)) {
+      return true;
+    }
+  }
+  if (isBoot && /\b(sneaker|spor ayakkabı|topuklu|sandalet)\b/.test(t) && !/\bbot\b/.test(t)) return true;
+  if (isSandal && /\b(sneaker|topuklu|bot)\b/.test(t) && !/\b(sandal|sandalet)\b/.test(t)) return true;
+  if (isLoafer && /\b(sneaker|spor ayakkabı|topuklu|sandalet)\b/.test(t) && !/\b(loafer|mokasen|oxford)\b/.test(t)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -574,6 +634,19 @@ export function contradictsCategoryFit(
     ) {
       return true;
     }
+    const details = `${(profile.distinctive_details || []).join(" ")} ${profile.search_query || ""}`.toLowerCase();
+    const wantsRound = /\b(yuvarlak|round|oval)\b/.test(details);
+    const wantsSquare = /\b(kare|square|dikdörtgen|rectang)\b/.test(details);
+    const wantsAviator = /\b(aviator|damla|pilot)\b/.test(details);
+    const wantsCat = /\b(kedi gözü|cat[- ]?eye)\b/.test(details);
+    if (wantsRound && /\b(kare|square|aviator|dikdörtgen)\b/.test(t) && !/\b(yuvarlak|round|oval)\b/.test(t)) {
+      return true;
+    }
+    if (wantsSquare && /\b(yuvarlak|round|aviator|damla)\b/.test(t) && !/\b(kare|square|dikdörtgen)\b/.test(t)) {
+      return true;
+    }
+    if (wantsAviator && requireType && !/\b(aviator|damla|pilot)\b/.test(t)) return true;
+    if (wantsCat && requireType && !/\b(kedi|cat[- ]?eye)\b/.test(t)) return true;
     return false;
   }
 
@@ -662,11 +735,16 @@ export function contradictsCategoryFit(
     }
   }
 
-  if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı") || /ayakkabı|boot|sandal|loafer/.test(blob))) {
+  if ((cat.includes("sneaker") || catTr.includes("spor ayakkabı") || /ayakkabı|boot|sandal|loafer|topuk|heel/.test(blob))) {
     if (/\b(tişört|pantolon|gözlük|elbise|etek|gömlek)\b/.test(t)) return true;
-    if (requireType && /sneaker|spor ayakkabı/.test(blob) && !/\b(spor ayakkabı|sneaker|sneakers|koşu)\b/.test(t)) {
+    const wantsSneaker = /sneaker|spor ayakkabı|koşu/.test(blob);
+    const wantsHeel = /topuk|stiletto|heel|pump/.test(blob);
+    const wantsBoot = /\b(bot|boot)\b/.test(blob) && !wantsSneaker;
+    if (wantsSneaker && requireType && !/\b(spor ayakkabı|sneaker|sneakers|koşu)\b/.test(t)) {
       return true;
     }
+    if (wantsHeel && requireType && !/\b(topuklu|topuk|stiletto|heel|pump)\b/.test(t)) return true;
+    if (wantsBoot && requireType && !/\b(bot|boot)\b/.test(t)) return true;
   }
   if (/çanta|bag|handbag|backpack/.test(blob)) {
     if (requireType && !/\b(çanta|bag|handbag|backpack|sırt çantası|clutch|tote)\b/.test(t)) return true;
@@ -719,6 +797,19 @@ export function contradictsCategoryFit(
         t
       )
     ) {
+      return true;
+    }
+    const details = `${(profile.distinctive_details || []).join(" ")} ${profile.search_query || ""} ${profile.material_tr || ""}`.toLowerCase();
+    const wantsLeather = /\b(deri|leather|nato)\b/.test(details);
+    const wantsMetal = /\b(metal|çelik|celik|hasır|hasir|bracelet)\b/.test(details) && !wantsLeather;
+    const wantsSilicone = /\b(silikon|silicone|kauçuk|kaucuk)\b/.test(details);
+    if (wantsLeather && /\b(metal kordon|çelik hasır|celik hasir|metal bilezik)\b/.test(t) && !/\b(deri|leather|nato)\b/.test(t)) {
+      return true;
+    }
+    if (wantsMetal && /\b(deri kayış|deri kayis|leather strap|silikon)\b/.test(t) && !/\b(metal|çelik|hasır)\b/.test(t)) {
+      return true;
+    }
+    if (wantsSilicone && /\b(deri kayış|metal kordon|çelik hasır)\b/.test(t) && !/\b(silikon|kauçuk)\b/.test(t)) {
       return true;
     }
     return false;
@@ -1192,6 +1283,10 @@ const subcategoryTR: Record<string, string> = {
   sneakers: "spor ayakkabı",
   boot: "bot",
   sandal: "sandalet",
+  loafer: "loafer",
+  heel: "topuklu ayakkabı",
+  "high-heel": "topuklu ayakkabı",
+  oxford: "oxford ayakkabı",
   bag: "çanta",
   hat: "şapka",
   glasses: "gözlük",
@@ -1227,6 +1322,10 @@ const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
   sneakers: "shoes",
   boot: "shoes",
   sandal: "shoes",
+  loafer: "shoes",
+  heel: "shoes",
+  "high-heel": "shoes",
+  oxford: "shoes",
   bag: "bag",
   hat: "hat",
   glasses: "eyewear",
@@ -1730,9 +1829,13 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
 
   const sizeQuery = firstSize ? uniqueJoin([full || strong, firstSize]) : "";
 
-  const base = [sizeQuery, full, strong, colorCore, core];
+  // Combine (and similar) stores a stylist query in search_query — it must be
+  // searched, not only the reconstructed core ("kadın siyah ayakkabı").
+  const storedQuery = (rebuilt.search_query || "").trim().replace(/\s+/g, " ");
 
-  const primary = (strong || core).trim();
+  const base = [storedQuery, sizeQuery, full, strong, colorCore, core];
+
+  const primary = (storedQuery || strong || core).trim();
   const brandSuffixes = pickDecidePoolBrands(
     {
       category: rebuilt.category,
@@ -2076,12 +2179,15 @@ function pickCheaperProduct(
   );
   if (otherPrices.length === 0) return null;
 
+  const blocked = new Set(
+    [productIdentityKey(recommended), style ? productIdentityKey(style) : ""].filter(Boolean)
+  );
+
   const candidates = pool
     .filter(
       (p) =>
         p.priceValue > 0 &&
-        p.title !== recommended.title &&
-        p.title !== style?.title &&
+        !blocked.has(productIdentityKey(p)) &&
         otherPrices.every((price) => p.priceValue <= price)
     )
     .sort((a, b) => a.priceValue - b.priceValue);
@@ -2106,23 +2212,19 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
   }
 
   const usedStores = new Set<string>();
-  const usedTitles = new Set<string>();
+  const usedKeys = new Set<string>();
   const topPool: ScoredProduct[] = [];
-  for (const p of scoredProducts) {
-    if (topPool.length >= 3) break;
-    if (!usedStores.has(p.store) && !usedTitles.has(p.title)) {
-      topPool.push(p);
-      usedStores.add(p.store);
-      usedTitles.add(p.title);
-    }
-  }
-  for (const p of scoredProducts) {
-    if (topPool.length >= 3) break;
-    if (!usedTitles.has(p.title)) {
-      topPool.push(p);
-      usedTitles.add(p.title);
-    }
-  }
+  const tryPush = (p: ScoredProduct, requireNewStore: boolean) => {
+    if (topPool.length >= 3) return;
+    const key = productIdentityKey(p);
+    if (!key || usedKeys.has(key)) return;
+    if (requireNewStore && usedStores.has(p.store)) return;
+    topPool.push(p);
+    usedKeys.add(key);
+    usedStores.add(p.store);
+  };
+  for (const p of scoredProducts) tryPush(p, true);
+  for (const p of scoredProducts) tryPush(p, false);
 
   const recommended = topPool[0] || null;
   const cheaper = recommended ? pickCheaperProduct(scoredProducts, recommended, null) : null;
@@ -2151,11 +2253,10 @@ export function pickTrustedFallback(
   pool: ScoredProduct[],
   excludeTitles: Set<string>
 ): ScoredProduct | null {
-  return (
-    pool.find((p) => p.trustScore >= 90 && !excludeTitles.has(p.title)) ||
-    pool.find((p) => !excludeTitles.has(p.title)) ||
-    null
-  );
+  const blocked = new Set([...excludeTitles].map((t) => normalizeProductTitle(t)));
+  const isFree = (p: ScoredProduct) =>
+    !titleIsExcluded(p.title, excludeTitles) && !blocked.has(normalizeProductTitle(p.title));
+  return pool.find((p) => p.trustScore >= 90 && isFree(p)) || pool.find(isFree) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2248,10 +2349,34 @@ export type Slot = (typeof SLOTS)[number];
 
 export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredProduct }[] {
   const recommended = scoring.recommended;
-  const validated =
-    recommended
-      ? { ...scoring, cheaper: pickCheaperProduct(scoring.pool, recommended, scoring.style) }
-      : scoring;
+  const used = new Set<string>();
+  const take = (p: ScoredProduct | null | undefined): ScoredProduct | null => {
+    if (!p) return null;
+    const key = productIdentityKey(p);
+    if (!key || used.has(key)) return null;
+    used.add(key);
+    return p;
+  };
+
+  const rec = take(recommended);
+  const cheaper =
+    take(scoring.cheaper) ||
+    (rec ? take(pickCheaperProduct(scoring.pool, rec, scoring.style)) : null);
+  const style =
+    take(scoring.style) ||
+    take(
+      pickTrustedFallback(
+        scoring.pool,
+        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[])
+      )
+    );
+
+  const validated: ScoringResult = {
+    ...scoring,
+    recommended: rec,
+    cheaper,
+    style,
+  };
 
   return SLOTS.map((slot) => ({ slot, product: validated[slot] }))
     .filter((s): s is { slot: Slot; product: ScoredProduct } => Boolean(s.product));
@@ -2266,13 +2391,16 @@ export function replaceOutOfStockSlots(
   slots: { slot: Slot; product: ScoredProduct }[],
   immersiveResponses: (ImmersiveResponse | null)[]
 ): { slot: Slot; product: ScoredProduct }[] {
-  const used = new Set(slots.map((s) => s.product.title));
+  const used = new Set(slots.map((s) => productIdentityKey(s.product)));
   return slots.map((entry, i) => {
     if (!isClearlyOutOfStock(immersiveResponses[i])) return entry;
-    const replacement = scoring.pool.find((p) => !used.has(p.title));
+    const replacement = scoring.pool.find((p) => {
+      const key = productIdentityKey(p);
+      return Boolean(key) && !used.has(key);
+    });
     if (!replacement) return entry;
-    used.add(replacement.title);
-    used.delete(entry.product.title);
+    used.add(productIdentityKey(replacement));
+    used.delete(productIdentityKey(entry.product));
     return { slot: entry.slot, product: replacement };
   });
 }
