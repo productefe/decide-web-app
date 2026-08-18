@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { asText } from "@/lib/text";
 
 export class ApiSecurityError extends Error {
