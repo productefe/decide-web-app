@@ -5,7 +5,6 @@ import {
   getSlots,
   mergeLinks,
   buildResults,
-  isLuxuryHit,
   titleIsExcluded,
   productIdentityKey,
   type ProductProfile,
@@ -13,6 +12,7 @@ import {
 } from "./pipeline";
 import type { PieceResult } from "@/components/analyze/types";
 import type { PriceMode } from "@/lib/preferences";
+import { allPoolBrandNames, normalizeBrandName } from "@/constants/brandPool";
 
 const SERPAPI_URL = "https://serpapi.com/search";
 
@@ -69,6 +69,96 @@ async function serpShoppingSearch(
   return serpData?.shopping_results || [];
 }
 
+function emptyScoring(productProfile: ProductProfile): ScoringResult {
+  return {
+    user_id: productProfile.user_id,
+    photo_url: productProfile.photo_url,
+    recommended: null,
+    cheaper: null,
+    style: null,
+    pool: [],
+    error: "Bu ürün için sonuç bulunamadı.",
+  };
+}
+
+/** Shopping results already include a merchant URL — immersive would not change the card. */
+export function linkNeedsImmersive(link: string | null | undefined): boolean {
+  const raw = (link || "").trim();
+  if (!raw) return true;
+  try {
+    const host = new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
+    if (!host) return true;
+    if (/(^|\.)google\.(com|com\.tr)$/.test(host)) return true;
+    if (host.includes("googleusercontent.com")) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+const POOL_BRAND_NEEDLES = allPoolBrandNames()
+  .map((b) => ({ raw: b.toLowerCase(), key: normalizeBrandName(b) }))
+  .filter((b) => b.key.length >= 3);
+
+function distinctPoolBrandCount(pool: ScoringResult["pool"]): number {
+  const found = new Set<string>();
+  for (const p of pool) {
+    const hay = `${p.title || ""} ${p.source || ""}`.toLocaleLowerCase("tr-TR");
+    for (const b of POOL_BRAND_NEEDLES) {
+      if (hay.includes(b.key) || hay.includes(b.raw)) found.add(b.key);
+    }
+  }
+  return found.size;
+}
+
+/**
+ * Stop after the first query only when the filtered pool is deep *and* not a
+ * single-brand dump (8 Bershka listings from 3 marketplaces still expands).
+ */
+function poolIsRichEnough(scoring: ScoringResult): boolean {
+  if (scoring.error || !scoring.recommended) return false;
+  if (scoring.pool.length < 8) return false;
+  return distinctPoolBrandCount(scoring.pool) >= 2;
+}
+
+async function searchQueries(
+  queries: string[],
+  productProfile: ProductProfile,
+  apiKey: string
+): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
+  const ordered = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
+  if (ordered.length === 0) {
+    return { scoring: emptyScoring(productProfile), queryUsed: "", items: [] };
+  }
+
+  const firstItems = await serpShoppingSearch(ordered[0], apiKey);
+  let merged = dedupeItems(firstItems);
+  let scoring = scoreProducts(merged, productProfile);
+
+  if (poolIsRichEnough(scoring)) {
+    console.log(
+      "SerpAPI adaptive stop@1:",
+      ordered[0],
+      `(pool=${scoring.pool.length}, brands=${distinctPoolBrandCount(scoring.pool)})`
+    );
+    return { scoring, queryUsed: ordered[0], items: merged };
+  }
+
+  const rest = ordered.slice(1);
+  if (rest.length) {
+    const extra = await Promise.all(rest.map((q) => serpShoppingSearch(q, apiKey)));
+    merged = dedupeItems([...merged, ...extra.flat()]);
+    scoring = scoreProducts(merged, productProfile);
+    console.log(
+      "SerpAPI adaptive expand:",
+      [ordered[0], ...rest].join(" | "),
+      `(pool=${scoring.pool.length})`
+    );
+  }
+
+  return { scoring, queryUsed: ordered[0], items: merged };
+}
+
 async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string
@@ -77,81 +167,32 @@ async function searchWithFallback(
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   if (queries.length === 0) {
-    return {
-      scoring: {
-        user_id: productProfile.user_id,
-        photo_url: productProfile.photo_url,
-        recommended: null,
-        cheaper: null,
-        style: null,
-        pool: [],
-        error: "Bu ürün için sonuç bulunamadı.",
-      },
-      queryUsed: "",
-    };
+    return { scoring: emptyScoring(productProfile), queryUsed: "" };
   }
 
   if (priceMode === "luks") {
-    // One parallel batch: 2 fixed stores (Beymen, Les Benjamins) + 2 rotating
-    // stores + 2 luxury pool-brand queries. Single RTT instead of the old
-    // conditional two-step, and more brand variety in the pool.
-    const luxuryQs = queries.slice(0, 4);
-    const batches = await Promise.all(luxuryQs.map((q) => serpShoppingSearch(q, apiKey)));
-    const merged = dedupeItems(batches.flat());
-    const scoring = scoreProducts(merged, productProfile);
-
-    console.log(
-      "SerpAPI luxury parallel:",
-      luxuryQs[0],
-      `(pool=${scoring.pool.length}, luxury=${scoring.pool.filter((p) => isLuxuryHit(p.source, p.title)).length})`
-    );
-    return { scoring, queryUsed: luxuryQs[0] || queries[0] || "" };
+    const result = await searchQueries(queries.slice(0, 4), productProfile, apiKey);
+    return { scoring: result.scoring, queryUsed: result.queryUsed };
   }
 
-  // Happy path: brand-suffixed queries first (Bershka / Pull&Bear / …), then one generic core.
-  // The plan marks brand queries explicitly — no fragile re-derivation.
   const brandQs = brandQueries.slice(0, 2);
   const genericQs = queries.filter((q) => !brandQueries.includes(q));
   const primary = genericQs[0] || queries[0];
-  const parallelQs = [...brandQs, primary].filter(Boolean);
-  const uniqueParallel = [...new Set(parallelQs)];
+  const uniqueParallel = [...new Set([...brandQs, primary].filter(Boolean))];
 
-  const batches = await Promise.all(uniqueParallel.map((q) => serpShoppingSearch(q, apiKey)));
-  const mergedPrimary = dedupeItems(batches.flat());
-
-  if (mergedPrimary.length) {
-    const scoring = scoreProducts(mergedPrimary, productProfile);
-    if (!scoring.error) {
-      console.log(
-        "SerpAPI matched+brands:",
-        uniqueParallel.join(" | "),
-        `(${mergedPrimary.length} results)`
-      );
-      return { scoring, queryUsed: brandQs[0] || primary || uniqueParallel[0] || "" };
-    }
-  }
+  const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey);
+  if (!firstPass.scoring.error) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
 
   const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
-  if (fallbackQs.length === 0) {
-    return {
-      scoring: scoreProducts(mergedPrimary, productProfile),
-      queryUsed: primary || "",
-    };
-  }
+  if (fallbackQs.length === 0) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
 
-  const fallbackBatches = await Promise.all(
-    fallbackQs.map((q) => serpShoppingSearch(q, apiKey))
+  const fallbackBatches = await Promise.all(fallbackQs.map((q) => serpShoppingSearch(q, apiKey)));
+  const scoring = scoreProducts(
+    dedupeItems([...firstPass.items, ...fallbackBatches.flat()]),
+    productProfile
   );
-  const merged = dedupeItems([...mergedPrimary, ...fallbackBatches.flat()]);
-  console.log(
-    "SerpAPI fallback parallel:",
-    fallbackQs.join(" | "),
-    `(merged=${merged.length})`
-  );
-  return {
-    scoring: scoreProducts(merged, productProfile),
-    queryUsed: primary || fallbackQs[0] || "",
-  };
+  console.log("SerpAPI fallback parallel:", fallbackQs.join(" | "), `(pool=${scoring.pool.length})`);
+  return { scoring, queryUsed: firstPass.queryUsed || fallbackQs[0] || "" };
 }
 
 async function fetchImmersive(url: string | null | undefined, serpKey: string) {
@@ -301,7 +342,9 @@ export async function processPiece(
     immersiveMode === "recommended" ? slots.slice(0, 1) : slots;
   const immersiveResponses = await Promise.all(
     immersiveTargets.map(({ product }) =>
-      fetchImmersive(product.serpapi_immersive_product_api, serpKey)
+      linkNeedsImmersive(product.link)
+        ? fetchImmersive(product.serpapi_immersive_product_api, serpKey)
+        : Promise.resolve(null)
     )
   );
   while (immersiveResponses.length < slots.length) immersiveResponses.push(null);
