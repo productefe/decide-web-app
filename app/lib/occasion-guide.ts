@@ -241,6 +241,23 @@ export function getOccasionKeyword(occasion: Occasion | null | undefined): strin
   return getOccasionGuide(occasion)?.searchPhrase || "";
 }
 
+/**
+ * Occasion words that are safe to append to accessory searches.
+ * Full phrases include garment types (abiye, gömlek) that pull dresses/shirts.
+ */
+const ACCESSORY_OCCASION_PHRASE: Record<Occasion, string> = {
+  spor: "spor",
+  gundelik: "günlük casual",
+  aksam: "akşam şık davet",
+  ev: "rahat",
+  is: "ofis",
+};
+
+export function getAccessoryOccasionPhrase(occasion: Occasion | null | undefined): string {
+  if (!occasion) return "";
+  return ACCESSORY_OCCASION_PHRASE[occasion] || "";
+}
+
 export function pieceBlobForOccasion(profile: {
   category?: string;
   category_tr?: string;
@@ -300,9 +317,12 @@ export function occasionTitleFit(
 /** Append occasion shopping words that are not already in the query. */
 export function withOccasionSearchPhrase(
   query: string,
-  occasion: Occasion | null | undefined
+  occasion: Occasion | null | undefined,
+  opts: { forAccessory?: boolean } = {}
 ): string {
-  const phrase = getOccasionKeyword(occasion);
+  const phrase = opts.forAccessory
+    ? getAccessoryOccasionPhrase(occasion)
+    : getOccasionKeyword(occasion);
   if (!query.trim()) return phrase;
   if (!phrase) return query.trim().replace(/\s+/g, " ");
   const q = query.toLocaleLowerCase("tr-TR");

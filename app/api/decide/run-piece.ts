@@ -6,7 +6,12 @@ import {
   mergeLinks,
   buildResults,
   titleIsExcluded,
-  productIdentityKey,
+  hasProductOverlap,
+  rememberProduct,
+  isAccessoryProfile,
+  typeTokenTr,
+  sanitizeAccessoryQuery,
+  productDedupeKeys,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
@@ -217,6 +222,8 @@ export type ProcessPieceOptions = {
   immersiveMode?: "all" | "recommended" | "none";
   /** Drop shopping titles matching this pattern before scoring slots. */
   denyTitlePattern?: RegExp;
+  /** Extra title denylist (e.g. garments in an accessory slot). */
+  denyTitle?: (title: string) => boolean;
   /** Keep searching with broader queries until at least one unique product remains. */
   mustFind?: boolean;
 };
@@ -224,11 +231,15 @@ export type ProcessPieceOptions = {
 function applyPoolFilters(
   scoring: ScoringResult,
   excludeTitles: Set<string>,
-  denyTitlePattern?: RegExp
+  denyTitlePattern?: RegExp,
+  denyTitle?: (title: string) => boolean
 ): ScoringResult {
   let pool = scoring.pool;
   if (denyTitlePattern) {
     pool = pool.filter((p) => !denyTitlePattern.test(p.title));
+  }
+  if (denyTitle) {
+    pool = pool.filter((p) => !denyTitle(p.title));
   }
   if (excludeTitles.size) {
     pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles));
@@ -236,9 +247,8 @@ function applyPoolFilters(
   const used = new Set<string>();
   const unique: typeof pool = [];
   for (const p of pool) {
-    const key = productIdentityKey(p);
-    if (!key || used.has(key)) continue;
-    used.add(key);
+    if (hasProductOverlap(p, used)) continue;
+    rememberProduct(p, used);
     unique.push(p);
   }
   const recommended = unique[0] || null;
@@ -246,7 +256,7 @@ function applyPoolFilters(
     unique.find(
       (p) =>
         recommended &&
-        productIdentityKey(p) !== productIdentityKey(recommended) &&
+        !hasProductOverlap(p, new Set(productDedupeKeys(recommended))) &&
         p.priceValue > 0 &&
         p.priceValue <= (recommended.priceValue || Infinity)
     ) || unique[1] || null;
@@ -271,34 +281,44 @@ export async function processPiece(
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
   let { scoring } = await searchWithFallback(productProfile, serpKey);
-  scoring = applyPoolFilters(scoring, excludeTitles, options.denyTitlePattern);
+  scoring = applyPoolFilters(
+    scoring,
+    excludeTitles,
+    options.denyTitlePattern,
+    options.denyTitle
+  );
 
   if ((!scoring.recommended || scoring.pool.length < 3) && options.mustFind) {
+    const accessoryType = isAccessoryProfile(productProfile)
+      ? typeTokenTr(productProfile)
+      : "";
     const broaden = [
       productProfile.search_query,
       productProfile.fallback_query,
-      [productProfile.gender_tr, productProfile.subcategory_tr || productProfile.category_tr]
+      [productProfile.gender_tr, accessoryType || productProfile.subcategory_tr || productProfile.category_tr]
         .filter(Boolean)
         .join(" "),
     ]
       .map((q) => (q || "").trim().replace(/\s+/g, " "))
+      .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
       .filter(Boolean);
     const extraQs = [...new Set(broaden)].slice(0, 2);
     if (extraQs.length) {
       const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
       const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);
-      const seen = new Set(scoring.pool.map((p) => productIdentityKey(p)));
+      const seen = new Set<string>();
+      for (const p of scoring.pool) rememberProduct(p, seen);
       const mergedPool = [...scoring.pool];
       for (const p of extraScoring.pool) {
-        const key = productIdentityKey(p);
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
+        if (hasProductOverlap(p, seen)) continue;
+        rememberProduct(p, seen);
         mergedPool.push(p);
       }
       scoring = applyPoolFilters(
         { ...scoring, pool: mergedPool, error: undefined },
         excludeTitles,
-        options.denyTitlePattern
+        options.denyTitlePattern,
+        options.denyTitle
       );
     }
   }
@@ -318,10 +338,11 @@ export async function processPiece(
     .toLowerCase()
     .split(/\s+/)
     .filter((w) => w.length > 2);
+  const blockedStyle = new Set<string>();
+  if (scoring.recommended) rememberProduct(scoring.recommended, blockedStyle);
+  if (scoring.cheaper) rememberProduct(scoring.cheaper, blockedStyle);
   const isFreeStyle = (p: (typeof scoring.pool)[number]) =>
-    !titleIsExcluded(p.title, usedTitles) &&
-    productIdentityKey(p) !== (scoring.recommended ? productIdentityKey(scoring.recommended) : "") &&
-    productIdentityKey(p) !== (scoring.cheaper ? productIdentityKey(scoring.cheaper) : "");
+    !titleIsExcluded(p.title, usedTitles) && !hasProductOverlap(p, blockedStyle);
   const styleProduct =
     (occasion
       ? scoring.pool.find(

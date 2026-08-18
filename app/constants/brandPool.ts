@@ -523,7 +523,7 @@ export function resolvePoolCategories(profile: {
   else if (/gözlük|sunglasses|eyewear|sunglass/.test(blob)) ordered.push("sunglasses");
   else if (/saat|watch|wrist/.test(blob)) ordered.push("watch");
   else if (/çanta|bag|backpack|clutch|tote/.test(blob)) ordered.push("bag");
-  else if (/şapka|hat|bere|cap|kemer|belt|takı|kolye|küpe/.test(blob)) ordered.push("accessory");
+  else if (/şapka|hat|bere|cap|kemer|belt|takı|kolye|küpe|bileklik|yüzük|aksesuar/.test(blob)) ordered.push("accessory");
   else if (/spor ayakkabı|sneaker|koşu/.test(blob)) ordered.push("sneakers");
   else if (/ayakkabı|bot|sandal|loafer|heel|topuk|oxford|shoe/.test(blob)) ordered.push("shoes_classic");
   else if (/ceket|mont|kaban|coat|jacket|trenç|puffer|blazer/.test(blob)) ordered.push("outerwear");

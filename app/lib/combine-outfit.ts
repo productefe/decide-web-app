@@ -15,7 +15,14 @@ import {
   getOccasionKeyword,
   withOccasionSearchPhrase,
 } from "@/lib/occasion-guide";
-import type { ProductProfile, UserProfile } from "@/api/decide/pipeline";
+import {
+  detectAccessoryKind,
+  defaultAccessoryKind,
+  sanitizeAccessoryQuery,
+  titleLooksLikeGarment,
+  type ProductProfile,
+  type UserProfile,
+} from "@/api/decide/pipeline";
 import { processPiece } from "@/api/decide/run-piece";
 import type { PieceResult } from "@/components/analyze/types";
 
@@ -34,10 +41,6 @@ const ACCESSORY_KINDS: { type: string; re: RegExp }[] = [
   { type: "şapka", re: /şapka|sapka|hat|bere|beanie|cap\b/i },
   { type: "atkı", re: /atkı|atki|scarf/i },
 ];
-
-/** Garments / shoes / cufflink noise that must never fill an accessory result. */
-const NON_ACCESSORY_TITLE_RE =
-  /yelek|vest|ceket|jacket|blazer|kaban|coat|trenç|trench|tişört|t[- ]?shirt|gömlek|hoodie|sweatshirt|kazak|sweater|hırka|cardigan|pantolon|jeans|chino|şort|shorts|etek|skirt|elbise|dress|ayakkabı|sneaker|bot|loafer|sandal|kol\s*düğme|kol\s*dugme|cuff\s*link|cufflink/i;
 
 /** Extra deny when searching watches specifically. */
 const WATCH_DENY_TITLE_RE =
@@ -104,10 +107,7 @@ type LlmSlotPayload = {
 };
 
 function detectAccessoryType(text: string): string | null {
-  for (const kind of ACCESSORY_KINDS) {
-    if (kind.re.test(text)) return kind.type;
-  }
-  return null;
+  return detectAccessoryKind(text);
 }
 
 async function openAIContent(apiKey: string, body: unknown): Promise<string> {
@@ -183,7 +183,9 @@ Rules:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
 - shoes: tip (sneaker/bot/loafer/topuklu) + renk — NEVER write generic "ayakkabı" alone
-- accessory: concrete type only (kemer/çanta/saat/gözlük/şapka…)
+- accessory: concrete type only (kemer/çanta/saat/gözlük/şapka/kolye/küpe…)
+  - NEVER write generic "aksesuar"
+  - NEVER write garment words (elbise, tişört, pantolon, gömlek, yelek, ayakkabı, abiye)
   - saat: include kayış (deri/metal/silikon) + renk
   - gözlük: include çerçeve şekli (yuvarlak/kare/aviator) + renk
 - Color may complement the source piece, but garment TYPE must follow the occasion rules above.
@@ -199,29 +201,33 @@ Rules:
   - Match metal/color to the source piece when suggesting jewelry.${accessoryField}`;
 }
 
-function normalizeAccessorySuggestion(raw: CombineSlotSuggestion): CombineSlotSuggestion | null {
+function normalizeAccessorySuggestion(
+  raw: CombineSlotSuggestion,
+  context: AnalysisContext
+): CombineSlotSuggestion | null {
   if (raw.slot !== "accessory") return raw;
 
+  const fallbackType = defaultAccessoryKind(context);
   const blob = `${raw.accessoryType || ""} ${raw.styleDescriptor} ${raw.searchQuery}`;
-  if (NON_ACCESSORY_TITLE_RE.test(blob) && !detectAccessoryType(blob)) {
-    return null;
-  }
+  const clothingLeak = titleLooksLikeGarment(blob) && !detectAccessoryType(blob);
 
   const type =
     (typeof raw.accessoryType === "string" && detectAccessoryType(raw.accessoryType)) ||
     detectAccessoryType(raw.searchQuery) ||
-    detectAccessoryType(raw.styleDescriptor);
+    detectAccessoryType(raw.styleDescriptor) ||
+    fallbackType;
 
-  if (!type) return null;
-
-  // Force descriptor + query to stay on the same accessory type
   let styleDescriptor = raw.styleDescriptor;
   let searchQuery = raw.searchQuery;
-  if (!detectAccessoryType(styleDescriptor)) {
+  if (clothingLeak || !detectAccessoryType(styleDescriptor)) {
     styleDescriptor = `${raw.color || ""} ${type}`.trim();
   }
-  if (!detectAccessoryType(searchQuery)) {
+  if (clothingLeak || !detectAccessoryType(searchQuery)) {
     searchQuery = `${raw.color || ""} ${type}`.trim();
+  }
+  searchQuery = sanitizeAccessoryQuery(searchQuery, type);
+  if (!detectAccessoryType(styleDescriptor)) {
+    styleDescriptor = `${raw.color || ""} ${type}`.trim();
   }
   // Reject if descriptor names a different accessory than query
   const typeFromDesc = detectAccessoryType(styleDescriptor);
@@ -240,7 +246,8 @@ function normalizeAccessorySuggestion(raw: CombineSlotSuggestion): CombineSlotSu
 
 function parseCombineSuggestions(
   content: string,
-  expectedSlots: readonly CombineOutfitSlot[]
+  expectedSlots: readonly CombineOutfitSlot[],
+  context: AnalysisContext
 ): CombineSlotSuggestion[] | null {
   let parsed: { slots?: Record<string, LlmSlotPayload> };
   try {
@@ -265,13 +272,16 @@ function parseCombineSuggestions(
       typeof raw.accessoryType === "string" ? raw.accessoryType.trim() : undefined;
     if (!searchQuery || searchQuery.length < 3) return null;
 
-    const suggestion = normalizeAccessorySuggestion({
-      slot,
-      color: truncateForPrompt(color, 40),
-      styleDescriptor: truncateForPrompt(styleDescriptor, 80),
-      searchQuery: truncateForPrompt(searchQuery, 120),
-      accessoryType,
-    });
+    const suggestion = normalizeAccessorySuggestion(
+      {
+        slot,
+        color: truncateForPrompt(color, 40),
+        styleDescriptor: truncateForPrompt(styleDescriptor, 80),
+        searchQuery: truncateForPrompt(searchQuery, 120),
+        accessoryType,
+      },
+      context
+    );
     if (!suggestion) return null;
     out.push(suggestion);
   }
@@ -298,12 +308,12 @@ async function generateSlotSuggestions(
   };
 
   const first = await openAIContent(openaiKey, body);
-  const parsed = parseCombineSuggestions(first, slots);
+  const parsed = parseCombineSuggestions(first, slots, context);
   if (parsed) return parsed;
 
   // Reject once and retry
   const second = await openAIContent(openaiKey, body);
-  const retried = parseCombineSuggestions(second, slots);
+  const retried = parseCombineSuggestions(second, slots, context);
   if (retried) return retried;
 
   throw new Error("Kombin önerisi oluşturulamadı. Lütfen tekrar dene.");
@@ -360,9 +370,11 @@ function buildSlotProductProfile(
       ? inferShoeSubcategory(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, input.context)
       : { subcategory: "", subcategory_tr: "" };
   const accessoryType =
-    suggestion.accessoryType || detectAccessoryType(suggestion.searchQuery) || undefined;
+    suggestion.accessoryType ||
+    detectAccessoryType(suggestion.searchQuery) ||
+    defaultAccessoryKind(input.context);
   const categoryTr = isAccessory
-    ? accessoryType || COMBINE_SLOT_CATEGORY_TR.accessory
+    ? accessoryType
     : shoe.subcategory_tr || COMBINE_SLOT_CATEGORY_TR[suggestion.slot];
   const genderFromUser = input.userProfile.gender || null;
   const genderFromPiece = input.attributes.gender || "";
@@ -371,8 +383,16 @@ function buildSlotProductProfile(
   // Keep fit_tr short — full styleDescriptor polluted accessory searches (kolye → yelek).
   const fitTr = isAccessory ? "" : truncateForPrompt(suggestion.styleDescriptor, 40);
 
-  const search_query = withOccasionSearchPhrase(suggestion.searchQuery, CONTEXT_TO_OCCASION[input.context]);
-  const fallback_query = [gTr, color, categoryTr].filter(Boolean).join(" ").trim();
+  const search_query = withOccasionSearchPhrase(
+    isAccessory
+      ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
+      : suggestion.searchQuery,
+    CONTEXT_TO_OCCASION[input.context],
+    { forAccessory: isAccessory }
+  );
+  const fallback_query = isAccessory
+    ? [gTr, color, accessoryType].filter(Boolean).join(" ").trim()
+    : [gTr, color, categoryTr].filter(Boolean).join(" ").trim();
   const distinctive_details = isAccessory
     ? accessoryDetailsFromText(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, accessoryType)
     : [];
@@ -381,7 +401,7 @@ function buildSlotProductProfile(
     photo_url: input.photoUrl,
     user_id: input.userId,
     user_profile: input.userProfile,
-    category: isAccessory ? accessoryType || "accessory" : suggestion.slot === "shoes" ? "shoes" : suggestion.slot,
+    category: isAccessory ? "accessory" : suggestion.slot === "shoes" ? "shoes" : suggestion.slot,
     category_tr: categoryTr,
     color_tr: color,
     colors: color ? [color] : [],
@@ -397,8 +417,8 @@ function buildSlotProductProfile(
     gender_tr: gTr,
     search_query,
     fallback_query,
-    subcategory: isAccessory ? accessoryType || "" : shoe.subcategory,
-    subcategory_tr: isAccessory ? accessoryType || categoryTr : shoe.subcategory_tr,
+    subcategory: isAccessory ? accessoryType : shoe.subcategory,
+    subcategory_tr: isAccessory ? accessoryType : shoe.subcategory_tr,
     secondary_colors: [],
     length: "",
     length_tr: "",
@@ -425,7 +445,10 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
 
   let suggestions: CombineSlotSuggestion[];
   if (input.reuseSuggestion && input.onlySlot) {
-    const normalized = normalizeAccessorySuggestion(input.reuseSuggestion);
+    const normalized = normalizeAccessorySuggestion(
+      input.reuseSuggestion,
+      input.context
+    );
     suggestions = [normalized || input.reuseSuggestion];
   } else {
     suggestions = await generateSlotSuggestions(
@@ -461,13 +484,10 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         {
           immersiveMode: input.onlySlot ? "none" : "recommended",
           mustFind: true,
-          denyTitlePattern: isWatchSlot
-            ? new RegExp(
-                `(?:${NON_ACCESSORY_TITLE_RE.source})|(?:${WATCH_DENY_TITLE_RE.source})`,
-                "i"
-              )
+          denyTitle: isWatchSlot
+            ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)
             : suggestion.slot === "accessory"
-              ? NON_ACCESSORY_TITLE_RE
+              ? titleLooksLikeGarment
               : undefined,
         }
       );

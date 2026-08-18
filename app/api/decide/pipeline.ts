@@ -14,6 +14,7 @@ import {
   pieceBlobForOccasion,
   withOccasionSearchPhrase,
 } from "@/lib/occasion-guide";
+import type { AnalysisContext } from "@/lib/combine-rules";
 
 export { getOccasionKeyword } from "@/lib/occasion-guide";
 
@@ -117,6 +118,137 @@ export function normalizeProductTitle(title: string): string {
     .trim();
 }
 
+const PRODUCT_FAMILY_COLOR_TOKENS = new Set([
+  "siyah",
+  "beyaz",
+  "kırmızı",
+  "kirmizi",
+  "mavi",
+  "yeşil",
+  "yesil",
+  "sarı",
+  "sari",
+  "pembe",
+  "turuncu",
+  "mor",
+  "kahverengi",
+  "gri",
+  "lacivert",
+  "bej",
+  "bordo",
+  "krem",
+  "altın",
+  "altin",
+  "gümüş",
+  "gumus",
+  "turkuaz",
+  "haki",
+  "hardal",
+  "kiremit",
+  "fuşya",
+  "fusya",
+  "camel",
+  "navy",
+  "black",
+  "white",
+  "red",
+  "blue",
+  "green",
+  "yellow",
+  "pink",
+  "orange",
+  "purple",
+  "brown",
+  "grey",
+  "gray",
+  "beige",
+  "burgundy",
+  "cream",
+  "gold",
+  "silver",
+  "khaki",
+  "ecru",
+  "ekru",
+  "nude",
+  "antrasit",
+  "füme",
+  "fume",
+  "mint",
+  "lavanta",
+  "lavender",
+  "coral",
+  "mercan",
+  "olive",
+  "indigo",
+  "mustard",
+  "rust",
+  "tan",
+  "rose",
+  "magenta",
+  "violet",
+  "teal",
+  "cyan",
+  "lime",
+  "maroon",
+  "offwhite",
+  "şampanya",
+  "sampanya",
+  "vizon",
+  "taupe",
+  "petrol",
+  "ivory",
+  "fildişi",
+  "fildisi",
+  "renkli",
+  "çokrenkli",
+  "cokrenkli",
+  "multicolor",
+  "pastel",
+  "açık",
+  "acik",
+  "koyu",
+  "light",
+  "dark",
+  "renk",
+  "rengi",
+  "tonu",
+  "color",
+  "colour",
+]);
+
+const PRODUCT_FAMILY_SIZE_TOKENS = new Set([
+  "xs",
+  "s",
+  "m",
+  "l",
+  "xl",
+  "xxl",
+  "xxxl",
+  "2xl",
+  "3xl",
+  "beden",
+  "numara",
+  "std",
+  "standart",
+]);
+
+function familyKeyUsable(fam: string): boolean {
+  return fam.split(/\s+/).filter((w) => w.length >= 2).length >= 2;
+}
+
+/** Same listing in different colors/sizes collapses to one family key. */
+export function productFamilyKey(title: string): string {
+  const n = normalizeProductTitle(title);
+  const parts = n.split(/\s+/).filter((w) => {
+    if (w.length <= 1) return false;
+    if (PRODUCT_FAMILY_COLOR_TOKENS.has(w)) return false;
+    if (PRODUCT_FAMILY_SIZE_TOKENS.has(w)) return false;
+    if (/^\d+$/.test(w)) return false;
+    return true;
+  });
+  return parts.join(" ");
+}
+
 export function productIdentityKey(p: {
   title?: string;
   product_id?: string | null;
@@ -128,15 +260,178 @@ export function productIdentityKey(p: {
   return `t:${normalizeProductTitle(p.title || "")}`;
 }
 
+type ProductKeySource = {
+  title?: string;
+  product_id?: string | null;
+  image?: string;
+};
+
+export function productDedupeKeys(p: ProductKeySource): string[] {
+  const keys = [productIdentityKey(p)];
+  const fam = productFamilyKey(p.title || "");
+  if (familyKeyUsable(fam)) keys.push(`fam:${fam}`);
+  return keys;
+}
+
+export function hasProductOverlap(p: ProductKeySource, used: Set<string>): boolean {
+  return productDedupeKeys(p).some((k) => used.has(k));
+}
+
+export function rememberProduct(p: ProductKeySource, used: Set<string>): void {
+  for (const k of productDedupeKeys(p)) used.add(k);
+}
+
 export function titleIsExcluded(title: string, exclude: Set<string>): boolean {
   if (!title || exclude.size === 0) return false;
   if (exclude.has(title)) return true;
   const n = normalizeProductTitle(title);
   if (!n) return false;
+  const fam = productFamilyKey(title);
+  const famOk = familyKeyUsable(fam);
   for (const e of exclude) {
     if (normalizeProductTitle(e) === n) return true;
+    if (famOk && familyKeyUsable(productFamilyKey(e)) && productFamilyKey(e) === fam) {
+      return true;
+    }
   }
   return false;
+}
+
+const GARMENT_TITLE_TOKENS = [
+  "elbise",
+  "dress",
+  "jumpsuit",
+  "tulum",
+  "bluz",
+  "blouse",
+  "tişört",
+  "tisort",
+  "t-shirt",
+  "tshirt",
+  "gömlek",
+  "gomlek",
+  "hoodie",
+  "sweatshirt",
+  "kazak",
+  "hırka",
+  "hirka",
+  "cardigan",
+  "triko",
+  "sweater",
+  "pantolon",
+  "jeans",
+  "jean",
+  "chino",
+  "eşofman",
+  "esofman",
+  "jogger",
+  "sweatpants",
+  "şort",
+  "shorts",
+  "etek",
+  "skirt",
+  "ceket",
+  "jacket",
+  "blazer",
+  "kaban",
+  "yelek",
+  "vest",
+  "palto",
+  "trenç",
+  "trench",
+  "trençkot",
+  "trenckot",
+  "ayakkabı",
+  "ayakkabi",
+  "sneaker",
+  "sneakers",
+  "loafer",
+  "sandal",
+  "sandalet",
+  "topuklu",
+  "stiletto",
+  "crop top",
+  "croptop",
+  "tayt",
+  "leggings",
+  "mayo",
+  "bikini",
+  "palazzo",
+  "pijama",
+  "terlik",
+  "bodysuit",
+];
+
+function titleHasWholeToken(title: string, token: string): boolean {
+  const t = (title || "").toLocaleLowerCase("tr-TR");
+  const w = token.toLocaleLowerCase("tr-TR");
+  if (!t || !w) return false;
+  if (w.includes(" ")) return t.includes(w);
+  const re = new RegExp(`(^|[^a-z0-9çğıöşü])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9çğıöşü]|$)`, "i");
+  return re.test(t);
+}
+
+/** Clothing/shoes that must never fill an accessory result. */
+export function titleLooksLikeGarment(title: string): boolean {
+  return GARMENT_TITLE_TOKENS.some((tok) => titleHasWholeToken(title, tok));
+}
+
+export const ACCESSORY_KIND_NEEDLES: { type: string; re: RegExp }[] = [
+  { type: "kolye", re: /kolye|necklace|pendant/i },
+  { type: "küpe", re: /küpe|kupe|earring/i },
+  { type: "bileklik", re: /bileklik|bracelet/i },
+  { type: "yüzük", re: /yüzük|yuzuk|ring\b/i },
+  { type: "kemer", re: /kemer|belt/i },
+  { type: "çanta", re: /çanta|canta|bag|clutch|tote|backpack|sırt/i },
+  { type: "saat", re: /saat|watch/i },
+  { type: "gözlük", re: /gözlük|gozluk|glasses|sunglasses|eyewear/i },
+  { type: "şapka", re: /şapka|sapka|hat|bere|beanie|cap\b/i },
+  { type: "atkı", re: /atkı|atki|scarf/i },
+];
+
+export function detectAccessoryKind(text: string): string | null {
+  for (const kind of ACCESSORY_KIND_NEEDLES) {
+    if (kind.re.test(text)) return kind.type;
+  }
+  return null;
+}
+
+export function defaultAccessoryKind(context: AnalysisContext | Occasion | null | undefined): string {
+  if (context === "sport" || context === "spor") return "şapka";
+  if (context === "evening" || context === "aksam") return "küpe";
+  if (context === "work" || context === "is") return "kemer";
+  if (context === "home" || context === "ev") return "atkı";
+  return "çanta";
+}
+
+const ACCESSORY_FAMILIES = new Set(["accessory", "bag", "hat", "eyewear"]);
+
+export function isAccessoryProfile(profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr">): boolean {
+  const family = (profile.category || "").toLowerCase();
+  if (ACCESSORY_FAMILIES.has(family)) return true;
+  const blob = `${profile.category} ${profile.category_tr} ${profile.subcategory} ${profile.subcategory_tr}`.toLowerCase();
+  return /aksesuar|kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|çanta|şapka|kemer|saat|gözlük|glasses|sunglasses|atkı|scarf|watch|belt/.test(
+    blob
+  );
+}
+
+export function sanitizeAccessoryQuery(query: string, accessoryType: string): string {
+  const type = (accessoryType || "").trim();
+  let q = (query || "").trim();
+  for (const tok of GARMENT_TITLE_TOKENS) {
+    if (tok.length < 4 && !tok.includes(" ")) continue;
+    const re = tok.includes(" ")
+      ? new RegExp(tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")
+      : new RegExp(`(^|[^a-z0-9çğıöşü])${tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9çğıöşü]|$)`, "gi");
+    q = q.replace(re, tok.includes(" ") ? " " : "$1 $2");
+  }
+  q = q.replace(/(^|[^a-z0-9çğıöşü])aksesuar([^a-z0-9çğıöşü]|$)/gi, `$1${type || ""}$2`);
+  q = q.replace(/(^|[^a-z0-9çğıöşü])abiye([^a-z0-9çğıöşü]|$)/gi, "$1$2");
+  q = q.replace(/\s+/g, " ").trim();
+  if (type && !q.toLocaleLowerCase("tr-TR").includes(type.toLocaleLowerCase("tr-TR"))) {
+    q = `${q} ${type}`.trim();
+  }
+  return q || type;
 }
 
 interface SerpShoppingItem {
@@ -588,6 +883,9 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     return true;
   }
 
+  // Accessory searches must never surface garments — not even when requireType is relaxed.
+  if (isAccessoryProfile(profile) && titleLooksLikeGarment(title)) return true;
+
   return false;
 }
 
@@ -745,35 +1043,19 @@ export function contradictsCategoryFit(
   }
   if (/çanta|bag|handbag|backpack/.test(blob)) {
     if (requireType && !/\b(çanta|bag|handbag|backpack|sırt çantası|clutch|tote)\b/.test(t)) return true;
-    if (
-      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|etek|hoodie|sweatshirt|kazak|şort|ceket|crop)\b/.test(
-        t
-      )
-    ) {
-      return true;
-    }
+    if (titleLooksLikeGarment(title)) return true;
     return false;
   }
 
   if (/şapka|hat|cap|beanie|bere/.test(blob)) {
     if (requireType && !/\b(şapka|hat|cap|beanie|bere|bucket)\b/.test(t)) return true;
-    if (
-      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|etek|hoodie|sweatshirt|çanta|kemer)\b/.test(
-        t
-      )
-    ) {
-      return true;
-    }
+    if (titleLooksLikeGarment(title)) return true;
     return false;
   }
 
   if (/kemer|belt/.test(blob)) {
     if (requireType && !/\b(kemer|belt)\b/.test(t)) return true;
-    if (
-      /\b(tişört|t-?shirt|gömlek|pantolon|gözlük|ayakkabı|elbise|hoodie|çanta|şapka)\b/.test(t)
-    ) {
-      return true;
-    }
+    if (titleLooksLikeGarment(title)) return true;
     return false;
   }
 
@@ -815,6 +1097,24 @@ export function contradictsCategoryFit(
   if (/elbise|dress/.test(blob)) {
     if (requireType && !/\b(elbise|dress)\b/.test(t)) return true;
     if (/\b(tişört|pantolon|gözlük|erkek pantolon)\b/.test(t)) return true;
+  }
+
+  // Jewelry / scarf / generic accessory — require a real accessory token, never a garment.
+  if (
+    /kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|atkı|scarf|aksesuar|accessory/.test(blob) &&
+    !/çanta|şapka|kemer|saat|gözlük|bag|hat|belt|watch|glasses/.test(blob)
+  ) {
+    if (titleLooksLikeGarment(title)) return true;
+    const kind =
+      detectAccessoryKind(`${cat} ${catTr} ${sub} ${profile.search_query || ""}`) ||
+      detectAccessoryKind(blob);
+    if (kind) {
+      const needle = ACCESSORY_KIND_NEEDLES.find((k) => k.type === kind);
+      if (needle && !needle.re.test(t)) return true;
+    } else if (!ACCESSORY_KIND_NEEDLES.some((k) => k.re.test(t))) {
+      return true;
+    }
+    return false;
   }
 
   return false;
@@ -1038,8 +1338,18 @@ export function buildShortReason(
 }
 
 /** Type token: subcategory if present, else category. Empty → low confidence. */
-export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "category_tr">): string {
-  return (profile.subcategory_tr || profile.category_tr || "").trim();
+export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "category_tr" | "category" | "subcategory" | "search_query" | "user_profile">): string {
+  const sub = (profile.subcategory_tr || "").trim();
+  if (sub && !/^aksesuar$/i.test(sub)) return sub;
+  const cat = (profile.category_tr || "").trim();
+  if (/^aksesuar$/i.test(cat) || (profile.category || "").toLowerCase() === "accessory") {
+    const detected =
+      detectAccessoryKind(
+        `${profile.subcategory || ""} ${profile.subcategory_tr || ""} ${profile.search_query || ""}`
+      ) || defaultAccessoryKind(parseOccasion(profile.user_profile?.occasion));
+    return detected;
+  }
+  return cat;
 }
 
 function uniqueJoin(parts: Array<string | undefined>): string {
@@ -1291,6 +1601,15 @@ const subcategoryTR: Record<string, string> = {
   watch: "saat",
   belt: "kemer",
   scarf: "atkı",
+  necklace: "kolye",
+  earring: "küpe",
+  earrings: "küpe",
+  bracelet: "bileklik",
+  ring: "yüzük",
+  kolye: "kolye",
+  küpe: "küpe",
+  bileklik: "bileklik",
+  yüzük: "yüzük",
 };
 
 const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
@@ -1330,6 +1649,15 @@ const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
   watch: "accessory",
   belt: "accessory",
   scarf: "accessory",
+  necklace: "accessory",
+  earring: "accessory",
+  earrings: "accessory",
+  bracelet: "accessory",
+  ring: "accessory",
+  kolye: "accessory",
+  küpe: "accessory",
+  bileklik: "accessory",
+  yüzük: "accessory",
 };
 
 const lengthTR: Record<string, string> = {
@@ -1667,7 +1995,8 @@ function pieceFamilyKey(category: string, categoryTr: string, subcategory = ""):
   if (/çanta|bag|backpack/.test(blob)) return "bag";
   if (/şapka|hat|bere|beanie|cap/.test(blob)) return "hat";
   if (/saat|watch/.test(blob)) return "watch";
-  if (/kemer|belt|atkı|scarf/.test(blob)) return "accessory";
+  if (/kolye|küpe|bileklik|yüzük|necklace|earring|bracelet/.test(blob)) return "jewelry";
+  if (/kemer|belt|atkı|scarf|aksesuar|accessory/.test(blob)) return "accessory";
   return blob.trim() || "other";
 }
 
@@ -1825,9 +2154,10 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
   const colorCore = uniqueJoin([core, rebuilt.color_tr]);
 
   const occasion = parseOccasion(rebuilt.user_profile?.occasion);
-  const occasionCore = withOccasionSearchPhrase(core, occasion);
-  const occasionStrong = withOccasionSearchPhrase(strong, occasion);
-  const occasionFull = withOccasionSearchPhrase(full, occasion);
+  const accessorySearch = isAccessoryProfile(rebuilt);
+  const occasionCore = withOccasionSearchPhrase(core, occasion, { forAccessory: accessorySearch });
+  const occasionStrong = withOccasionSearchPhrase(strong, occasion, { forAccessory: accessorySearch });
+  const occasionFull = withOccasionSearchPhrase(full, occasion, { forAccessory: accessorySearch });
 
   const sizeQuery = firstSize
     ? uniqueJoin([occasionFull || occasionStrong || full || strong, firstSize])
@@ -1836,7 +2166,9 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
   // Combine (and similar) stores a stylist query in search_query — it must be
   // searched, not only the reconstructed core ("kadın siyah ayakkabı").
   const storedQuery = (rebuilt.search_query || "").trim().replace(/\s+/g, " ");
-  const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion);
+  const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion, {
+    forAccessory: accessorySearch,
+  });
 
   const base = [
     storedWithOccasion,
@@ -1898,6 +2230,20 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
     seen.add(q);
     return true;
   });
+
+  if (accessorySearch) {
+    const accessoryType = typeLc;
+    const clean = (q: string) => sanitizeAccessoryQuery(q, accessoryType);
+    const accSeen = new Set<string>();
+    const accQueries = queries.map(clean).filter((q) => {
+      const key = q.toLocaleLowerCase("tr-TR");
+      if (!q || accSeen.has(key)) return false;
+      accSeen.add(key);
+      return true;
+    });
+    const brandClean = new Set(queries.filter((q) => brandSet.has(q)).map(clean));
+    return { queries: accQueries, brandQueries: accQueries.filter((q) => brandClean.has(q)) };
+  }
 
   return { queries, brandQueries: queries.filter((q) => brandSet.has(q)) };
 }
@@ -2212,15 +2558,15 @@ function pickCheaperProduct(
   );
   if (otherPrices.length === 0) return null;
 
-  const blocked = new Set(
-    [productIdentityKey(recommended), style ? productIdentityKey(style) : ""].filter(Boolean)
-  );
+  const blocked = new Set<string>();
+  rememberProduct(recommended, blocked);
+  if (style) rememberProduct(style, blocked);
 
   const candidates = pool
     .filter(
       (p) =>
         p.priceValue > 0 &&
-        !blocked.has(productIdentityKey(p)) &&
+        !hasProductOverlap(p, blocked) &&
         otherPrices.every((price) => p.priceValue <= price)
     )
     .sort((a, b) => a.priceValue - b.priceValue);
@@ -2249,11 +2595,10 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
   const topPool: ScoredProduct[] = [];
   const tryPush = (p: ScoredProduct, requireNewStore: boolean) => {
     if (topPool.length >= 3) return;
-    const key = productIdentityKey(p);
-    if (!key || usedKeys.has(key)) return;
+    if (hasProductOverlap(p, usedKeys)) return;
     if (requireNewStore && usedStores.has(p.store)) return;
     topPool.push(p);
-    usedKeys.add(key);
+    rememberProduct(p, usedKeys);
     usedStores.add(p.store);
   };
   for (const p of scoredProducts) tryPush(p, true);
@@ -2385,9 +2730,8 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
   const used = new Set<string>();
   const take = (p: ScoredProduct | null | undefined): ScoredProduct | null => {
     if (!p) return null;
-    const key = productIdentityKey(p);
-    if (!key || used.has(key)) return null;
-    used.add(key);
+    if (hasProductOverlap(p, used)) return null;
+    rememberProduct(p, used);
     return p;
   };
 
@@ -2424,16 +2768,13 @@ export function replaceOutOfStockSlots(
   slots: { slot: Slot; product: ScoredProduct }[],
   immersiveResponses: (ImmersiveResponse | null)[]
 ): { slot: Slot; product: ScoredProduct }[] {
-  const used = new Set(slots.map((s) => productIdentityKey(s.product)));
+  const used = new Set<string>();
+  for (const s of slots) rememberProduct(s.product, used);
   return slots.map((entry, i) => {
     if (!isClearlyOutOfStock(immersiveResponses[i])) return entry;
-    const replacement = scoring.pool.find((p) => {
-      const key = productIdentityKey(p);
-      return Boolean(key) && !used.has(key);
-    });
+    const replacement = scoring.pool.find((p) => !hasProductOverlap(p, used));
     if (!replacement) return entry;
-    used.add(productIdentityKey(replacement));
-    used.delete(productIdentityKey(entry.product));
+    rememberProduct(replacement, used);
     return { slot: entry.slot, product: replacement };
   });
 }

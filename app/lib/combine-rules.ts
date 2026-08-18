@@ -85,7 +85,11 @@ export function resolveCombinePieceCategory(
   const blob = `${category ?? ""} ${categoryTr ?? ""} ${label ?? ""}`.toLowerCase();
   if (!blob.trim()) return null;
 
-  if (/gözlük|glasses|sunglasses|eyewear|saat|watch|şapka|hat|bere|beanie|cap|çanta|bag|backpack|kemer|belt|atkı|scarf|cüzdan|wallet/.test(blob)) {
+  if (
+    /gözlük|glasses|sunglasses|eyewear|saat|watch|şapka|hat|bere|beanie|cap|çanta|bag|backpack|kemer|belt|atkı|scarf|cüzdan|wallet|kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|aksesuar|accessory/.test(
+      blob
+    )
+  ) {
     return "accessory";
   }
   if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
