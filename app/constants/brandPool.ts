@@ -4,6 +4,8 @@
  * designer is a luxury subset, not a separate tier.
  */
 
+import { asLower, asText } from "@/lib/text";
+
 export type BrandTier = "affordable" | "luxury";
 
 export type BrandPoolCategory =
@@ -476,9 +478,8 @@ export const APPROVED_AFFORDABLE_BRANDS = [
   "trendyolmilla",
 ];
 
-export function normalizeBrandName(name: string): string {
-  return name
-    .toLocaleLowerCase("tr-TR")
+export function normalizeBrandName(name: unknown): string {
+  return asLower(name)
     .replace(/&/g, "and")
     .replace(/['’.]/g, "")
     .replace(/\s+/g, " ")
@@ -492,6 +493,7 @@ function blobOf(profile: {
   subcategory_tr?: string;
 }): string {
   return [profile.subcategory, profile.subcategory_tr, profile.category, profile.category_tr]
+    .map(asText)
     .join(" ")
     .toLowerCase();
 }
@@ -501,9 +503,9 @@ export function isCropCasualSubcategory(profile: {
   subcategory_tr?: string;
   category_tr?: string;
 }): boolean {
-  const sub = (profile.subcategory || "").toLowerCase();
+  const sub = asLower(profile.subcategory);
   if (CROP_SUBCATEGORIES.includes(sub)) return true;
-  const blob = `${profile.subcategory || ""} ${profile.subcategory_tr || ""} ${profile.category_tr || ""}`.toLowerCase();
+  const blob = `${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.category_tr)}`.toLowerCase();
   return /crop|askılı|askili|bralet|büstiyer|bustiyer/.test(blob);
 }
 
@@ -676,14 +678,14 @@ export function allPoolBrandNames(opts?: { tier?: BrandTier; includeDesigner?: b
   return out;
 }
 
-export function textHasPoolBrand(text: string, brands?: string[]): boolean {
-  const t = (text || "").toLocaleLowerCase("tr-TR");
+export function textHasPoolBrand(text: unknown, brands?: string[]): boolean {
+  const t = asLower(text);
   if (!t) return false;
   const list = brands || allPoolBrandNames();
   return list.some((b) => {
     const name = normalizeBrandName(b);
     if (name.length < 3) return false;
-    return t.includes(name) || t.includes(b.toLowerCase());
+    return t.includes(name) || t.includes(asLower(b));
   });
 }
 

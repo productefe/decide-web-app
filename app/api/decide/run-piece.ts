@@ -17,6 +17,7 @@ import {
 } from "./pipeline";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
+import { asLower } from "@/lib/text";
 import { occasionTitleFit, pieceBlobForOccasion } from "@/lib/occasion-guide";
 import { allPoolBrandNames, normalizeBrandName } from "@/constants/brandPool";
 
@@ -334,8 +335,7 @@ export async function processPiece(
 
   const occasion = parseOccasion(productProfile.user_profile?.occasion);
   const pieceBlob = pieceBlobForOccasion(productProfile);
-  const occasionWords = occasionKeyword
-    .toLowerCase()
+  const occasionWords = asLower(occasionKeyword)
     .split(/\s+/)
     .filter((w) => w.length > 2);
   const blockedStyle = new Set<string>();
@@ -352,7 +352,7 @@ export async function processPiece(
     (occasionWords.length
       ? scoring.pool.find(
           (p) =>
-            isFreeStyle(p) && occasionWords.some((w) => p.title.toLowerCase().includes(w))
+            isFreeStyle(p) && occasionWords.some((w) => asLower(p.title).includes(w))
         )
       : null) ||
     pickTrustedFallback(scoring.pool, usedTitles);

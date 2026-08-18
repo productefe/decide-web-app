@@ -4,6 +4,7 @@
  */
 
 import { parseOccasion } from "@/lib/preferences";
+import { asLower, asText } from "@/lib/text";
 
 export const COMBINE_OUTFIT_SLOTS = ["top", "bottom", "shoes", "outerwear", "accessory"] as const;
 export type CombineOutfitSlot = (typeof COMBINE_OUTFIT_SLOTS)[number];
@@ -82,7 +83,7 @@ export function resolveCombinePieceCategory(
   categoryTr: string | null | undefined,
   label?: string | null
 ): CombinePieceCategory | null {
-  const blob = `${category ?? ""} ${categoryTr ?? ""} ${label ?? ""}`.toLowerCase();
+  const blob = `${asText(category)} ${asText(categoryTr)} ${asText(label)}`.toLowerCase();
   if (!blob.trim()) return null;
 
   if (
@@ -125,7 +126,7 @@ export function parseAnalysisContext(raw: unknown): AnalysisContext | null {
     return raw;
   }
   if (typeof raw === "string") {
-    const v = raw.trim().toLocaleLowerCase("tr-TR");
+    const v = asLower(raw).trim();
     if (v === "sport" || v === "casual" || v === "evening" || v === "home" || v === "work") {
       return v;
     }

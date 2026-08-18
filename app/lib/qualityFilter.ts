@@ -1,4 +1,5 @@
 import type { PriceMode } from "@/lib/preferences";
+import { asLower, asText } from "@/lib/text";
 import {
   APPROVED_AFFORDABLE_BRANDS,
   LUXURY_POOL_BRANDS,
@@ -65,36 +66,36 @@ const GARMENT_FILLER_RE = new RegExp(
   "gi"
 );
 
-function hay(title: string, source: string): string {
-  return `${title || ""} ${source || ""}`.toLocaleLowerCase("tr-TR");
+function hay(title: unknown, source: unknown): string {
+  return `${asText(title)} ${asText(source)}`.toLocaleLowerCase("tr-TR");
 }
 
-function isApprovedCatalogBrand(text: string): boolean {
-  const t = text.toLocaleLowerCase("tr-TR");
+function isApprovedCatalogBrand(text: unknown): boolean {
+  const t = asLower(text);
   return APPROVED_AFFORDABLE_BRANDS.some((b) => t.includes(b));
 }
 
-function looksRandomSeller(source: string): boolean {
-  const s = (source || "").trim();
+function looksRandomSeller(source: unknown): boolean {
+  const s = asText(source).trim();
   if (!s) return false;
   if (/^[A-Z0-9][A-Z0-9 _-]{12,}$/.test(s) && s === s.toUpperCase()) return true;
   if (/^[a-z]{1,4}\d{3,}$/i.test(s.replace(/\s/g, ""))) return true;
   return false;
 }
 
-function keywordPileCount(title: string): number {
-  const t = title.toLocaleLowerCase("tr-TR");
+function keywordPileCount(title: unknown): number {
+  const t = asLower(title);
   const hits = t.match(GARMENT_FILLER_RE) || [];
-  return new Set(hits.map((h) => h.toLocaleLowerCase("tr-TR"))).size;
+  return new Set(hits.map((h) => asLower(h))).size;
 }
 
-function categoryNameCount(title: string): number {
-  const t = title.toLocaleLowerCase("tr-TR");
+function categoryNameCount(title: unknown): number {
+  const t = asLower(title);
   return QUALITY_CONFIG.categoryNameTokens.filter((tok) => t.includes(tok)).length;
 }
 
-function hasReplica(title: string): boolean {
-  const t = title.toLocaleLowerCase("tr-TR");
+function hasReplica(title: unknown): boolean {
+  const t = asLower(title);
   return QUALITY_CONFIG.replicaTokens.some((tok) => t.includes(tok));
 }
 
@@ -106,8 +107,8 @@ const POOL_NAMES_LC = allPoolBrandNames()
  * Knockoff signature: "<brand> model / tarzı / stili" in the title means the
  * item merely imitates the brand ("Weppa Bershka Model Crop") — hard reject.
  */
-function isBrandKnockoffTitle(title: string): boolean {
-  const t = title.toLocaleLowerCase("tr-TR");
+function isBrandKnockoffTitle(title: unknown): boolean {
+  const t = asLower(title);
   return POOL_NAMES_LC.some(
     (b) => t.includes(`${b} model`) || t.includes(`${b} tarz`) || t.includes(`${b} stil`)
   );

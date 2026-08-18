@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { asText } from "@/lib/text";
 
 export class ApiSecurityError extends Error {
   constructor(
@@ -20,9 +20,10 @@ export function assertOwnStoragePath(userId: string, storagePath: string | undef
   }
 }
 
-export function truncateForPrompt(value: string | undefined, maxLen = 200): string {
-  if (!value) return "";
-  return value.replace(/[\r\n]+/g, " ").trim().slice(0, maxLen);
+export function truncateForPrompt(value: unknown, maxLen = 200): string {
+  const text = asText(value);
+  if (!text) return "";
+  return text.replace(/[\r\n]+/g, " ").trim().slice(0, maxLen);
 }
 
 export async function enforceGuestAnalysisCap(

@@ -15,6 +15,7 @@ import {
   withOccasionSearchPhrase,
 } from "@/lib/occasion-guide";
 import type { AnalysisContext } from "@/lib/combine-rules";
+import { asLower, asStringList, asText } from "@/lib/text";
 
 export { getOccasionKeyword } from "@/lib/occasion-guide";
 
@@ -109,8 +110,8 @@ export interface ScoringResult {
 }
 
 /** Collapse title noise so "Bershka Crop Kadın" and "Bershka Crop" count as one product. */
-export function normalizeProductTitle(title: string): string {
-  return (title || "")
+export function normalizeProductTitle(title: unknown): string {
+  return asText(title)
     .toLocaleLowerCase("tr-TR")
     .replace(/[^a-z0-9çğıöşü\s]/gi, " ")
     .replace(/\b(kadın|kadin|erkek|bayan|unisex|yeni|sezon|orijinal)\b/g, " ")
@@ -362,9 +363,9 @@ const GARMENT_TITLE_TOKENS = [
   "bodysuit",
 ];
 
-function titleHasWholeToken(title: string, token: string): boolean {
-  const t = (title || "").toLocaleLowerCase("tr-TR");
-  const w = token.toLocaleLowerCase("tr-TR");
+function titleHasWholeToken(title: unknown, token: string): boolean {
+  const t = asLower(title);
+  const w = asLower(token);
   if (!t || !w) return false;
   if (w.includes(" ")) return t.includes(w);
   const re = new RegExp(`(^|[^a-z0-9çğıöşü])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9çğıöşü]|$)`, "i");
@@ -372,7 +373,7 @@ function titleHasWholeToken(title: string, token: string): boolean {
 }
 
 /** Clothing/shoes that must never fill an accessory result. */
-export function titleLooksLikeGarment(title: string): boolean {
+export function titleLooksLikeGarment(title: unknown): boolean {
   return GARMENT_TITLE_TOKENS.some((tok) => titleHasWholeToken(title, tok));
 }
 
@@ -389,9 +390,10 @@ export const ACCESSORY_KIND_NEEDLES: { type: string; re: RegExp }[] = [
   { type: "atkı", re: /atkı|atki|scarf/i },
 ];
 
-export function detectAccessoryKind(text: string): string | null {
+export function detectAccessoryKind(text: unknown): string | null {
+  const hay = asText(text);
   for (const kind of ACCESSORY_KIND_NEEDLES) {
-    if (kind.re.test(text)) return kind.type;
+    if (kind.re.test(hay)) return kind.type;
   }
   return null;
 }
@@ -407,17 +409,19 @@ export function defaultAccessoryKind(context: AnalysisContext | Occasion | null 
 const ACCESSORY_FAMILIES = new Set(["accessory", "bag", "hat", "eyewear"]);
 
 export function isAccessoryProfile(profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr">): boolean {
-  const family = (profile.category || "").toLowerCase();
+  const family = asLower(profile.category);
   if (ACCESSORY_FAMILIES.has(family)) return true;
-  const blob = `${profile.category} ${profile.category_tr} ${profile.subcategory} ${profile.subcategory_tr}`.toLowerCase();
+  const blob = asLower(
+    `${asText(profile.category)} ${asText(profile.category_tr)} ${asText(profile.subcategory)} ${asText(profile.subcategory_tr)}`
+  );
   return /aksesuar|kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|çanta|şapka|kemer|saat|gözlük|glasses|sunglasses|atkı|scarf|watch|belt/.test(
     blob
   );
 }
 
-export function sanitizeAccessoryQuery(query: string, accessoryType: string): string {
-  const type = (accessoryType || "").trim();
-  let q = (query || "").trim();
+export function sanitizeAccessoryQuery(query: unknown, accessoryType: unknown): string {
+  const type = asText(accessoryType).trim();
+  let q = asText(query).trim();
   for (const tok of GARMENT_TITLE_TOKENS) {
     if (tok.length < 4 && !tok.includes(" ")) continue;
     const re = tok.includes(" ")
@@ -428,7 +432,7 @@ export function sanitizeAccessoryQuery(query: string, accessoryType: string): st
   q = q.replace(/(^|[^a-z0-9çğıöşü])aksesuar([^a-z0-9çğıöşü]|$)/gi, `$1${type || ""}$2`);
   q = q.replace(/(^|[^a-z0-9çğıöşü])abiye([^a-z0-9çğıöşü]|$)/gi, "$1$2");
   q = q.replace(/\s+/g, " ").trim();
-  if (type && !q.toLocaleLowerCase("tr-TR").includes(type.toLocaleLowerCase("tr-TR"))) {
+  if (type && !asLower(q).includes(asLower(type))) {
     q = `${q} ${type}`.trim();
   }
   return q || type;
@@ -706,8 +710,8 @@ const MASS_MARKET_STORES = [
   "oysho",
 ];
 
-function normalizeStore(source?: string): string {
-  return (source || "").toLowerCase().trim();
+function normalizeStore(source?: unknown): string {
+  return asLower(source).trim();
 }
 
 function storeMatches(source: string | undefined, names: string[]): boolean {
@@ -797,8 +801,8 @@ const FIT_TR: Record<string, string> = {
   "crop top": "crop",
 };
 
-function fitToken(fit: string | undefined): string {
-  const raw = (fit || "").toLowerCase().trim();
+function fitToken(fit: unknown): string {
+  const raw = asLower(fit).trim();
   if (!raw || raw === "none") return "";
   if (raw in FIT_TR) return FIT_TR[raw];
   return raw;
@@ -817,6 +821,7 @@ function profileTypeBlob(profile: ProductProfile): string {
     profile.fit,
     profile.fit_tr,
   ]
+    .map(asText)
     .join(" ")
     .toLowerCase();
 }
@@ -826,10 +831,10 @@ function profileTypeBlob(profile: ProductProfile): string {
  * Subcategory empty → apply at category-family level (top must not match dress).
  */
 export function contradictsAbsoluteType(title: string, profile: ProductProfile): boolean {
-  const t = title.toLowerCase();
+  const t = asLower(title);
   const blob = profileTypeBlob(profile);
-  const family = (profile.category || "").toLowerCase();
-  const familyTr = (profile.category_tr || "").toLowerCase();
+  const family = asLower(profile.category);
+  const familyTr = asLower(profile.category_tr);
 
   const isTopFamily =
     family === "top" ||
@@ -846,7 +851,7 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     if (/\b(elbise|dress|tulum|jumpsuit)\b/.test(t)) return true;
   }
 
-  const length = (profile.length || profile.length_tr || "").toLowerCase();
+  const length = asLower(profile.length || profile.length_tr);
   if (length === "crop" || isCrop) {
     if (/\b(midi|maxi)\b/.test(t)) return true;
     if (/\b(uzun boy|maxi boy|midi boy|uzun üst|uzun bluz|uzun elbise)\b/.test(t)) return true;
@@ -895,11 +900,11 @@ export function contradictsCategoryFit(
   profile: ProductProfile,
   opts: { requireType?: boolean } = { requireType: true }
 ): boolean {
-  const t = title.toLowerCase();
-  const cat = (profile.category || "").toLowerCase();
-  const catTr = (profile.category_tr || "").toLowerCase();
-  const sub = `${profile.subcategory || ""} ${profile.subcategory_tr || ""}`.toLowerCase();
-  const fit = (profile.fit || "").toLowerCase();
+  const t = asLower(title);
+  const cat = asLower(profile.category);
+  const catTr = asLower(profile.category_tr);
+  const sub = asLower(`${asText(profile.subcategory)} ${asText(profile.subcategory_tr)}`);
+  const fit = asLower(profile.fit);
   const blob = `${cat} ${catTr} ${sub}`;
   const requireType = opts.requireType !== false;
 
@@ -908,8 +913,8 @@ export function contradictsCategoryFit(
     cat.includes("crop") ||
     catTr.includes("crop") ||
     sub.includes("crop") ||
-    (profile.length || "").toLowerCase() === "crop" ||
-    (profile.length_tr || "").toLowerCase() === "crop";
+    (asLower(profile.length) === "crop" ||
+    asLower(profile.length_tr) === "crop");
 
   const isOversize = /\b(oversize|oversized)\b/.test(fit) || /\b(oversize|oversized|bol kesim)\b/.test(blob);
 
@@ -929,7 +934,7 @@ export function contradictsCategoryFit(
     ) {
       return true;
     }
-    const details = `${(profile.distinctive_details || []).join(" ")} ${profile.search_query || ""}`.toLowerCase();
+    const details = `${asStringList(profile.distinctive_details).join(" ")} ${asText(profile.search_query)}`.toLowerCase();
     const wantsRound = /\b(yuvarlak|round|oval)\b/.test(details);
     const wantsSquare = /\b(kare|square|dikdörtgen|rectang)\b/.test(details);
     const wantsAviator = /\b(aviator|damla|pilot)\b/.test(details);
@@ -1078,7 +1083,7 @@ export function contradictsCategoryFit(
     ) {
       return true;
     }
-    const details = `${(profile.distinctive_details || []).join(" ")} ${profile.search_query || ""} ${profile.material_tr || ""}`.toLowerCase();
+    const details = `${asStringList(profile.distinctive_details).join(" ")} ${asText(profile.search_query)} ${asText(profile.material_tr)}`.toLowerCase();
     const wantsLeather = /\b(deri|leather|nato)\b/.test(details);
     const wantsMetal = /\b(metal|çelik|celik|hasır|hasir|bracelet)\b/.test(details) && !wantsLeather;
     const wantsSilicone = /\b(silikon|silicone|kauçuk|kaucuk)\b/.test(details);
@@ -1148,8 +1153,8 @@ const MEN_GENDER_TOKENS = [
   "oglan",
 ];
 
-function normalizeTr(text: string): string {
-  return text.toLocaleLowerCase("tr-TR");
+function normalizeTr(text: unknown): string {
+  return asLower(text);
 }
 
 function escapeRegExp(s: string): string {
@@ -1339,26 +1344,26 @@ export function buildShortReason(
 
 /** Type token: subcategory if present, else category. Empty → low confidence. */
 export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "category_tr" | "category" | "subcategory" | "search_query" | "user_profile">): string {
-  const sub = (profile.subcategory_tr || "").trim();
+  const sub = asText(profile.subcategory_tr).trim();
   if (sub && !/^aksesuar$/i.test(sub)) return sub;
-  const cat = (profile.category_tr || "").trim();
-  if (/^aksesuar$/i.test(cat) || (profile.category || "").toLowerCase() === "accessory") {
+  const cat = asText(profile.category_tr).trim();
+  if (/^aksesuar$/i.test(cat) || asLower(profile.category) === "accessory") {
     const detected =
       detectAccessoryKind(
-        `${profile.subcategory || ""} ${profile.subcategory_tr || ""} ${profile.search_query || ""}`
+        `${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)}`
       ) || defaultAccessoryKind(parseOccasion(profile.user_profile?.occasion));
     return detected;
   }
   return cat;
 }
 
-function uniqueJoin(parts: Array<string | undefined>): string {
+function uniqueJoin(parts: Array<unknown>): string {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of parts) {
-    const token = (raw || "").trim();
+    const token = asText(raw).trim();
     if (!token) continue;
-    const key = token.toLocaleLowerCase("tr-TR");
+    const key = asLower(token);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(token);
@@ -1366,9 +1371,10 @@ function uniqueJoin(parts: Array<string | undefined>): string {
   return out.join(" ").replace(/\s+/g, " ").trim();
 }
 
-function strapInCore(strapTr: string): string {
-  if (!strapTr) return "";
-  if (/askı|straplez|kolsuz|halter/.test(strapTr.toLowerCase())) return strapTr;
+function strapInCore(strapTr: unknown): string {
+  const s = asText(strapTr);
+  if (!s) return "";
+  if (/askı|straplez|kolsuz|halter/.test(asLower(s))) return s;
   return "";
 }
 
@@ -1385,8 +1391,8 @@ function patternQueryTokens(profile: ProductProfile): string[] {
   return tokens;
 }
 
-function detailQueryTokens(details: string[]): string[] {
-  return details
+function detailQueryTokens(details: unknown): string[] {
+  return asStringList(details)
     .slice(0, 2)
     .map((d) =>
       d
@@ -1412,8 +1418,8 @@ export function rebuildProfileQueries(profile: ProductProfile): ProductProfile {
   }
 
   const lengthTr =
-    profile.length_tr && !type.toLowerCase().includes(profile.length_tr.toLowerCase())
-      ? profile.length_tr
+    asText(profile.length_tr) && !asLower(type).includes(asLower(profile.length_tr))
+      ? asText(profile.length_tr)
       : "";
   const core = uniqueJoin([
     profile.gender_tr,
@@ -1755,15 +1761,15 @@ const genderTR: Record<string, string> = { men: "erkek", women: "kadın", unisex
 
 const collarTR = necklineTR;
 
-function canonKey(raw: string | undefined): string {
-  return (raw || "")
+function canonKey(raw: unknown): string {
+  return asText(raw)
     .toLowerCase()
     .trim()
     .replace(/_/g, "-")
     .replace(/\s+/g, " ");
 }
 
-function lookupTr(map: Record<string, string>, raw: string | undefined): string {
+function lookupTr(map: Record<string, string>, raw: unknown): string {
   const key = canonKey(raw);
   if (!key || key === "none") return "";
   if (key in map) return map[key];
@@ -1774,10 +1780,10 @@ function lookupTr(map: Record<string, string>, raw: string | undefined): string 
   return "";
 }
 
-function translateColor(raw: string | undefined): string {
+function translateColor(raw: unknown): string {
   const key = canonKey(raw);
   if (!key) return "";
-  return colorTR[key] || raw!.trim();
+  return colorTR[key] || asText(raw).trim();
 }
 
 function translatePattern(raw: string | undefined): string {
@@ -1819,10 +1825,10 @@ function inferFamily(sub: string, cat: string): string {
 }
 
 function splitCategoryFields(
-  rawCategory: string,
-  rawSubcategory: string
+  rawCategory: unknown,
+  rawSubcategory: unknown
 ): { category: string; subcategory: string } {
-  const subCanon = canonicalSubcategory(rawSubcategory);
+  const subCanon = canonicalSubcategory(asText(rawSubcategory));
   const catCanon = canonKey(rawCategory);
 
   if (subCanon) {
@@ -1871,7 +1877,7 @@ function normalizePatterns(product: VisionProduct, hasLogo: boolean): VisionPatt
     return product.patterns
       .map((p) => ({
         type: canonKey(p?.type),
-        colors: Array.isArray(p?.colors) ? p.colors.filter(Boolean) : [],
+        colors: asStringList(p?.colors),
         placement: canonKey(p?.placement),
       }))
       .filter((p) => p.type && p.type !== "plain" && p.type !== "none");
@@ -1889,22 +1895,20 @@ function normalizePatterns(product: VisionProduct, hasLogo: boolean): VisionPatt
 
 function visionProductToProfile(product: VisionProduct, ctx: RequestContext): ProductProfile {
   const { category: family, subcategory } = splitCategoryFields(
-    product.category || "",
-    product.subcategory || ""
+    asText(product.category),
+    asText(product.subcategory)
   );
 
-  const primaryRaw = product.primary_color || (product.colors || [])[0] || "";
-  const secondaryRaw = (
-    product.secondary_colors?.length
-      ? product.secondary_colors
-      : (product.colors || []).slice(1)
-  ).filter(Boolean);
+  const colorList = asStringList(product.colors);
+  const secondaryList = asStringList(product.secondary_colors);
+  const primaryRaw = asText(product.primary_color) || colorList[0] || "";
+  const secondaryRaw = (secondaryList.length ? secondaryList : colorList.slice(1)).filter(Boolean);
 
   const hasLogo = product.has_logo === true;
   const patterns = normalizePatterns(product, hasLogo);
-  const silhouette = product.silhouette_fit || product.fit || "";
-  const neckline = product.neckline || product.collar || "";
-  const genderRaw = product.gender_presentation || product.gender || "";
+  const silhouette = asText(product.silhouette_fit) || asText(product.fit);
+  const neckline = asText(product.neckline) || asText(product.collar);
+  const genderRaw = asText(product.gender_presentation) || asText(product.gender);
 
   const color = translateColor(primaryRaw);
   const secondary_colors = secondaryRaw.map(translateColor).filter(Boolean);
@@ -1929,8 +1933,8 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
       ? "logolu"
       : "";
 
-  const distinctive_details = (product.distinctive_details || [])
-    .map((d) => (typeof d === "string" ? d.trim() : ""))
+  const distinctive_details = asStringList(product.distinctive_details)
+    .map((d) => d.trim())
     .filter(Boolean)
     .slice(0, 5);
 
@@ -1938,7 +1942,7 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     photo_url: ctx.photo_url,
     user_id: ctx.user_id,
     user_profile: ctx.user_profile || {},
-    category: family || product.category || "",
+    category: family || asText(product.category),
     category_tr: typeTr,
     subcategory,
     subcategory_tr,
@@ -1954,14 +1958,14 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     neckline,
     sleeve_or_strap: canonKey(product.sleeve_or_strap),
     sleeve_or_strap_tr,
-    pattern: patterns[0]?.type || product.pattern || "",
+    pattern: patterns[0]?.type || asText(product.pattern),
     pattern_tr: patternWord,
     patterns,
     material_impression: canonKey(product.material_impression),
     material_tr,
     distinctive_details,
     has_logo: hasLogo || patterns.some((p) => p.type === "logo"),
-    style_tags: product.style_tags || [],
+    style_tags: asStringList(product.style_tags),
     gender: canonKey(genderRaw),
     gender_tr: gender,
     search_query: "",
@@ -1980,8 +1984,8 @@ export interface VisionPiece {
 
 const MAX_OUTFIT_PIECES = 5;
 
-function pieceFamilyKey(category: string, categoryTr: string, subcategory = ""): string {
-  const blob = `${category} ${categoryTr} ${subcategory}`.toLowerCase();
+function pieceFamilyKey(category: unknown, categoryTr: unknown, subcategory = ""): string {
+  const blob = asLower(`${asText(category)} ${asText(categoryTr)} ${asText(subcategory)}`);
   if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) return "eyewear";
   if (/crop/.test(blob)) return "crop";
   if (/tişört|t-shirt|tshirt|tee|polo/.test(blob)) return "tee";
@@ -2103,13 +2107,13 @@ function getTrust(source?: string, priceMode?: PriceMode, title?: string): numbe
 
 function getPrice(item: SerpShoppingItem): number {
   if (typeof item.extracted_price === "number") return item.extracted_price;
-  const cleaned = (item.price || "").replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+  const cleaned = asText(item.price).replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
   return parseFloat(cleaned) || 0;
 }
 
 export function isValidShoppingItem(item: SerpShoppingItem): boolean {
   if (getPrice(item) <= 0) return false;
-  const priceStr = item.price || "";
+  const priceStr = asText(item.price);
   if (priceStr.includes("₺") || /\bTL\b/i.test(priceStr) || /\bTRY\b/i.test(priceStr)) return true;
   return typeof item.extracted_price === "number" && item.extracted_price > 0;
 }
@@ -2165,7 +2169,7 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
 
   // Combine (and similar) stores a stylist query in search_query — it must be
   // searched, not only the reconstructed core ("kadın siyah ayakkabı").
-  const storedQuery = (rebuilt.search_query || "").trim().replace(/\s+/g, " ");
+  const storedQuery = asText(rebuilt.search_query).trim().replace(/\s+/g, " ");
   const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion, {
     forAccessory: accessorySearch,
   });
@@ -2300,10 +2304,10 @@ function scoreShoppingItems(
   const userProfile = productProfile.user_profile || {};
   const priceMode = (userProfile.price_mode as PriceMode | undefined) || "karma";
   const occasion = parseOccasion(userProfile.occasion);
-  const occasionPhrase = getOccasionKeyword(occasion) || styleKeyword;
-  const styleWords = occasionPhrase.toLowerCase().split(/\s+/).filter(Boolean);
+  const occasionPhrase = asText(getOccasionKeyword(occasion) || styleKeyword);
+  const styleWords = asLower(occasionPhrase).split(/\s+/).filter(Boolean);
   const pieceBlob = pieceBlobForOccasion(productProfile);
-  const fitWord = (productProfile.fit_tr || fitToken(productProfile.fit)).toLowerCase();
+  const fitWord = asLower(productProfile.fit_tr || fitToken(productProfile.fit));
 
   let validResults = (shoppingResults || [])
     .filter(isValidShoppingItem)
@@ -2359,9 +2363,9 @@ function scoreShoppingItems(
   // Similarity locks: when enough results carry the exact subcategory / pattern /
   // color token, drop the ones that don't — the pool stays on-model instead of
   // drifting to loosely related pieces.
-  const lcTitle = (item: SerpShoppingItem) => (item.title || "").toLocaleLowerCase("tr-TR");
-  const subToken = (productProfile.subcategory_tr || "").toLocaleLowerCase("tr-TR").split(" ")[0];
-  const catToken = (productProfile.category_tr || "").toLocaleLowerCase("tr-TR").split(" ")[0];
+  const lcTitle = (item: SerpShoppingItem) => asLower(item.title);
+  const subToken = asLower(productProfile.subcategory_tr).split(" ")[0];
+  const catToken = asLower(productProfile.category_tr).split(" ")[0];
   if (subToken.length >= 3 && subToken !== catToken) {
     const subMatched = validResults.filter((item) => lcTitle(item).includes(subToken));
     if (subMatched.length >= 3) validResults = subMatched;
@@ -2379,7 +2383,7 @@ function scoreShoppingItems(
     );
     if (patternMatched.length >= 3) validResults = patternMatched;
   }
-  const colorToken = (productProfile.color_tr || "").toLocaleLowerCase("tr-TR");
+  const colorToken = asLower(productProfile.color_tr);
   if (colorToken) {
     const colorMatched = validResults.filter((item) => lcTitle(item).includes(colorToken));
     if (colorMatched.length >= 3) validResults = colorMatched;
@@ -2426,22 +2430,22 @@ function scoreShoppingItems(
   }
 
   const scored = validResults.slice(0, 40).map((item) => {
-    const title = (item.title || "").toLowerCase();
+    const title = asLower(item.title);
     const price = getPrice(item);
     const luxury = isLuxuryHit(item.source, item.title);
     const trustScore = getTrust(item.source, priceMode, item.title);
-    const hay = `${item.title || ""} ${item.source || ""}`;
+    const hay = `${asText(item.title)} ${asText(item.source)}`;
     const poolBrandHit = textHasPoolBrand(hay);
     const iconicBrandHit = textHasIconicPoolBrand(hay, productProfile);
 
-    const categoryHit = titleMatchesCategory(item.title || "", productProfile);
-    const subTr = (productProfile.subcategory_tr || "").toLowerCase();
+    const categoryHit = titleMatchesCategory(asText(item.title), productProfile);
+    const subTr = asLower(productProfile.subcategory_tr);
     const subcategoryHit = Boolean(
       subTr &&
-        subTr !== (productProfile.category_tr || "").toLowerCase() &&
+        subTr !== asLower(productProfile.category_tr) &&
         title.includes(subTr)
     );
-    const lengthTr = (productProfile.length_tr || "").toLowerCase();
+    const lengthTr = asLower(productProfile.length_tr);
     const lengthHit = Boolean(lengthTr && title.includes(lengthTr));
     const patternPlacementHit = (productProfile.patterns || []).some((p) => {
       const typeTr = translatePattern(p.type);
@@ -2450,20 +2454,19 @@ function scoreShoppingItems(
       return title.includes(typeTr) && title.includes(placeTr);
     });
     const colorHit = Boolean(
-      productProfile.color_tr && title.includes(productProfile.color_tr.toLowerCase())
+      asText(productProfile.color_tr) && title.includes(asLower(productProfile.color_tr))
     );
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
     // Layered attribute hits from collar / pattern / extra tokens in search_query
     const collarHit = Boolean(
-      productProfile.collar_tr && title.includes(productProfile.collar_tr.toLowerCase())
+      asText(productProfile.collar_tr) && title.includes(asLower(productProfile.collar_tr))
     );
     const patternHit = Boolean(
-      productProfile.pattern_tr && title.includes(productProfile.pattern_tr.toLowerCase())
+      asText(productProfile.pattern_tr) && title.includes(asLower(productProfile.pattern_tr))
     );
-    const queryTokens = (productProfile.search_query || "")
-      .toLowerCase()
+    const queryTokens = asLower(productProfile.search_query)
       .split(/\s+/)
       .filter((w) => w.length > 2 && !["erkek", "kadın", "kadin", "için"].includes(w));
     const layeredTokenHits = queryTokens.filter((w) => title.includes(w)).length;
@@ -2522,15 +2525,15 @@ function scoreShoppingItems(
     recommendationScore = Math.max(0, Math.min(recommendationScore, 100));
 
     return {
-      title: item.title || "",
-      price: item.price || "",
+      title: asText(item.title),
+      price: asText(item.price),
       priceValue: price,
-      source: item.source || "",
-      image: item.thumbnail || "",
+      source: asText(item.source),
+      image: asText(item.thumbnail),
       product_id: item.product_id || null,
       serpapi_immersive_product_api: item.serpapi_immersive_product_api || null,
-      link: item.product_link || "",
-      store: (item.source || "").toLowerCase(),
+      link: asText(item.product_link),
+      store: asLower(item.source),
       matchScore,
       forYouScore,
       trustScore,

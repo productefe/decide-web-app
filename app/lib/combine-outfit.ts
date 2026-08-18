@@ -8,7 +8,7 @@ import {
   type CombineOutfitSlot,
   type CombinePieceCategory,
 } from "@/lib/combine-rules";
-import { truncateForPrompt } from "@/lib/api-security";
+import { asLower, asStringList } from "@/lib/text";
 import type { PriceMode } from "@/lib/preferences";
 import {
   getOccasionGuide,
@@ -139,7 +139,7 @@ function buildCombinePrompt(
   const color = truncateForPrompt(attributes.color_tr || "", 40);
   const fit = truncateForPrompt(attributes.fit || "", 40);
   const gender = truncateForPrompt(attributes.gender || "", 20);
-  const tags = (attributes.style_tags || []).slice(0, 6).map((t) => truncateForPrompt(t, 30));
+  const tags = asStringList(attributes.style_tags).slice(0, 6).map((t) => truncateForPrompt(t, 30));
   const pieceLabel = truncateForPrompt(attributes.label || attributes.category_tr, 60);
   const pieceCat = truncateForPrompt(attributes.category || attributes.category_tr, 60);
   const accessoryKinds = ACCESSORY_KINDS.map((k) => k.type).join("|");
@@ -320,7 +320,7 @@ async function generateSlotSuggestions(
 }
 
 function genderTr(gender: string | null | undefined): string {
-  const g = (gender || "").toLowerCase();
+  const g = asLower(gender);
   if (g === "men" || g === "erkek" || g === "male") return "erkek";
   if (g === "women" || g === "kadın" || g === "kadin" || g === "female") return "kadın";
   return "";
@@ -330,7 +330,7 @@ function inferShoeSubcategory(blob: string, context: AnalysisContext): {
   subcategory: string;
   subcategory_tr: string;
 } {
-  const t = blob.toLowerCase();
+  const t = asLower(blob);
   if (/\b(topuk|stiletto|heel|pump)\b/.test(t)) return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
   if (/\b(bot|boot|chelsea)\b/.test(t)) return { subcategory: "boot", subcategory_tr: "bot" };
   if (/\b(sandal|sandalet)\b/.test(t)) return { subcategory: "sandal", subcategory_tr: "sandalet" };
@@ -344,7 +344,7 @@ function inferShoeSubcategory(blob: string, context: AnalysisContext): {
 }
 
 function accessoryDetailsFromText(text: string, accessoryType?: string): string[] {
-  const t = text.toLowerCase();
+  const t = asLower(text);
   const out: string[] = [];
   if (accessoryType === "saat" || /saat|watch/.test(t)) {
     if (/\b(deri|leather|nato)\b/.test(t)) out.push("deri kayış");

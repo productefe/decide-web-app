@@ -1,4 +1,5 @@
 import type { Occasion } from "@/lib/preferences";
+import { asLower, asText } from "@/lib/text";
 
 export type OccasionGuide = {
   labelTr: string;
@@ -266,11 +267,11 @@ export function pieceBlobForOccasion(profile: {
   search_query?: string;
 }): string {
   return [
-    profile.category,
-    profile.category_tr,
-    profile.subcategory,
-    profile.subcategory_tr,
-    profile.search_query,
+    asText(profile.category),
+    asText(profile.category_tr),
+    asText(profile.subcategory),
+    asText(profile.subcategory_tr),
+    asText(profile.search_query),
   ]
     .filter(Boolean)
     .join(" ")
@@ -287,9 +288,9 @@ function escapeRegExp(s: string): string {
 }
 
 /** Short tokens like "ev" / "iş" must not match inside "level" / "istanbul". */
-export function titleHasTerm(title: string, term: string): boolean {
-  const t = title.toLocaleLowerCase("tr-TR");
-  const w = term.toLocaleLowerCase("tr-TR");
+export function titleHasTerm(title: unknown, term: unknown): boolean {
+  const t = asLower(title);
+  const w = asLower(term);
   if (!t || !w) return false;
   if (w.length <= 3) {
     const re = new RegExp(`(?:^|[^a-z0-9çğıöşü])${escapeRegExp(w)}(?:$|[^a-z0-9çğıöşü])`, "i");
@@ -323,11 +324,12 @@ export function withOccasionSearchPhrase(
   const phrase = opts.forAccessory
     ? getAccessoryOccasionPhrase(occasion)
     : getOccasionKeyword(occasion);
-  if (!query.trim()) return phrase;
-  if (!phrase) return query.trim().replace(/\s+/g, " ");
-  const q = query.toLocaleLowerCase("tr-TR");
+  const raw = asText(query);
+  if (!raw.trim()) return phrase;
+  if (!phrase) return raw.trim().replace(/\s+/g, " ");
+  const q = asLower(raw);
   const extra = phrase
     .split(/\s+/)
-    .filter((w) => w && !q.includes(w.toLocaleLowerCase("tr-TR")));
-  return [query.trim(), ...extra].join(" ").replace(/\s+/g, " ").trim();
+    .filter((w) => w && !q.includes(asLower(w)));
+  return [raw.trim(), ...extra].join(" ").replace(/\s+/g, " ").trim();
 }
