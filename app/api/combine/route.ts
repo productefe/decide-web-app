@@ -130,7 +130,8 @@ export async function POST(req: NextRequest) {
       typeof body?.history_id === "string" ? body.history_id : undefined;
     const pieceLabel: string | undefined =
       typeof body?.piece_label === "string" ? body.piece_label : undefined;
-    const saveContext = parseAnalysisContext(body?.context);
+    const saveContext =
+      parseAnalysisContext(body?.context) || parseAnalysisContext(body?.occasion);
     const onlySlot = parseOutfitSlot(body?.outfit_slot);
     const reuseSuggestion = parseReuseSuggestion(body?.suggestion);
     const isShowMore = Boolean(onlySlot && reuseSuggestion);

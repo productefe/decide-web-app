@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseGender, parseOccasion, parsePriceMode, parseSizes, type Occasion, type PriceMode } from "@/lib/preferences";
 import { isAnonymousUser } from "@/lib/auth-user";
 import { createClient, getBearerToken } from "@/utils/supabase/server";
-import { VISION_OUTFIT_PROMPT } from "../vision-prompt";
+import { visionPromptForOccasion } from "../vision-prompt";
 import {
   parseVisionOutfit,
   getOccasionKeyword,
@@ -82,7 +82,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const photo_url: string | undefined = body?.photo_url;
     const storage_path: string | undefined = body?.storage_path;
-    const occasion: Occasion | null = parseOccasion(body?.occasion);
+    const occasion: Occasion | null =
+      parseOccasion(body?.occasion) || parseOccasion(body?.context);
     const pieceLabel: string | undefined = body?.piece_label;
     const excludeRaw = Array.isArray(body?.exclude_titles) ? body.exclude_titles : [];
     const excludeTitles = new Set<string>(
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest) {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: visionImageUrl } },
-            { type: "text", text: VISION_OUTFIT_PROMPT },
+            { type: "text", text: visionPromptForOccasion(occasion) },
           ],
         },
       ],

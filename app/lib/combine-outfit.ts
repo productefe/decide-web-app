@@ -11,10 +11,11 @@ import {
 import { truncateForPrompt } from "@/lib/api-security";
 import type { PriceMode } from "@/lib/preferences";
 import {
+  getOccasionGuide,
   getOccasionKeyword,
-  type ProductProfile,
-  type UserProfile,
-} from "@/api/decide/pipeline";
+  withOccasionSearchPhrase,
+} from "@/lib/occasion-guide";
+import type { ProductProfile, UserProfile } from "@/api/decide/pipeline";
 import { processPiece } from "@/api/decide/run-piece";
 import type { PieceResult } from "@/components/analyze/types";
 
@@ -143,6 +144,10 @@ function buildCombinePrompt(
   const pieceCat = truncateForPrompt(attributes.category || attributes.category_tr, 60);
   const accessoryKinds = ACCESSORY_KINDS.map((k) => k.type).join("|");
 
+  const occasion = CONTEXT_TO_OCCASION[context];
+  const guide = getOccasionGuide(occasion);
+  const occasionBrief = guide?.combineNote || `Keep suggestions consistent with ${contextTr}.`;
+
   const accessoryField = slots.includes("accessory")
     ? `,"accessoryType":"one of: ${accessoryKinds}"`
     : "";
@@ -157,7 +162,8 @@ SOURCE PIECE:
 - gender: ${gender || "unisex"}
 - style_tags: ${tags.length ? tags.join(", ") : "none"}
 
-CONTEXT (occasion): ${context} (${contextTr})
+CONTEXT (occasion) is the PRIMARY constraint — not optional flavor:
+${occasionBrief}
 
 Fill ONLY these outfit slots: [${slotList}]
 Return ONLY valid JSON (no markdown) with exactly these keys under "slots":
@@ -173,14 +179,14 @@ Return ONLY valid JSON (no markdown) with exactly these keys under "slots":
 Rules:
 - Only fill the given slots — never add other slots.
 - Never invent product names, brands, or store names.
-- searchQuery must be Turkish shopping keywords, 4–10 words, and MUST encode layered product attributes when relevant:
+- searchQuery must be Turkish shopping keywords, 4–10 words, MUST fit ${contextTr}, and MUST encode layered product attributes when relevant:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
-- shoes: tip (sneaker/bot/loafer/topuklu) + renk — NEVER write generic "ayakkabı" alone; sport → sneaker, evening → loafer or topuklu as appropriate
+- shoes: tip (sneaker/bot/loafer/topuklu) + renk — NEVER write generic "ayakkabı" alone
 - accessory: concrete type only (kemer/çanta/saat/gözlük/şapka…)
   - saat: include kayış (deri/metal/silikon) + renk
   - gözlük: include çerçeve şekli (yuvarlak/kare/aviator) + renk
-- Keep suggestions consistent with the context (${contextTr}) and the source piece color.
+- Color may complement the source piece, but garment TYPE must follow the occasion rules above.
 - Prefer safe, widely-wearable combinations over adventurous color theory.
 - styleDescriptor: short Turkish phrase describing THE SAME item as searchQuery (include the same cut/collar/type words).
 - For non-accessory slots: never suggest jewelry, bags, belts, watches, hats — only that garment/shoe type.
@@ -190,7 +196,7 @@ Rules:
   - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
   - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons. Always mention strap (deri kayış / metal kordon / silikon kayış).
   - For gözlük: always mention frame shape (yuvarlak/kare/aviator) and frame color.
-  - Match metal/color to the source piece when suggesting jewelry; otherwise prefer bag/belt/watch/glasses for casual sport looks.${accessoryField}`;
+  - Match metal/color to the source piece when suggesting jewelry.${accessoryField}`;
 }
 
 function normalizeAccessorySuggestion(raw: CombineSlotSuggestion): CombineSlotSuggestion | null {
@@ -319,10 +325,11 @@ function inferShoeSubcategory(blob: string, context: AnalysisContext): {
   if (/\b(bot|boot|chelsea)\b/.test(t)) return { subcategory: "boot", subcategory_tr: "bot" };
   if (/\b(sandal|sandalet)\b/.test(t)) return { subcategory: "sandal", subcategory_tr: "sandalet" };
   if (/\b(loafer|mokasen|oxford)\b/.test(t)) return { subcategory: "loafer", subcategory_tr: "loafer" };
-  if (/\b(sneaker|spor ayakkabı|koşu)\b/.test(t) || context === "sport") {
+  if (/\b(sneaker|spor ayakkabı|koşu)\b/.test(t) || context === "sport" || context === "home") {
     return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
   }
   if (context === "evening") return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  if (context === "work") return { subcategory: "loafer", subcategory_tr: "loafer" };
   return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
 }
 
@@ -364,7 +371,7 @@ function buildSlotProductProfile(
   // Keep fit_tr short — full styleDescriptor polluted accessory searches (kolye → yelek).
   const fitTr = isAccessory ? "" : truncateForPrompt(suggestion.styleDescriptor, 40);
 
-  const search_query = suggestion.searchQuery;
+  const search_query = withOccasionSearchPhrase(suggestion.searchQuery, CONTEXT_TO_OCCASION[input.context]);
   const fallback_query = [gTr, color, categoryTr].filter(Boolean).join(" ").trim();
   const distinctive_details = isAccessory
     ? accessoryDetailsFromText(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, accessoryType)

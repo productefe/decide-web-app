@@ -11,7 +11,8 @@ import {
   type ScoringResult,
 } from "./pipeline";
 import type { PieceResult } from "@/components/analyze/types";
-import type { PriceMode } from "@/lib/preferences";
+import { parseOccasion, type PriceMode } from "@/lib/preferences";
+import { occasionTitleFit, pieceBlobForOccasion } from "@/lib/occasion-guide";
 import { allPoolBrandNames, normalizeBrandName } from "@/constants/brandPool";
 
 const SERPAPI_URL = "https://serpapi.com/search";
@@ -311,20 +312,29 @@ export async function processPiece(
   if (scoring.recommended) usedTitles.add(scoring.recommended.title);
   if (scoring.cheaper) usedTitles.add(scoring.cheaper.title);
 
+  const occasion = parseOccasion(productProfile.user_profile?.occasion);
+  const pieceBlob = pieceBlobForOccasion(productProfile);
   const occasionWords = occasionKeyword
     .toLowerCase()
     .split(/\s+/)
     .filter((w) => w.length > 2);
+  const isFreeStyle = (p: (typeof scoring.pool)[number]) =>
+    !titleIsExcluded(p.title, usedTitles) &&
+    productIdentityKey(p) !== (scoring.recommended ? productIdentityKey(scoring.recommended) : "") &&
+    productIdentityKey(p) !== (scoring.cheaper ? productIdentityKey(scoring.cheaper) : "");
   const styleProduct =
+    (occasion
+      ? scoring.pool.find(
+          (p) => isFreeStyle(p) && occasionTitleFit(p.title, occasion, pieceBlob) === "boost"
+        )
+      : null) ||
     (occasionWords.length
       ? scoring.pool.find(
           (p) =>
-            !titleIsExcluded(p.title, usedTitles) &&
-            productIdentityKey(p) !== (scoring.recommended ? productIdentityKey(scoring.recommended) : "") &&
-            productIdentityKey(p) !== (scoring.cheaper ? productIdentityKey(scoring.cheaper) : "") &&
-            occasionWords.some((w) => p.title.toLowerCase().includes(w))
+            isFreeStyle(p) && occasionWords.some((w) => p.title.toLowerCase().includes(w))
         )
-      : null) || pickTrustedFallback(scoring.pool, usedTitles);
+      : null) ||
+    pickTrustedFallback(scoring.pool, usedTitles);
 
   const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
   const slots = getSlots(finalScoring);

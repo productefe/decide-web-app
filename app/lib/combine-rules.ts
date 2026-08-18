@@ -3,6 +3,8 @@
  * The LLM must ONLY fill slots returned by resolveCombineSlots — never invent slots.
  */
 
+import { parseOccasion } from "@/lib/preferences";
+
 export const COMBINE_OUTFIT_SLOTS = ["top", "bottom", "shoes", "outerwear", "accessory"] as const;
 export type CombineOutfitSlot = (typeof COMBINE_OUTFIT_SLOTS)[number];
 
@@ -42,26 +44,36 @@ export const COMBINE_SLOT_CATEGORY_TR: Record<CombineOutfitSlot, string> = {
   accessory: "aksesuar",
 };
 
-export type AnalysisContext = "sport" | "casual" | "evening";
+export type AnalysisContext = "sport" | "casual" | "evening" | "home" | "work";
 
-export const ANALYSIS_CONTEXT_VALUES = ["sport", "casual", "evening"] as const;
+export const ANALYSIS_CONTEXT_VALUES = ["sport", "casual", "evening", "home", "work"] as const;
 
-export const CONTEXT_TO_OCCASION: Record<AnalysisContext, "spor" | "gundelik" | "aksam"> = {
+export const CONTEXT_TO_OCCASION: Record<
+  AnalysisContext,
+  "spor" | "gundelik" | "aksam" | "ev" | "is"
+> = {
   sport: "spor",
   casual: "gundelik",
   evening: "aksam",
+  home: "ev",
+  work: "is",
 };
 
-export const OCCASION_TO_CONTEXT: Record<"spor" | "gundelik" | "aksam", AnalysisContext> = {
-  spor: "sport",
-  gundelik: "casual",
-  aksam: "evening",
-};
+export const OCCASION_TO_CONTEXT: Record<"spor" | "gundelik" | "aksam" | "ev" | "is", AnalysisContext> =
+  {
+    spor: "sport",
+    gundelik: "casual",
+    aksam: "evening",
+    ev: "home",
+    is: "work",
+  };
 
 export const CONTEXT_LABEL_TR: Record<AnalysisContext, string> = {
   sport: "Spor",
   casual: "Gündelik",
-  evening: "Akşam çıkmalık",
+  evening: "Akşam",
+  home: "Ev",
+  work: "İş",
 };
 
 /** Map vision / piece labels to a CombinePieceCategory. */
@@ -101,6 +113,19 @@ export function resolveCombineSlots(
 }
 
 export function parseAnalysisContext(raw: unknown): AnalysisContext | null {
-  if (raw === "sport" || raw === "casual" || raw === "evening") return raw;
-  return null;
+  if (Array.isArray(raw)) return parseAnalysisContext(raw[0]);
+  if (raw && typeof raw === "object" && "value" in raw) {
+    return parseAnalysisContext((raw as { value: unknown }).value);
+  }
+  if (raw === "sport" || raw === "casual" || raw === "evening" || raw === "home" || raw === "work") {
+    return raw;
+  }
+  if (typeof raw === "string") {
+    const v = raw.trim().toLocaleLowerCase("tr-TR");
+    if (v === "sport" || v === "casual" || v === "evening" || v === "home" || v === "work") {
+      return v;
+    }
+  }
+  const occasion = parseOccasion(raw);
+  return occasion ? OCCASION_TO_CONTEXT[occasion] : null;
 }

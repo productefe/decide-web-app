@@ -5,7 +5,7 @@ import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecideLogo } from "@/components/decide-logo";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
-import { OCCASION_OPTIONS, type Occasion } from "@/lib/preferences";
+import { OCCASION_OPTIONS, OCCASION_ROW_VALUES } from "@/lib/preferences";
 import { useAnalyze } from "./useAnalyze";
 import { ResultList } from "./ResultList";
 import { AnalyzeLoadingProgress, DEFAULT_LOADING_STEPS } from "./AnalyzeLoadingProgress";
@@ -93,22 +93,29 @@ export default function AnalyzeModal({
         <div className="mt-4 shrink-0">
           <p className="text-center text-sm font-medium text-foreground">Giyim amacı</p>
           <p className="mt-1 text-center text-xs text-muted-foreground">
-            Bu fotoğraf için neye göre önerelim?
+            Nerede giyeceksin?
           </p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {OCCASION_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setOccasion(opt.value as Occasion)}
-                className={`min-h-[40px] rounded-xl border px-3 py-2 text-sm transition-all ${
-                  occasion === opt.value
-                    ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
-                    : "border-border bg-muted text-foreground hover:border-accent/50"
-                }`}
-              >
-                {opt.label}
-              </button>
+          <div className="mt-3 flex flex-col items-center gap-2">
+            {OCCASION_ROW_VALUES.map((row) => (
+              <div key={row.join("-")} className="flex flex-wrap justify-center gap-2">
+                {row.map((value) => {
+                  const opt = OCCASION_OPTIONS.find((o) => o.value === value)!;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setOccasion(value)}
+                      className={`min-h-[40px] rounded-xl border px-3 py-2 text-sm transition-all ${
+                        occasion === opt.value
+                          ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
+                          : "border-border bg-muted text-foreground hover:border-accent/50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             ))}
           </div>
         </div>

@@ -29,12 +29,12 @@ export const PRICE_MODE_OPTIONS = [
   },
   {
     value: "uygunluk",
-    label: "Uygun bütçeli",
+    label: "Uygun",
     desc: "Bütçe dostu seçenekler; pahalı ve lüks markalardan kaçın.",
   },
   {
     value: "karma",
-    label: "Karışık dağılım",
+    label: "Karma",
     desc: "Hem uygun hem premium alternatifleri karışık getir.",
   },
 ] as const;
@@ -43,11 +43,19 @@ export type PriceMode = (typeof PRICE_MODE_OPTIONS)[number]["value"];
 
 export const OCCASION_OPTIONS = [
   { value: "spor", label: "Spor" },
+  { value: "ev", label: "Ev" },
+  { value: "aksam", label: "Akşam" },
   { value: "gundelik", label: "Gündelik" },
-  { value: "aksam", label: "Akşam çıkmalık" },
+  { value: "is", label: "İş" },
 ] as const;
 
 export type Occasion = (typeof OCCASION_OPTIONS)[number]["value"];
+
+/** Chip layout: top row Spor/Ev/Akşam, bottom row Gündelik/İş. */
+export const OCCASION_ROW_VALUES: Occasion[][] = [
+  ["spor", "ev", "aksam"],
+  ["gundelik", "is"],
+];
 
 export type UserPreferencesRow = {
   id: string;
@@ -81,7 +89,35 @@ export function parsePriceMode(raw: unknown): PriceMode | null {
   return null;
 }
 
+const OCCASION_BY_ALIAS: Record<string, Occasion> = {
+  spor: "spor",
+  sport: "spor",
+  gundelik: "gundelik",
+  gunluk: "gundelik",
+  günlük: "gundelik",
+  casual: "gundelik",
+  aksam: "aksam",
+  akşam: "aksam",
+  evening: "aksam",
+  ev: "ev",
+  home: "ev",
+  lounge: "ev",
+  is: "is",
+  iş: "is",
+  work: "is",
+  ofis: "is",
+};
+
+function occasionToken(raw: unknown): string {
+  if (Array.isArray(raw)) return occasionToken(raw[0]);
+  if (raw && typeof raw === "object" && "value" in raw) {
+    return occasionToken((raw as { value: unknown }).value);
+  }
+  if (typeof raw !== "string") return "";
+  return raw.trim().toLocaleLowerCase("tr-TR");
+}
+
 export function parseOccasion(raw: unknown): Occasion | null {
-  if (raw === "spor" || raw === "gundelik" || raw === "aksam") return raw;
-  return null;
+  const v = occasionToken(raw);
+  return OCCASION_BY_ALIAS[v] ?? null;
 }

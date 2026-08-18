@@ -1,3 +1,6 @@
+import type { Occasion } from "@/lib/preferences";
+import { getOccasionGuide } from "@/lib/occasion-guide";
+
 /**
  * Shared GPT-4o outfit extraction prompt (POST /api/decide and /api/decide/more).
  * Empty string / empty array = not sure. Never invent attributes.
@@ -31,3 +34,14 @@ Return ONLY valid JSON, no markdown:
 {"items":[{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"orange","secondary_colors":["black","white"],"patterns":[{"type":"graphic","colors":["black"],"placement":"chest"},{"type":"striped","colors":["white"],"placement":"shoulder"}],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":["önde siyah motif","omuzlarda beyaz şerit"],"style_tags":["casual"],"has_logo":false}]}
 
 Order items top → bottom → shoes → outerwear → accessories (watch/bag/sunglasses) when possible.`;
+
+export function visionPromptForOccasion(occasion: Occasion): string {
+  const guide = getOccasionGuide(occasion);
+  if (!guide) return VISION_OUTFIT_PROMPT;
+  return `${VISION_OUTFIT_PROMPT}
+
+OCCASION — the user will wear shopping alternatives for: ${guide.labelTr} (${occasion}).
+${guide.visionNote}
+style_tags MUST include "${guide.labelTr.toLocaleLowerCase("tr-TR")}" plus 1–3 specific tags that help Turkish shopping search for this occasion.
+Never change category or subcategory to force the occasion. Extract the visible garment, then tag the most honest ${guide.labelTr} reading of THAT same piece.`;
+}

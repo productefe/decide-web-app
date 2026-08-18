@@ -1,5 +1,5 @@
 import { Product, Results } from "@/components/analyze/types";
-import type { Occasion, PriceMode } from "@/lib/preferences";
+import { parseOccasion, type Occasion, type PriceMode } from "@/lib/preferences";
 import {
   isCropCasualSubcategory,
   pickDecidePoolBrands,
@@ -8,6 +8,14 @@ import {
   textHasPoolBrand,
 } from "@/constants/brandPool";
 import { failsQualityFilter } from "@/lib/qualityFilter";
+import {
+  getOccasionKeyword,
+  occasionTitleFit,
+  pieceBlobForOccasion,
+  withOccasionSearchPhrase,
+} from "@/lib/occasion-guide";
+
+export { getOccasionKeyword } from "@/lib/occasion-guide";
 
 export interface RequestContext {
   photo_url: string;
@@ -146,12 +154,6 @@ interface SerpShoppingItem {
 // Occasion + price mode
 // ---------------------------------------------------------------------------
 
-const OCCASION_KEYWORDS: Record<Occasion, string> = {
-  spor: "spor athleisure",
-  gundelik: "günlük casual",
-  aksam: "akşam davet şık",
-};
-
 /** @deprecated Prefer getOccasionKeyword. Kept for older callers. */
 const STYLE_KEYWORDS: Record<string, string> = {
   "Rahatlık & Konfor": "rahat oversize",
@@ -162,11 +164,6 @@ const STYLE_KEYWORDS: Record<string, string> = {
   "Maceracı & Doğa": "outdoor",
   "Lüks & Kalite": "premium",
   "Trend & Moda": "trend",
-};
-
-export function getOccasionKeyword(occasion: Occasion | null | undefined): string {
-  if (!occasion) return "";
-  return OCCASION_KEYWORDS[occasion] || "";
 }
 
 export function getStyleKeyword(preferences: string[] | undefined): string {
@@ -1827,15 +1824,33 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
   ]);
   const colorCore = uniqueJoin([core, rebuilt.color_tr]);
 
-  const sizeQuery = firstSize ? uniqueJoin([full || strong, firstSize]) : "";
+  const occasion = parseOccasion(rebuilt.user_profile?.occasion);
+  const occasionCore = withOccasionSearchPhrase(core, occasion);
+  const occasionStrong = withOccasionSearchPhrase(strong, occasion);
+  const occasionFull = withOccasionSearchPhrase(full, occasion);
+
+  const sizeQuery = firstSize
+    ? uniqueJoin([occasionFull || occasionStrong || full || strong, firstSize])
+    : "";
 
   // Combine (and similar) stores a stylist query in search_query — it must be
   // searched, not only the reconstructed core ("kadın siyah ayakkabı").
   const storedQuery = (rebuilt.search_query || "").trim().replace(/\s+/g, " ");
+  const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion);
 
-  const base = [storedQuery, sizeQuery, full, strong, colorCore, core];
+  const base = [
+    storedWithOccasion,
+    occasionFull,
+    sizeQuery,
+    occasionStrong,
+    full,
+    occasionCore,
+    strong,
+    colorCore,
+    core,
+  ];
 
-  const primary = (storedQuery || strong || core).trim();
+  const primary = (storedWithOccasion || occasionStrong || strong || core).trim();
   const brandSuffixes = pickDecidePoolBrands(
     {
       category: rebuilt.category,
@@ -1938,7 +1953,10 @@ function scoreShoppingItems(
 ): ScoredProduct[] {
   const userProfile = productProfile.user_profile || {};
   const priceMode = (userProfile.price_mode as PriceMode | undefined) || "karma";
-  const styleWords = styleKeyword.toLowerCase().split(/\s+/).filter(Boolean);
+  const occasion = parseOccasion(userProfile.occasion);
+  const occasionPhrase = getOccasionKeyword(occasion) || styleKeyword;
+  const styleWords = occasionPhrase.toLowerCase().split(/\s+/).filter(Boolean);
+  const pieceBlob = pieceBlobForOccasion(productProfile);
   const fitWord = (productProfile.fit_tr || fitToken(productProfile.fit)).toLowerCase();
 
   let validResults = (shoppingResults || [])
@@ -2027,6 +2045,18 @@ function scoreShoppingItems(
     if (lightOnly.length >= 3) validResults = lightOnly;
   }
 
+  // Prefer listings that match the chosen giyim amacı; drop clashing styles when enough remain.
+  if (occasion) {
+    const boosted = validResults.filter(
+      (item) => occasionTitleFit(item.title || "", occasion, pieceBlob) === "boost"
+    );
+    if (boosted.length >= 3) validResults = boosted;
+    const notAvoid = validResults.filter(
+      (item) => occasionTitleFit(item.title || "", occasion, pieceBlob) !== "avoid"
+    );
+    if (notAvoid.length >= 3) validResults = notAvoid;
+  }
+
   // Prefer titles that explicitly mark the user's gender (erkek/kadın) when enough exist.
   if (profileGenderSide(productProfile)) {
     const gendered = validResults.filter((item) => titleMatchesUserGender(item.title || "", productProfile));
@@ -2107,6 +2137,9 @@ function scoreShoppingItems(
     if (poolBrandHit) matchScore += 15;
     if (iconicBrandHit) matchScore += 8;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
+    const occFit = occasionTitleFit(item.title || "", occasion, pieceBlob);
+    if (occFit === "boost") matchScore += 18;
+    if (occFit === "avoid") matchScore = Math.max(0, matchScore - 22);
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
     matchScore = Math.min(matchScore, 100);

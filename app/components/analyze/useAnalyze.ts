@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { Stage, Results, PieceResult } from "./types";
 import type { Occasion } from "@/lib/preferences";
+import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { markGuestAnalysisUsed, saveGuestResultsLocal } from "@/lib/guest";
 import { sanitizeUploadFileName, validateImageFile } from "@/lib/upload";
 
@@ -82,6 +83,7 @@ export function useAnalyze(
           photo_url: publicUrl,
           storage_path: fileName,
           occasion,
+          context: OCCASION_TO_CONTEXT[occasion],
         }),
       });
 
