@@ -42,7 +42,13 @@ export interface PieceResult {
 }
 
 /** Stored in search_history — supports legacy flat Results or outfit pieces. */
-export type StoredResults = Results | { pieces: PieceResult[] };
+export type StoredResults =
+  | Results
+  | {
+      pieces: PieceResult[];
+      /** Raw GPT-4o vision JSON — lets "3 alternatif daha" skip re-analysis. */
+      vision_content?: string;
+    };
 
 export const SLOT_LABELS: Record<string, string> = {
   recommended: "Önerilen",

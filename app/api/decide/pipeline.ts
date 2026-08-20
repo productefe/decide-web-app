@@ -1390,6 +1390,15 @@ function strapInCore(strapTr: unknown): string {
 const PATTERN_OK_WHEN_LOCALIZED = new Set(["baskılı", "logolu"]);
 
 /**
+ * Decorative pattern words in a listing title that mean "different design"
+ * when the analyzed piece does not carry that pattern over the whole garment.
+ */
+const STRAY_PATTERN_WORDS = [
+  "çizgili", "ekoseli", "kareli", "çiçekli", "desenli",
+  "puantiyeli", "leopar", "kamuflaj", "batik", "emprime",
+];
+
+/**
  * Pattern words safe to use for queries and scoring. A shoulder-only stripe is
  * a local accent — searching/boosting "çizgili tişört" for it returns fully
  * striped tees, so localized striped/floral/checkered patterns are skipped.
@@ -2264,7 +2273,7 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
       subcategory_tr: rebuilt.subcategory_tr,
       price_mode: priceMode,
     },
-    3,
+    5,
     primary
   );
   const brandQueries = primary ? brandSuffixes.map((brand) => `${primary} ${brand}`) : [];
@@ -2361,6 +2370,42 @@ function interleaveByStore(scored: ScoredProduct[]): ScoredProduct[] {
       if (round < list.length) out.push(list[round]);
     }
   }
+  return out;
+}
+
+const WOMEN_TREND_BRAND_RE = /bershka|stradivarius|pull\s*&?\s*bear|trendyol\s*milla|trendyolmilla|addax|zara/;
+const WOMEN_BUDGET_BRAND_RE = /koton|lc\s*waikiki|lcw|defacto|de\s*facto/;
+
+/**
+ * Women's picks: trend youth brands (Bershka, Stradivarius, Pull&Bear, …)
+ * always rank ahead of budget basics brands (Koton, LCW, DeFacto) in the
+ * visible alternatives. Only the relative order of those two groups changes;
+ * every other item keeps its score-sorted position.
+ */
+function preferTrendOverBudget(
+  scored: ScoredProduct[],
+  profile: ProductProfile,
+  priceMode: PriceMode
+): ScoredProduct[] {
+  if (priceMode === "luks") return scored;
+  if (profileGenderSide(profile) !== "women") return scored;
+
+  const hayOf = (p: ScoredProduct) => asLower(`${p.title} ${p.source}`);
+  const isTrend = (p: ScoredProduct) => WOMEN_TREND_BRAND_RE.test(hayOf(p));
+  const isBudget = (p: ScoredProduct) => !isTrend(p) && WOMEN_BUDGET_BRAND_RE.test(hayOf(p));
+
+  const groupIdx: number[] = [];
+  scored.forEach((p, i) => {
+    if (isTrend(p) || isBudget(p)) groupIdx.push(i);
+  });
+  if (groupIdx.length < 2) return scored;
+
+  const group = groupIdx.map((i) => scored[i]);
+  const reordered = [...group.filter(isTrend), ...group.filter(isBudget)];
+  const out = [...scored];
+  groupIdx.forEach((slot, k) => {
+    out[slot] = reordered[k];
+  });
   return out;
 }
 
@@ -2482,6 +2527,13 @@ function scoreShoppingItems(
       patternTokens.some((tok) => lcTitle(item).includes(tok))
     );
     if (patternMatched.length >= 3) validResults = patternMatched;
+  } else {
+    // The piece is plain (or has only a local accent): drop clearly patterned
+    // listings when enough plain ones remain — design fidelity over quantity.
+    const plainOnly = validResults.filter(
+      (item) => !STRAY_PATTERN_WORDS.some((w) => lcTitle(item).includes(w))
+    );
+    if (plainOnly.length >= 3) validResults = plainOnly;
   }
   const colorToken = asLower(productProfile.color_tr);
   if (colorToken) {
@@ -2573,7 +2625,7 @@ function scoreShoppingItems(
     // Only whole-garment pattern words count; a shoulder-only stripe must not
     // boost "çizgili tişört" listings.
     const patternHit = patternTokens.some((tok) => title.includes(asLower(tok)));
-    const strayPatternHit = ["çizgili", "ekoseli", "çiçekli", "batik"].some(
+    const strayPatternHit = STRAY_PATTERN_WORDS.some(
       (w) => title.includes(w) && !patternTokens.includes(w)
     );
     const queryTokens = asLower(productProfile.search_query)
@@ -2660,7 +2712,8 @@ function scoreShoppingItems(
   });
 
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
-  return preferLuxuryScored(mixKarmaScored(scored, priceMode), priceMode);
+  const trendOrdered = preferTrendOverBudget(scored, productProfile, priceMode);
+  return preferLuxuryScored(mixKarmaScored(trendOrdered, priceMode), priceMode);
 }
 
 function pickCheaperProduct(

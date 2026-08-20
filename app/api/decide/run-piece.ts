@@ -162,7 +162,9 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || luksFallback[0] || "" };
   }
 
-  const brandQs = brandQueries.slice(0, 2);
+  // Wider brand-pool coverage (docs/decide-brand-pool.md): 3 brand-scoped
+  // queries fire in the same parallel batch — no extra latency.
+  const brandQs = brandQueries.slice(0, 3);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );

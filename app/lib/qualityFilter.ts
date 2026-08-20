@@ -10,6 +10,8 @@ import {
 /** Configurable quality-filter constants (docs/decide-brand-pool.md § kalite filtresi). */
 export const QUALITY_CONFIG = {
   supermarketStores: ["migros", "a101", "bim", "şok", "sok market", "sok.com"],
+  /** Sellers that must never appear, even when the title carries a pool-brand word. */
+  bannedStores: ["sanal çadır", "sanalcadir", "sanal cadir", "sanalçadır"],
   replicaTokens: ["replika", "replica", "muadil", "benzeri", "a kalite", "a-kalite", "1. kalite"],
   maxKeywordPile: 5,
   fillerKeywords: [
@@ -146,6 +148,11 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   const title = input.title || "";
   const source = input.source || "";
   const blob = hay(title, source);
+
+  // Hard-banned sellers bypass every other rule (a "mavi şapka" title would
+  // otherwise count as a Mavi-brand catalog hit and let the seller through).
+  if (QUALITY_CONFIG.bannedStores.some((s) => blob.includes(s))) return true;
+
   const catalog = isApprovedCatalogBrand(blob) || textHasPoolBrand(blob);
 
   if (typeof input.priceValue === "number" && input.priceValue > 0 && input.priceValue < QUALITY_CONFIG.minPriceTry) {

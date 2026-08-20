@@ -13,12 +13,14 @@ import {
 } from "../pipeline";
 import { processPiece } from "../run-piece";
 import { getVisionImageDataUrl } from "../vision-image";
+import { getCachedVision, setCachedVision, visionCacheKey } from "../vision-cache";
 import type { PieceResult, Results } from "@/components/analyze/types";
 import {
   ApiSecurityError,
   assertOwnStoragePath,
   enforceRateLimit,
 } from "@/lib/api-security";
+import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -132,20 +134,46 @@ export async function POST(req: NextRequest) {
     const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
-    const visionContent = await openAIContent(OPENAI_API_KEY, {
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: visionImageUrl } },
-            { type: "text", text: visionPromptForOccasion(occasion) },
-          ],
-        },
-      ],
-      max_tokens: 2000,
-    });
+    // Reuse the vision analysis from the original /api/decide run when
+    // possible — the photo has not changed, so re-running GPT-4o only adds
+    // 4-8 seconds to every "3 alternatif daha" click.
+    const cacheKey = visionCacheKey(user.id, storage_path, occasion);
+    let visionContent = getCachedVision(cacheKey);
+
+    if (!visionContent) {
+      const { data: historyRow } = await supabase
+        .from("search_history")
+        .select("results")
+        .eq("user_id", user.id)
+        .eq("photo_url", photo_url)
+        .eq("context", OCCASION_TO_CONTEXT[occasion])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const storedContent = (historyRow?.results as { vision_content?: unknown } | null)
+        ?.vision_content;
+      if (typeof storedContent === "string" && storedContent.trim()) {
+        visionContent = storedContent;
+      }
+    }
+
+    if (!visionContent) {
+      const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
+      visionContent = await openAIContent(OPENAI_API_KEY, {
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: visionImageUrl } },
+              { type: "text", text: visionPromptForOccasion(occasion) },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      });
+    }
+    setCachedVision(cacheKey, visionContent);
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
     let target = visionPieces[0];

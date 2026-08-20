@@ -13,6 +13,7 @@ import {
 } from "./pipeline";
 import { processPiece } from "./run-piece";
 import { getVisionImageDataUrl } from "./vision-image";
+import { setCachedVision, visionCacheKey } from "./vision-cache";
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import {
   ApiSecurityError,
@@ -127,11 +128,15 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    const { data: userPrefs } = await supabase
-      .from("user_preferences")
-      .select("preferences, gender, sizes, price_mode")
-      .eq("id", user.id)
-      .single();
+    // Preferences read and storage image download are independent — overlap them.
+    const [{ data: userPrefs }, visionImageUrl] = await Promise.all([
+      supabase
+        .from("user_preferences")
+        .select("preferences, gender, sizes, price_mode")
+        .eq("id", user.id)
+        .single(),
+      getVisionImageDataUrl(supabase, storage_path!),
+    ]);
 
     // Body prefs win when present — avoids stale DB reads right after profile save.
     const bodySizes = parseSizes(body?.sizes);
@@ -152,8 +157,6 @@ export async function POST(req: NextRequest) {
     };
     const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
-
-    const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path!);
 
     const visionContent = await openAIContent(OPENAI_API_KEY, {
       model: "gpt-4o",
@@ -206,7 +209,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const stored: StoredResults = { pieces: pieceResults };
+    // Persist + memory-cache the raw vision JSON so "3 alternatif daha" can
+    // reuse it instead of re-running GPT-4o on the same photo.
+    setCachedVision(visionCacheKey(user.id, storage_path!, occasion), visionContent);
+    const stored: StoredResults = { pieces: pieceResults, vision_content: visionContent };
     const firstResults = pieceResults[0].results;
     const context = OCCASION_TO_CONTEXT[occasion];
     let history_id: string | null = null;
