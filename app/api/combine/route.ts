@@ -268,6 +268,10 @@ export async function POST(req: NextRequest) {
       bodyPriceMode || parsePriceMode(userPrefs?.price_mode) || "karma";
     const userGender = bodyGender || parseGender(userPrefs?.gender);
 
+    if (userGender) {
+      attributes.gender = userGender;
+    }
+
     const user_profile: UserProfile = {
       preferences: userPrefs?.preferences || [],
       sizes,
