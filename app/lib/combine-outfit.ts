@@ -133,13 +133,14 @@ async function openAIContent(apiKey: string, body: unknown): Promise<string> {
 function buildCombinePrompt(
   slots: readonly CombineOutfitSlot[],
   attributes: CombinePieceAttributes,
-  context: AnalysisContext
+  context: AnalysisContext,
+  genderWord: string
 ): string {
   const slotList = slots.join(", ");
   const contextTr = CONTEXT_LABEL_TR[context];
   const color = truncateForPrompt(attributes.color_tr || "", 40);
   const fit = truncateForPrompt(attributes.fit || "", 40);
-  const gender = truncateForPrompt(attributes.gender || "", 20);
+  const gender = genderWord || truncateForPrompt(attributes.gender || "", 20);
   const tags = asStringList(attributes.style_tags).slice(0, 6).map((t) => truncateForPrompt(t, 30));
   const pieceLabel = truncateForPrompt(attributes.label || attributes.category_tr, 60);
   const pieceCat = truncateForPrompt(attributes.category || attributes.category_tr, 60);
@@ -163,6 +164,19 @@ SOURCE PIECE:
 - gender: ${gender || "unisex"}
 - style_tags: ${tags.length ? tags.join(", ") : "none"}
 
+GENDER LOCK — wearer's gender is mandatory:
+${
+  genderWord === "erkek"
+    ? `- EVERY searchQuery MUST include "erkek". Never suggest kadın/bayan products.
+- shoes: ONLY sneaker, bot, loafer, oxford, derby — NEVER topuklu, stiletto, pump.
+- Never suggest elbise, etek, crop top, bralet, küpe, kolye.
+- accessory: saat, kemer, gözlük, şapka — not küpe/kolye.`
+    : genderWord === "kadın"
+      ? `- EVERY searchQuery MUST include "kadın". Never suggest erkek-only products.
+- shoes may be topuklu / sneaker / bot / loafer as the occasion requires.`
+      : `- Gender unknown: prefer unisex types (sneaker, loafer, tişört). Never default to topuklu.`
+}
+
 CONTEXT (occasion) is the PRIMARY constraint — not optional flavor:
 ${occasionBrief}
 
@@ -183,7 +197,7 @@ Rules:
 - searchQuery must be Turkish shopping keywords, 4–10 words, MUST fit ${contextTr}, and MUST encode layered product attributes when relevant:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
-- shoes: tip (sneaker/bot/loafer/topuklu) + renk — NEVER write generic "ayakkabı" alone
+- shoes: tip + renk — NEVER write generic "ayakkabı" alone. For erkek: sneaker/bot/loafer/oxford only. For kadın: sneaker/bot/loafer/topuklu as occasion allows.
 - accessory: concrete type only (kemer/çanta/saat/gözlük/şapka/kolye/küpe…)
   - NEVER write generic "aksesuar"
   - NEVER write garment words (elbise, tişört, pantolon, gömlek, yelek, ayakkabı, abiye)
@@ -204,19 +218,24 @@ Rules:
 
 function normalizeAccessorySuggestion(
   raw: CombineSlotSuggestion,
-  context: AnalysisContext
+  context: AnalysisContext,
+  genderWord = ""
 ): CombineSlotSuggestion | null {
   if (raw.slot !== "accessory") return raw;
 
-  const fallbackType = defaultAccessoryKind(context);
+  const fallbackType = defaultAccessoryKind(context, genderWord || undefined);
   const blob = `${raw.accessoryType || ""} ${raw.styleDescriptor} ${raw.searchQuery}`;
   const clothingLeak = titleLooksLikeGarment(blob) && !detectAccessoryType(blob);
 
-  const type =
+  let type =
     (typeof raw.accessoryType === "string" && detectAccessoryType(raw.accessoryType)) ||
     detectAccessoryType(raw.searchQuery) ||
     detectAccessoryType(raw.styleDescriptor) ||
     fallbackType;
+
+  if (genderWord === "erkek" && /küpe|kolye|bileklik|yüzük/.test(asLower(type))) {
+    type = fallbackType;
+  }
 
   let styleDescriptor = raw.styleDescriptor;
   let searchQuery = raw.searchQuery;
@@ -248,7 +267,8 @@ function normalizeAccessorySuggestion(
 function parseCombineSuggestions(
   content: string,
   expectedSlots: readonly CombineOutfitSlot[],
-  context: AnalysisContext
+  context: AnalysisContext,
+  genderWord = ""
 ): CombineSlotSuggestion[] | null {
   let parsed: { slots?: Record<string, LlmSlotPayload> };
   try {
@@ -273,15 +293,20 @@ function parseCombineSuggestions(
       typeof raw.accessoryType === "string" ? raw.accessoryType.trim() : undefined;
     if (!searchQuery || searchQuery.length < 3) return null;
 
-    const suggestion = normalizeAccessorySuggestion(
-      {
-        slot,
-        color: truncateForPrompt(color, 40),
-        styleDescriptor: truncateForPrompt(styleDescriptor, 80),
-        searchQuery: truncateForPrompt(searchQuery, 120),
-        accessoryType,
-      },
-      context
+    const suggestion = sanitizeSlotForGender(
+      normalizeAccessorySuggestion(
+        {
+          slot,
+          color: truncateForPrompt(color, 40),
+          styleDescriptor: truncateForPrompt(styleDescriptor, 80),
+          searchQuery: truncateForPrompt(searchQuery, 120),
+          accessoryType,
+        },
+        context,
+        genderWord
+      ),
+      context,
+      genderWord
     );
     if (!suggestion) return null;
     out.push(suggestion);
@@ -293,14 +318,15 @@ async function generateSlotSuggestions(
   openaiKey: string,
   slots: readonly CombineOutfitSlot[],
   attributes: CombinePieceAttributes,
-  context: AnalysisContext
+  context: AnalysisContext,
+  genderWord: string
 ): Promise<CombineSlotSuggestion[]> {
   const body = {
     model: "gpt-4o-mini",
     messages: [
       {
         role: "user",
-        content: buildCombinePrompt(slots, attributes, context),
+        content: buildCombinePrompt(slots, attributes, context, genderWord),
       },
     ],
     max_tokens: 350,
@@ -309,48 +335,60 @@ async function generateSlotSuggestions(
   };
 
   const first = await openAIContent(openaiKey, body);
-  const parsed = parseCombineSuggestions(first, slots, context);
+  const parsed = parseCombineSuggestions(first, slots, context, genderWord);
   if (parsed) return parsed;
 
   // Skip a second LLM round-trip — heuristic queries keep combine fast.
-  return heuristicSlotSuggestions(slots, attributes, context);
+  return heuristicSlotSuggestions(slots, attributes, context, genderWord);
 }
 
 function heuristicSlotSuggestions(
   slots: readonly CombineOutfitSlot[],
   attributes: CombinePieceAttributes,
-  context: AnalysisContext
+  context: AnalysisContext,
+  genderWord = ""
 ): CombineSlotSuggestion[] {
   const occasion = CONTEXT_TO_OCCASION[context];
   const guide = getOccasionGuide(occasion);
   const occasionWords = (guide?.searchPhrase || CONTEXT_LABEL_TR[context] || "").split(" ")[0] || "";
-  const gender = genderTr(attributes.gender);
+  const gender = genderWord || genderTr(attributes.gender);
   const color = (attributes.color_tr || "").trim();
 
   return slots.map((slot) => {
     if (slot === "accessory") {
-      const type = defaultAccessoryKind(context);
+      const type = defaultAccessoryKind(context, gender);
       const searchQuery = [gender, color, type, occasionWords].filter(Boolean).join(" ");
-      return {
-        slot,
-        color,
-        styleDescriptor: `${color} ${type}`.trim(),
-        searchQuery: sanitizeAccessoryQuery(searchQuery, type),
-        accessoryType: type,
-      };
+      return sanitizeSlotForGender(
+        {
+          slot,
+          color,
+          styleDescriptor: `${color} ${type}`.trim(),
+          searchQuery: sanitizeAccessoryQuery(searchQuery, type),
+          accessoryType: type,
+        },
+        context,
+        gender
+      )!;
     }
-    const type = COMBINE_SLOT_CATEGORY_TR[slot];
+    const type =
+      slot === "shoes"
+        ? inferShoeSubcategory("", context, gender).subcategory_tr
+        : COMBINE_SLOT_CATEGORY_TR[slot];
     const searchQuery = withOccasionSearchPhrase(
       [gender, color, type].filter(Boolean).join(" "),
       occasion,
       { forAccessory: false }
     );
-    return {
-      slot,
-      color,
-      styleDescriptor: `${color} ${type}`.trim(),
-      searchQuery: searchQuery || [gender, type].filter(Boolean).join(" "),
-    };
+    return sanitizeSlotForGender(
+      {
+        slot,
+        color,
+        styleDescriptor: `${color} ${type}`.trim(),
+        searchQuery: searchQuery || [gender, type].filter(Boolean).join(" "),
+      },
+      context,
+      gender
+    )!;
   });
 }
 
@@ -361,21 +399,73 @@ function genderTr(gender: string | null | undefined): string {
   return "";
 }
 
-function inferShoeSubcategory(blob: string, context: AnalysisContext): {
+function inferShoeSubcategory(
+  blob: string,
+  context: AnalysisContext,
+  genderWord = ""
+): {
   subcategory: string;
   subcategory_tr: string;
 } {
   const t = asLower(blob);
-  if (/\b(topuk|stiletto|heel|pump)\b/.test(t)) return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  const men = genderWord === "erkek";
+  if (!men && /\b(topuk|stiletto|heel|pump)\b/.test(t)) {
+    return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  }
   if (/\b(bot|boot|chelsea)\b/.test(t)) return { subcategory: "boot", subcategory_tr: "bot" };
-  if (/\b(sandal|sandalet)\b/.test(t)) return { subcategory: "sandal", subcategory_tr: "sandalet" };
-  if (/\b(loafer|mokasen|oxford)\b/.test(t)) return { subcategory: "loafer", subcategory_tr: "loafer" };
+  if (!men && /\b(sandal|sandalet)\b/.test(t)) return { subcategory: "sandal", subcategory_tr: "sandalet" };
+  if (/\b(loafer|mokasen|oxford|derby)\b/.test(t)) return { subcategory: "loafer", subcategory_tr: "loafer" };
   if (/\b(sneaker|spor ayakkabı|koşu)\b/.test(t) || context === "sport" || context === "home") {
     return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
   }
-  if (context === "evening") return { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" };
+  if (context === "evening") {
+    return genderWord === "kadın"
+      ? { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" }
+      : { subcategory: "loafer", subcategory_tr: "loafer" };
+  }
   if (context === "work") return { subcategory: "loafer", subcategory_tr: "loafer" };
   return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
+}
+
+function ensureGenderInQuery(query: string, genderWord: string): string {
+  if (!genderWord) return query;
+  const q = asLower(query);
+  if (q.includes(genderWord) || (genderWord === "kadın" && q.includes("kadin"))) return query;
+  const stripped = query.replace(/\b(erkek|kadın|kadin|bayan)\b/gi, " ").replace(/\s+/g, " ").trim();
+  return `${genderWord} ${stripped}`.trim();
+}
+
+function sanitizeSlotForGender(
+  raw: CombineSlotSuggestion | null,
+  context: AnalysisContext,
+  genderWord: string
+): CombineSlotSuggestion | null {
+  if (!raw) return null;
+  const next: CombineSlotSuggestion = { ...raw };
+  if (genderWord === "erkek") {
+    if (next.slot === "shoes") {
+      next.searchQuery = next.searchQuery
+        .replace(/topuklu|stiletto|\bpump\b|kitten/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      next.styleDescriptor = next.styleDescriptor
+        .replace(/topuklu|stiletto|\bpump\b|kitten/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const shoe = inferShoeSubcategory(
+        `${next.searchQuery} ${next.styleDescriptor}`,
+        context,
+        genderWord
+      );
+      if (!/\b(sneaker|bot|loafer|oxford|derby|ayakkabı)\b/i.test(next.searchQuery)) {
+        next.searchQuery = `${next.searchQuery} ${shoe.subcategory_tr}`.trim();
+      }
+      if (!next.styleDescriptor) next.styleDescriptor = shoe.subcategory_tr;
+    }
+    next.searchQuery = next.searchQuery.replace(/\b(kadın|kadin|bayan)\b/gi, " ").replace(/\s+/g, " ").trim();
+  }
+  next.searchQuery = ensureGenderInQuery(next.searchQuery, genderWord);
+  return next;
 }
 
 function accessoryDetailsFromText(text: string, accessoryType?: string): string[] {
@@ -400,30 +490,37 @@ function buildSlotProductProfile(
   suggestion: CombineSlotSuggestion
 ): ProductProfile {
   const isAccessory = suggestion.slot === "accessory";
+  const genderFromUser = input.userProfile.gender || null;
+  const genderFromPiece = input.attributes.gender || "";
+  const gTr = genderTr(genderFromUser || genderFromPiece);
   const shoe =
     suggestion.slot === "shoes"
-      ? inferShoeSubcategory(`${suggestion.searchQuery} ${suggestion.styleDescriptor}`, input.context)
+      ? inferShoeSubcategory(
+          `${suggestion.searchQuery} ${suggestion.styleDescriptor}`,
+          input.context,
+          gTr
+        )
       : { subcategory: "", subcategory_tr: "" };
   const accessoryType =
     suggestion.accessoryType ||
     detectAccessoryType(suggestion.searchQuery) ||
-    defaultAccessoryKind(input.context);
+    defaultAccessoryKind(input.context, gTr);
   const categoryTr = isAccessory
     ? accessoryType
     : shoe.subcategory_tr || COMBINE_SLOT_CATEGORY_TR[suggestion.slot];
-  const genderFromUser = input.userProfile.gender || null;
-  const genderFromPiece = input.attributes.gender || "";
-  const gTr = genderTr(genderFromUser || genderFromPiece);
   const color = suggestion.color || input.attributes.color_tr || "";
   // Keep fit_tr short — full styleDescriptor polluted accessory searches (kolye → yelek).
   const fitTr = isAccessory ? "" : truncateForPrompt(suggestion.styleDescriptor, 40);
 
-  const search_query = withOccasionSearchPhrase(
-    isAccessory
-      ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
-      : suggestion.searchQuery,
-    CONTEXT_TO_OCCASION[input.context],
-    { forAccessory: isAccessory }
+  const search_query = ensureGenderInQuery(
+    withOccasionSearchPhrase(
+      isAccessory
+        ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
+        : suggestion.searchQuery,
+      CONTEXT_TO_OCCASION[input.context],
+      { forAccessory: isAccessory }
+    ),
+    gTr
   );
   const fallback_query = isAccessory
     ? [gTr, color, accessoryType].filter(Boolean).join(" ").trim()
@@ -478,11 +575,15 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
   const slots =
     input.onlySlot && allSlots.includes(input.onlySlot) ? [input.onlySlot] : allSlots;
 
+  const genderWord =
+    genderTr(input.userProfile.gender) || genderTr(input.attributes.gender);
+
   let suggestions: CombineSlotSuggestion[];
   if (input.reuseSuggestion && input.onlySlot) {
-    const normalized = normalizeAccessorySuggestion(
-      input.reuseSuggestion,
-      input.context
+    const normalized = sanitizeSlotForGender(
+      normalizeAccessorySuggestion(input.reuseSuggestion, input.context, genderWord),
+      input.context,
+      genderWord
     );
     suggestions = [normalized || input.reuseSuggestion];
   } else {
@@ -490,7 +591,8 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       input.openaiKey,
       slots,
       input.attributes,
-      input.context
+      input.context,
+      genderWord
     );
   }
 

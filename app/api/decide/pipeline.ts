@@ -399,7 +399,16 @@ export function detectAccessoryKind(text: unknown): string | null {
   return null;
 }
 
-export function defaultAccessoryKind(context: AnalysisContext | Occasion | null | undefined): string {
+export function defaultAccessoryKind(
+  context: AnalysisContext | Occasion | null | undefined,
+  gender?: string | null
+): string {
+  const men = parseUserGender(gender) === "men" || asLower(gender) === "erkek";
+  if (men) {
+    if (context === "sport" || context === "spor") return "şapka";
+    if (context === "work" || context === "is") return "kemer";
+    return "saat";
+  }
   if (context === "sport" || context === "spor") return "şapka";
   if (context === "evening" || context === "aksam") return "küpe";
   if (context === "work" || context === "is") return "kemer";
@@ -1199,13 +1208,18 @@ export function profileGenderSide(profile: ProductProfile): "men" | "women" | nu
   return fromPrefs;
 }
 
+/** Product types that are women's even when the title omits "kadın". */
+const MEN_FORBIDDEN_PRODUCT_RE =
+  /topuklu|stiletto|kitten\s*heel|high[- ]?heel|\bpump\b|elbise|\betek\b|crop\s*top|bralet|büstiyer|bustiyer|abiye|askılı\s*(üst|bluz|crop)/;
+
 export function contradictsGender(title: string, profile: ProductProfile): boolean {
   const side = profileGenderSide(profile);
   if (!side) return false;
+  const t = asLower(title);
 
   if (side === "men") {
-    // Explicit women marking → reject (even if "erkek" somehow also present)
     if (titleHasGenderToken(title, WOMEN_GENDER_TOKENS)) return true;
+    if (MEN_FORBIDDEN_PRODUCT_RE.test(t)) return true;
     return false;
   }
 
@@ -1360,7 +1374,10 @@ export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "ca
     const detected =
       detectAccessoryKind(
         `${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)}`
-      ) || defaultAccessoryKind(parseOccasion(profile.user_profile?.occasion));
+      ) || defaultAccessoryKind(
+        parseOccasion(profile.user_profile?.occasion),
+        asText(profile.user_profile?.gender)
+      );
     return detected;
   }
   return cat;
