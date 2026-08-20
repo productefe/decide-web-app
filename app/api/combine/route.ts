@@ -140,6 +140,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Parça seçilmedi." }, { status: 400 });
     }
 
+    const prefsPromise = supabase
+      .from("user_preferences")
+      .select("preferences, gender, sizes, price_mode")
+      .eq("id", user.id)
+      .single();
+
     try {
       if (isShowMore) {
         await enforceRateLimit(supabase, "combine_more", 100);
@@ -186,12 +192,14 @@ export async function POST(req: NextRequest) {
       }
 
       if (saveContext && row.context !== saveContext) {
-        const { error: updErr } = await supabase
+        void supabase
           .from("search_history")
           .update({ context: saveContext })
           .eq("id", historyId)
-          .eq("user_id", user.id);
-        if (updErr) console.error("search_history context update:", updErr.message);
+          .eq("user_id", user.id)
+          .then(({ error: updErr }) => {
+            if (updErr) console.error("search_history context update:", updErr.message);
+          });
       }
     } else {
       // Live results session without history_id — attrs must come from body
@@ -249,11 +257,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: userPrefs } = await supabase
-      .from("user_preferences")
-      .select("preferences, gender, sizes, price_mode")
-      .eq("id", user.id)
-      .single();
+    const { data: userPrefs } = await prefsPromise;
 
     const bodySizes = parseSizes(body?.sizes);
     const bodyGender = parseGender(body?.gender);
@@ -278,13 +282,13 @@ export async function POST(req: NextRequest) {
     );
 
     if (!isShowMore) {
-      await trackAnalyticsEvent(supabase, user.id, "combine_requested", {
+      void trackAnalyticsEvent(supabase, user.id, "combine_requested", {
         piece_category: pieceCategory,
         context,
         piece_label: pieceLabel,
       });
     } else {
-      await trackAnalyticsEvent(supabase, user.id, "combine_show_more", {
+      void trackAnalyticsEvent(supabase, user.id, "combine_show_more", {
         piece_category: pieceCategory,
         context,
         outfit_slot: onlySlot,
@@ -307,7 +311,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!isShowMore) {
-      await trackAnalyticsEvent(supabase, user.id, "combine_result_viewed", {
+      void trackAnalyticsEvent(supabase, user.id, "combine_result_viewed", {
         piece_category: pieceCategory,
         context,
         slot_count: result.slots.length,

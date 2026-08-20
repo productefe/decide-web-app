@@ -303,7 +303,7 @@ async function generateSlotSuggestions(
         content: buildCombinePrompt(slots, attributes, context),
       },
     ],
-    max_tokens: 450,
+    max_tokens: 350,
     temperature: 0.2,
     response_format: { type: "json_object" },
   };
@@ -312,12 +312,46 @@ async function generateSlotSuggestions(
   const parsed = parseCombineSuggestions(first, slots, context);
   if (parsed) return parsed;
 
-  // Reject once and retry
-  const second = await openAIContent(openaiKey, body);
-  const retried = parseCombineSuggestions(second, slots, context);
-  if (retried) return retried;
+  // Skip a second LLM round-trip — heuristic queries keep combine fast.
+  return heuristicSlotSuggestions(slots, attributes, context);
+}
 
-  throw new Error("Kombin önerisi oluşturulamadı. Lütfen tekrar dene.");
+function heuristicSlotSuggestions(
+  slots: readonly CombineOutfitSlot[],
+  attributes: CombinePieceAttributes,
+  context: AnalysisContext
+): CombineSlotSuggestion[] {
+  const occasion = CONTEXT_TO_OCCASION[context];
+  const guide = getOccasionGuide(occasion);
+  const occasionWords = (guide?.searchPhrase || CONTEXT_LABEL_TR[context] || "").split(" ")[0] || "";
+  const gender = genderTr(attributes.gender);
+  const color = (attributes.color_tr || "").trim();
+
+  return slots.map((slot) => {
+    if (slot === "accessory") {
+      const type = defaultAccessoryKind(context);
+      const searchQuery = [gender, color, type, occasionWords].filter(Boolean).join(" ");
+      return {
+        slot,
+        color,
+        styleDescriptor: `${color} ${type}`.trim(),
+        searchQuery: sanitizeAccessoryQuery(searchQuery, type),
+        accessoryType: type,
+      };
+    }
+    const type = COMBINE_SLOT_CATEGORY_TR[slot];
+    const searchQuery = withOccasionSearchPhrase(
+      [gender, color, type].filter(Boolean).join(" "),
+      occasion,
+      { forAccessory: false }
+    );
+    return {
+      slot,
+      color,
+      styleDescriptor: `${color} ${type}`.trim(),
+      searchQuery: searchQuery || [gender, type].filter(Boolean).join(" "),
+    };
+  });
 }
 
 function genderTr(gender: string | null | undefined): string {
@@ -483,7 +517,8 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         input.affiliateTag,
         exclude,
         {
-          immersiveMode: input.onlySlot ? "none" : "recommended",
+          immersiveMode: "none",
+          searchMode: "compact",
           mustFind: true,
           denyTitle: isWatchSlot
             ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)

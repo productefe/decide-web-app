@@ -124,32 +124,36 @@ async function searchQueries(
   return { scoring, queryUsed: ordered[0], items: merged };
 }
 
+function compactExtraLimit(searchMode: "full" | "compact"): number {
+  return searchMode === "compact" ? 2 : 4;
+}
+
 async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string,
-  rotation = 0
+  rotation = 0,
+  searchMode: "full" | "compact" = "full"
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
+  const compact = searchMode === "compact";
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
   }
 
   if (priceMode === "luks") {
-    // Store-scoped luxury queries plus one generic query — luxury stores alone
-    // often return too few (or already-shown) items and "3 alternatif daha"
-    // used to dead-end with "yeni alternatif bulunamadı".
     const genericLuks = queries.filter(
       (q) => !luxuryQueries.includes(q) && !brandQueries.includes(q)
     );
-    const firstBatch = [
-      ...new Set([...luxuryQueries.slice(0, 4), genericLuks[0]].filter(Boolean)),
-    ];
+    const firstBatch = compact
+      ? [...new Set([luxuryQueries[0], genericLuks[0] || luxuryQueries[1]].filter(Boolean))]
+      : [...new Set([...luxuryQueries.slice(0, 4), genericLuks[0]].filter(Boolean))];
     const result = await searchQueries(firstBatch, productProfile, apiKey);
     if (!result.scoring.error && result.scoring.recommended) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
+    if (compact) return { scoring: result.scoring, queryUsed: result.queryUsed };
 
     const luksFallback = genericLuks.filter((q) => !firstBatch.includes(q)).slice(0, 3);
     if (luksFallback.length === 0) {
@@ -164,20 +168,18 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || luksFallback[0] || "" };
   }
 
-  // Wider brand-pool coverage (docs/decide-brand-pool.md): 3 brand-scoped
-  // queries fire in the same parallel batch — no extra latency.
-  const brandQs = brandQueries.slice(0, 3);
+  const brandQs = brandQueries.slice(0, compact ? 1 : 3);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
   const primary = genericQs[0] || queries[0];
-  // Karma fires luxury store queries alongside budget/brand ones so the pool
-  // is a genuine price mix instead of an all-mass-market dump.
-  const luxQs = priceMode === "karma" ? luxuryQueries.slice(0, 2) : [];
+  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 2) : [];
   const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
 
   const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey);
-  if (!firstPass.scoring.error) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
+  if (!firstPass.scoring.error || compact) {
+    return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
+  }
 
   const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
   if (fallbackQs.length === 0) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
@@ -210,6 +212,11 @@ export type ProcessPieceOptions = {
    * - none: skip (fastest; product_link only)
    */
   immersiveMode?: "all" | "recommended" | "none";
+  /**
+   * full: brand + luxury ladder (analysis).
+   * compact: 2 shopping queries, no extra round unless the pool is empty (combine).
+   */
+  searchMode?: "full" | "compact";
   /** Drop shopping titles matching this pattern before scoring slots. */
   denyTitlePattern?: RegExp;
   /** Extra title denylist (e.g. garments in an accessory slot). */
@@ -270,8 +277,9 @@ export async function processPiece(
 ): Promise<PieceResult | null> {
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
+  const searchMode = options.searchMode ?? "full";
   const rotation = excludeTitles.size;
-  let { scoring } = await searchWithFallback(productProfile, serpKey, rotation);
+  let { scoring } = await searchWithFallback(productProfile, serpKey, rotation, searchMode);
   scoring = applyPoolFilters(
     scoring,
     excludeTitles,
@@ -279,7 +287,10 @@ export async function processPiece(
     options.denyTitle
   );
 
-  if ((!scoring.recommended || scoring.pool.length < 3) && options.mustFind) {
+  if (
+    (!scoring.recommended || (searchMode === "full" && scoring.pool.length < 3)) &&
+    options.mustFind
+  ) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
@@ -338,7 +349,7 @@ export async function processPiece(
       );
       for (const brand of nextBrands) broaden.unshift(`${seedQuery} ${brand}`);
     }
-    const extraQs = [...new Set(broaden)].slice(0, priceMode === "luks" ? 4 : 4);
+    const extraQs = [...new Set(broaden)].slice(0, compactExtraLimit(searchMode));
     if (extraQs.length) {
       const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
       const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);
