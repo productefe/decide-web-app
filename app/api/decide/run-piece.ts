@@ -16,6 +16,7 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
+import { pickDecidePoolBrands } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
@@ -125,9 +126,10 @@ async function searchQueries(
 
 async function searchWithFallback(
   productProfile: ProductProfile,
-  apiKey: string
+  apiKey: string,
+  rotation = 0
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
-  const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile);
+  const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
 
   if (queries.length === 0) {
@@ -268,7 +270,8 @@ export async function processPiece(
 ): Promise<PieceResult | null> {
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
-  let { scoring } = await searchWithFallback(productProfile, serpKey);
+  const rotation = excludeTitles.size;
+  let { scoring } = await searchWithFallback(productProfile, serpKey, rotation);
   scoring = applyPoolFilters(
     scoring,
     excludeTitles,
@@ -298,10 +301,20 @@ export async function processPiece(
       .map((q) => (q || "").trim().replace(/\s+/g, " "))
       .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
       .filter(Boolean);
+    const seedQuery = (
+      productProfile.fallback_query ||
+      productProfile.search_query ||
+      [
+        productProfile.gender_tr,
+        productProfile.color_tr,
+        accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    ).trim();
     if (priceMode === "luks") {
       // Rotate through different luxury stores on each "3 alternatif daha"
       // click (excludeTitles grows every round) so new items keep appearing.
-      const seedQuery = (productProfile.fallback_query || productProfile.search_query || "").trim();
       if (seedQuery) {
         const offset = excludeTitles.size % LUXURY_SEARCH_STORES.length;
         for (let i = 0; i < 2; i++) {
@@ -309,8 +322,23 @@ export async function processPiece(
           broaden.unshift(`${seedQuery} ${store}`);
         }
       }
+    } else if (seedQuery) {
+      const nextBrands = pickDecidePoolBrands(
+        {
+          category: productProfile.category,
+          category_tr: productProfile.category_tr,
+          subcategory: productProfile.subcategory,
+          subcategory_tr: productProfile.subcategory_tr,
+          price_mode: priceMode,
+          gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
+        },
+        4,
+        seedQuery,
+        rotation + 5
+      );
+      for (const brand of nextBrands) broaden.unshift(`${seedQuery} ${brand}`);
     }
-    const extraQs = [...new Set(broaden)].slice(0, priceMode === "luks" ? 4 : 2);
+    const extraQs = [...new Set(broaden)].slice(0, priceMode === "luks" ? 4 : 4);
     if (extraQs.length) {
       const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
       const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);

@@ -32,6 +32,11 @@ export interface BrandPoolEntry {
 
 export const CROP_SUBCATEGORIES = ["crop-top", "askili-ust", "bralet", "bustiyer", "büstiyer"];
 
+/** Women's apparel: these always outrank Koton / LCW / DeFacto in first alternatives. */
+export const WOMEN_TREND_PRIORITY_BRANDS = ["Bershka", "Stradivarius", "Pull&Bear"];
+
+const WOMEN_TREND_CATEGORIES: BrandPoolCategory[] = ["tops", "crop", "bottoms", "dress", "accessory"];
+
 export const BRAND_POOL: BrandPoolEntry[] = [
   // --- 1. ÜST GİYİM ---
   {
@@ -585,19 +590,28 @@ export function pickDecidePoolBrands(
     subcategory?: string;
     subcategory_tr?: string;
     price_mode?: string;
+    gender?: string;
   },
   count = 3,
-  seed = ""
+  seed = "",
+  rotation = 0
 ): string[] {
   const tiers = allowedTiers(profile.price_mode);
   const categories = resolvePoolCategories(profile);
   const needles = iconicNeedles(profile);
+  const turn = Math.max(0, rotation | 0);
+  const womenTrend =
+    profile.price_mode !== "luks" &&
+    categories.some((c) => WOMEN_TREND_CATEGORIES.includes(c)) &&
+    (/kadın|kadin|women|female|woman/.test(asLower(profile.gender)) ||
+      categories.some((c) => c === "crop" || c === "dress"));
 
   const seen = new Set<string>();
   const out: string[] = [];
 
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash + seed.charCodeAt(i) * (i + 1)) % 997;
+  hash = (hash + turn * 17) % 997;
 
   const pushBrand = (brand: string): boolean => {
     if (out.length >= count) return false;
@@ -643,6 +657,23 @@ export function pickDecidePoolBrands(
       .filter((b, i, arr) => arr.findIndex((x) => normalizeBrandName(x) === normalizeBrandName(b)) === i);
     for (const b of iconic) {
       if (!pushBrand(b)) break;
+    }
+
+    if (womenTrend && tiers.includes("affordable")) {
+      const priority = WOMEN_TREND_PRIORITY_BRANDS.filter((b) =>
+        affordableCat.some((x) => normalizeBrandName(x) === normalizeBrandName(b))
+      );
+      if (turn === 0) {
+        for (const b of priority) {
+          if (!pushBrand(b)) break;
+        }
+      } else {
+        // Later "3 alternatif daha" rounds skip the opening trio so the pool
+        // actually changes instead of recycling Bershka/Koton listings.
+        const skip = new Set(priority.map((b) => normalizeBrandName(b)));
+        const rotated = affordableCat.filter((b) => !skip.has(normalizeBrandName(b)));
+        pickFrom(rotated, count - out.length);
+      }
     }
 
     const remaining = count - out.length;

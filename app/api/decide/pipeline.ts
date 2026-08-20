@@ -6,6 +6,7 @@ import {
   resolvePoolCategories,
   textHasIconicPoolBrand,
   textHasPoolBrand,
+  WOMEN_TREND_PRIORITY_BRANDS,
 } from "@/constants/brandPool";
 import { failsQualityFilter } from "@/lib/qualityFilter";
 import {
@@ -2204,7 +2205,7 @@ export interface SearchQueryPlan {
 }
 
 /** Most specific → broadest; core type token never dropped. Empty if low_confidence. */
-export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan {
+export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): SearchQueryPlan {
   const empty: SearchQueryPlan = { queries: [], brandQueries: [], luxuryQueries: [] };
   if (productProfile.low_confidence) return empty;
 
@@ -2272,9 +2273,11 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
       subcategory: rebuilt.subcategory,
       subcategory_tr: rebuilt.subcategory_tr,
       price_mode: priceMode,
+      gender: `${rebuilt.gender} ${rebuilt.gender_tr} ${asText(rebuilt.user_profile?.gender)}`,
     },
     5,
-    primary
+    primary,
+    rotation
   );
   const brandQueries = primary ? brandSuffixes.map((brand) => `${primary} ${brand}`) : [];
 
@@ -2289,11 +2292,13 @@ export function buildSearchPlan(productProfile: ProductProfile): SearchQueryPlan
     for (let i = 0; i < primary.length; i++) {
       seed = (seed * 31 + primary.charCodeAt(i)) >>> 0;
     }
-    const first = seed % rotating.length;
-    const second = (first + 1 + (seed % (rotating.length - 1))) % rotating.length;
+    const first = (seed + rotation) % rotating.length;
+    const second = (first + 1 + ((seed + rotation) % Math.max(1, rotating.length - 1))) % rotating.length;
     const stores =
       priceMode === "luks"
-        ? [...fixedStores, rotating[first], rotating[second]]
+        ? rotation > 0
+          ? [rotating[first], rotating[second], rotating[(second + 1) % rotating.length], "beymen"]
+          : [...fixedStores, rotating[first], rotating[second]]
         : [...fixedStores, rotating[first]];
     for (const store of stores) {
       luxuryQueries.push(`${primary} ${store}`);
@@ -2373,40 +2378,50 @@ function interleaveByStore(scored: ScoredProduct[]): ScoredProduct[] {
   return out;
 }
 
-const WOMEN_TREND_BRAND_RE = /bershka|stradivarius|pull\s*&?\s*bear|trendyol\s*milla|trendyolmilla|addax|zara/;
+const WOMEN_TREND_BRAND_RE = /bershka|stradivarius|pull\s*&?\s*bear/;
 const WOMEN_BUDGET_BRAND_RE = /koton|lc\s*waikiki|lcw|defacto|de\s*facto/;
 
+function wantsWomenTrendRank(profile: ProductProfile, priceMode: PriceMode): boolean {
+  if (priceMode === "luks") return false;
+  if (profileGenderSide(profile) === "women") return true;
+  if (/kadın|kadin/.test(asLower(profile.gender_tr))) return true;
+  const blob = asLower(
+    `${profile.category} ${profile.subcategory} ${profile.category_tr} ${profile.subcategory_tr}`
+  );
+  return /crop|askili|askılı|bralet|elbise|dress|etek|skirt/.test(blob);
+}
+
+function isWomenTrendHit(title: string, source: string): boolean {
+  const hay = asLower(`${title} ${source}`);
+  if (WOMEN_TREND_BRAND_RE.test(hay)) return true;
+  return WOMEN_TREND_PRIORITY_BRANDS.some((b) => hay.includes(asLower(b)));
+}
+
+function isWomenBudgetHit(title: string, source: string): boolean {
+  if (isWomenTrendHit(title, source)) return false;
+  return WOMEN_BUDGET_BRAND_RE.test(asLower(`${title} ${source}`));
+}
+
 /**
- * Women's picks: trend youth brands (Bershka, Stradivarius, Pull&Bear, …)
- * always rank ahead of budget basics brands (Koton, LCW, DeFacto) in the
- * visible alternatives. Only the relative order of those two groups changes;
- * every other item keeps its score-sorted position.
+ * Women's apparel: Bershka / Stradivarius / Pull&Bear always occupy the
+ * front of the pool; Koton / LCW / DeFacto drop behind everything else.
  */
 function preferTrendOverBudget(
   scored: ScoredProduct[],
   profile: ProductProfile,
   priceMode: PriceMode
 ): ScoredProduct[] {
-  if (priceMode === "luks") return scored;
-  if (profileGenderSide(profile) !== "women") return scored;
-
-  const hayOf = (p: ScoredProduct) => asLower(`${p.title} ${p.source}`);
-  const isTrend = (p: ScoredProduct) => WOMEN_TREND_BRAND_RE.test(hayOf(p));
-  const isBudget = (p: ScoredProduct) => !isTrend(p) && WOMEN_BUDGET_BRAND_RE.test(hayOf(p));
-
-  const groupIdx: number[] = [];
-  scored.forEach((p, i) => {
-    if (isTrend(p) || isBudget(p)) groupIdx.push(i);
-  });
-  if (groupIdx.length < 2) return scored;
-
-  const group = groupIdx.map((i) => scored[i]);
-  const reordered = [...group.filter(isTrend), ...group.filter(isBudget)];
-  const out = [...scored];
-  groupIdx.forEach((slot, k) => {
-    out[slot] = reordered[k];
-  });
-  return out;
+  if (!wantsWomenTrendRank(profile, priceMode)) return scored;
+  const trend: ScoredProduct[] = [];
+  const rest: ScoredProduct[] = [];
+  const budget: ScoredProduct[] = [];
+  for (const p of scored) {
+    if (isWomenTrendHit(p.title, p.source)) trend.push(p);
+    else if (isWomenBudgetHit(p.title, p.source)) budget.push(p);
+    else rest.push(p);
+  }
+  if (!trend.length) return scored;
+  return [...trend, ...rest, ...budget];
 }
 
 /**
@@ -2655,6 +2670,12 @@ function scoreShoppingItems(
     if (occFit === "avoid") matchScore = Math.max(0, matchScore - 22);
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
+    if (wantsWomenTrendRank(productProfile, priceMode)) {
+      if (isWomenTrendHit(asText(item.title), asText(item.source))) matchScore += 22;
+      if (isWomenBudgetHit(asText(item.title), asText(item.source))) {
+        matchScore = Math.max(0, matchScore - 10);
+      }
+    }
     matchScore = Math.min(matchScore, 100);
 
     // Require category fidelity when we know the category
@@ -2686,6 +2707,10 @@ function scoreShoppingItems(
     );
     if (priceMode === "luks" && luxury) recommendationScore += 25;
     if (priceMode === "luks" && !luxury) recommendationScore -= 20;
+    if (wantsWomenTrendRank(productProfile, priceMode)) {
+      if (isWomenTrendHit(asText(item.title), asText(item.source))) recommendationScore += 20;
+      if (isWomenBudgetHit(asText(item.title), asText(item.source))) recommendationScore -= 12;
+    }
     recommendationScore = Math.max(0, Math.min(recommendationScore, 100));
 
     return {
