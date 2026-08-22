@@ -58,8 +58,8 @@ const GUIDES: Record<Occasion, OccasionGuide> = {
       "abiye",
       "davet",
       "smokin",
-      "kumaş",
-      "kumas",
+      "kumaş pantolon",
+      "kumas pantolon",
       "chino",
       "oxford",
       "loafer",
@@ -71,7 +71,16 @@ const GUIDES: Record<Occasion, OccasionGuide> = {
       "mayo",
       "plaj",
     ],
-    hardAvoidTerms: ["kumaş", "kumas", "chino", "oxford", "loafer", "topuklu", "stiletto", "blazer"],
+    hardAvoidTerms: [
+      "kumaş pantolon",
+      "kumas pantolon",
+      "chino",
+      "oxford",
+      "loafer",
+      "topuklu",
+      "stiletto",
+      "blazer",
+    ],
     visionNote: `User will shop alternatives for SPORT / training / gym / athleisure.
 Extract the visible garments faithfully — do not swap a blouse for a tank or heels for sneakers.
 Emphasize sport-relevant attributes in distinctive_details and style_tags: athletic cut, stretch/performance fabric impression, jogger cuff, mesh panels, sneaker type (running vs lifestyle).
@@ -226,7 +235,7 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "gomlek",
       "blazer",
       "chino",
-      "kumaş",
+      "kumaş pantolon",
       "klasik",
       "smart casual",
       "business casual",
@@ -268,7 +277,7 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "hoodie",
       "tayt",
       "spor ayakkabı",
-      "koşu",
+      "koşu ayakkabı",
       "yırtık",
     ],
     visionNote: `User will shop alternatives for WORK / office / business casual / smart casual.
@@ -285,7 +294,7 @@ searchQuery MUST include at least one of: iş, ofis, smart casual, business casu
   },
   sahil: {
     labelTr: "Sahil",
-    searchPhrase: "sahil plaj şort bikini mayo",
+    searchPhrase: "sahil plaj",
     boostTerms: [
       "sahil",
       "plaj",
@@ -306,8 +315,8 @@ searchQuery MUST include at least one of: iş, ofis, smart casual, business casu
       "blazer",
       "gömlek",
       "gomlek",
-      "kumaş",
-      "kumas",
+      "kumaş pantolon",
+      "kumas pantolon",
       "chino",
       "ofis",
       "klasik",
@@ -324,12 +333,10 @@ searchQuery MUST include at least one of: iş, ofis, smart casual, business casu
       "trenç",
     ],
     hardAvoidTerms: [
-      "kumaş",
-      "kumas",
+      "kumaş pantolon",
+      "kumas pantolon",
       "chino",
       "blazer",
-      "gömlek",
-      "gomlek",
       "oxford",
       "topuklu",
       "eşofman",
@@ -374,11 +381,11 @@ const ACCESSORY_OCCASION_PHRASE: Record<Occasion, string> = {
   sahil: "plaj çantası hasır",
 };
 
-type PieceFamily = "bottom" | "shoes" | "top" | "dress" | "other";
+type PieceFamily = "bottom" | "shoes" | "top" | "dress" | "swim" | "other";
 
 function pieceFamily(category: string, subcategory: string, categoryTr = ""): PieceFamily {
   const blob = `${category} ${subcategory} ${categoryTr}`.toLocaleLowerCase("tr-TR");
-  if (/bikini|mayo|swimsuit|pareo/.test(blob)) return "top";
+  if (/bikini|mayo|swimsuit|pareo/.test(blob)) return "swim";
   if (/bottom|pantolon|jean|chino|jogger|eşofman|esofman|şort|short|tayt|legging|etek|skirt/.test(blob)) {
     return "bottom";
   }
@@ -424,8 +431,9 @@ const PIECE_SEARCH_PHRASE: Record<Occasion, Partial<Record<PieceFamily, string>>
   sahil: {
     bottom: "şort plaj deniz şortu",
     shoes: "sandalet plaj terliği",
-    top: "bikini mayo crop atlet plaj",
-    dress: "pareo plaj elbisesi mayo",
+    top: "plaj keten atlet",
+    dress: "pareo plaj elbisesi",
+    swim: "bikini mayo plaj",
   },
 };
 
@@ -467,11 +475,14 @@ export function parseVisionWearOccasion(visionContent: string): Occasion | null 
       .flatMap((item) => (Array.isArray(item.style_tags) ? item.style_tags : []))
       .map((t) => asText(t))
       .join(" ");
-    for (const token of tags.split(/\s+/)) {
+    const hits = new Set<Occasion>();
+    for (const token of tags.split(/[\s,;/|]+/)) {
       const hit = parseOccasion(token);
-      if (hit) return hit;
+      if (hit) hits.add(hit);
     }
-    return null;
+    if (hits.size === 0) return null;
+    const priority: Occasion[] = ["sahil", "spor", "aksam", "is", "ev", "gundelik"];
+    return priority.find((occ) => hits.has(occ)) ?? [...hits][0];
   } catch {
     return null;
   }

@@ -384,7 +384,11 @@ function heuristicSlotSuggestions(
     const searchQuery = withOccasionSearchPhrase(
       [gender, color, type].filter(Boolean).join(" "),
       occasion,
-      { forAccessory: false }
+      {
+        forAccessory: false,
+        category: slot === "shoes" ? "shoes" : slot,
+        category_tr: type,
+      }
     );
     return sanitizeSlotForGender(
       {
@@ -539,7 +543,12 @@ function buildSlotProductProfile(
         ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
         : suggestion.searchQuery,
       CONTEXT_TO_OCCASION[input.context],
-      { forAccessory: isAccessory }
+      {
+        forAccessory: isAccessory,
+        category: isAccessory ? "accessory" : suggestion.slot === "shoes" ? "shoes" : suggestion.slot,
+        category_tr: categoryTr,
+        subcategory: isAccessory ? accessoryType : shoe.subcategory,
+      }
     ),
     gTr
   );

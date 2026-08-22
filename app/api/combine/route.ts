@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
       // Legacy rows: require context chip selection, then persist
       if (!context) {
         return NextResponse.json(
-          { error: "context_required", message: "Önce giyim amacını seçmelisin." },
+          { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
           { status: 400 }
         );
       }
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
       // Live results session without history_id — attrs must come from body
       if (!context) {
         return NextResponse.json(
-          { error: "context_required", message: "Önce giyim amacını seçmelisin." },
+          { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
           { status: 400 }
         );
       }
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
 
     if (!context) {
       return NextResponse.json(
-        { error: "context_required", message: "Önce giyim amacını seçmelisin." },
+        { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
         { status: 400 }
       );
     }

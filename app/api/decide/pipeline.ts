@@ -415,7 +415,7 @@ export function defaultAccessoryKind(
   if (context === "evening" || context === "aksam") return "küpe";
   if (context === "work" || context === "is") return "kemer";
   if (context === "home" || context === "ev") return "atkı";
-  if (context === "beach" || context === "sahil") return "güneş gözlüğü";
+  if (context === "beach" || context === "sahil") return "çanta";
   return "çanta";
 }
 
