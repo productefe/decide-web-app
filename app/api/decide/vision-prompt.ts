@@ -16,13 +16,14 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - Patterns and motifs are CRITICAL for search — never omit them. Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
 - placement PRECISION: use all-over ONLY when the pattern covers the whole garment. A stripe only on the shoulders or sleeves is placement shoulder/sleeve — the garment is NOT a "striped t-shirt". A mostly plain garment with one local accent stays visually plain; report the accent with its exact placement.
 - Shoes: sneaker, boot, sandal, loafer, and heel are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
+- Swimwear: bikini, mayo, and swim shorts are DISTINCT from t-shirt / trousers. If the photo shows a bikini or swimsuit, subcategory MUST be bikini or mayo — never t-shirt, never dress.
 - Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
 - Glasses/sunglasses: distinctive_details MUST include frame shape + color when visible (yuvarlak çerçeve, siyah kare çerçeve, aviator).
 - Accessories (watch, bag, glasses, hat, belt, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
 - If you are not sure about a field, leave it "" or []. Never guess.
 
 category (family, English): top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
-subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | sneaker | boot | sandal | loafer | heel | bag | hat | glasses | sunglasses | watch | belt | scarf | necklace | earring | bracelet | ring
+subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | bikini | mayo | sneaker | boot | sandal | loafer | heel | bag | hat | glasses | sunglasses | watch | belt | scarf | necklace | earring | bracelet | ring
 silhouette_fit: oversize | regular | slim | bodycon | loose | ""
 length: crop | normal | uzun | midi | maxi | mini | ""
 neckline: crew-neck | v-neck | polo | turtleneck | halter | square | strapless | ""
@@ -39,9 +40,26 @@ Return ONLY valid JSON, no markdown:
 
 Order items top → bottom → shoes → outerwear → accessories (watch/bag/sunglasses) when possible.`;
 
-export function visionPromptForOccasion(occasion: Occasion): string {
+export function visionPromptForOccasion(occasion: Occasion | null): string {
   const guide = getOccasionGuide(occasion);
-  if (!guide) return VISION_OUTFIT_PROMPT;
+  if (!guide) {
+    return `${VISION_OUTFIT_PROMPT}
+
+WEAR CONTEXT is unknown. Infer where this look belongs from garments, fabric, and shoes.
+Add a root field "occasion" that MUST be exactly one of: spor | gundelik | aksam | ev | is | sahil
+Return JSON like: {"occasion":"gundelik","items":[...]}
+
+Hard pick rules (choose one):
+- spor: gym / training / athleisure — jogger, eşofman, tayt, running sneaker, workout sweat. NOT kumaş pantolon, NOT gömlek, NOT heels, NOT bikini.
+- is: office / business casual / smart casual — gömlek, blazer, chino, kumaş, loafer, oxford, polo. NOT eşofman, NOT hoodie, NOT running sneaker.
+- aksam: evening / davet / abiye — saten, topuklu, şık. NOT gym, NOT hoodie.
+- ev: home / lounge / pijama / terlik. NOT office, NOT heels.
+- sahil: beach / plaj — şort, bikini, mayo, sandalet, plaj çantası. NOT kumaş pantolon, NOT gömlek, NOT jogger.
+- gundelik: street / weekend / jean / tişört — default when none of the above is clear.
+
+style_tags on each item MUST include the chosen occasion word (spor, gündelik, akşam, ev, iş, or sahil).
+Never change category or subcategory to force the occasion. Extract the visible garment, then tag it for the inferred place.`;
+  }
   return `${VISION_OUTFIT_PROMPT}
 
 OCCASION — the user will wear shopping alternatives for: ${guide.labelTr} (${occasion}).

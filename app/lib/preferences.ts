@@ -47,6 +47,7 @@ export const OCCASION_OPTIONS = [
   { value: "aksam", label: "Akşam" },
   { value: "gundelik", label: "Gündelik" },
   { value: "is", label: "İş" },
+  { value: "sahil", label: "Sahil" },
 ] as const;
 
 export type Occasion = (typeof OCCASION_OPTIONS)[number]["value"];
@@ -54,7 +55,7 @@ export type Occasion = (typeof OCCASION_OPTIONS)[number]["value"];
 /** Chip layout: top row Spor/Ev/Akşam, bottom row Gündelik/İş. */
 export const OCCASION_ROW_VALUES: Occasion[][] = [
   ["spor", "ev", "aksam"],
-  ["gundelik", "is"],
+  ["gundelik", "is", "sahil"],
 ];
 
 export type UserPreferencesRow = {
@@ -95,6 +96,7 @@ const OCCASION_BY_ALIAS: Record<string, Occasion> = {
   gundelik: "gundelik",
   gunluk: "gundelik",
   günlük: "gundelik",
+  gündelik: "gundelik",
   casual: "gundelik",
   aksam: "aksam",
   akşam: "aksam",
@@ -106,6 +108,9 @@ const OCCASION_BY_ALIAS: Record<string, Occasion> = {
   iş: "is",
   work: "is",
   ofis: "is",
+  sahil: "sahil",
+  beach: "sahil",
+  plaj: "sahil",
 };
 
 function occasionToken(raw: unknown): string {

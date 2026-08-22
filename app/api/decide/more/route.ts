@@ -21,6 +21,7 @@ import {
   enforceRateLimit,
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
+import { resolveDecideOccasion } from "@/lib/occasion-guide";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const photo_url: string | undefined = body?.photo_url;
     const storage_path: string | undefined = body?.storage_path;
-    const occasion: Occasion | null =
+    const requestedOccasion: Occasion | null =
       parseOccasion(body?.occasion) || parseOccasion(body?.context);
     const pieceLabel: string | undefined = body?.piece_label;
     const excludeRaw = Array.isArray(body?.exclude_titles) ? body.exclude_titles : [];
@@ -94,9 +95,6 @@ export async function POST(req: NextRequest) {
 
     if (!photo_url || !storage_path) {
       return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 400 });
-    }
-    if (!occasion) {
-      return NextResponse.json({ error: "Giyim amacı seçmelisin." }, { status: 400 });
     }
 
     try {
@@ -128,25 +126,35 @@ export async function POST(req: NextRequest) {
       preferences: userPrefs?.preferences || [],
       sizes,
       price_mode,
-      occasion,
+      occasion: requestedOccasion,
       gender: userGender,
     };
-    const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
     // Reuse the vision analysis from the original /api/decide run when
     // possible — the photo has not changed, so re-running GPT-4o only adds
     // 4-8 seconds to every "3 alternatif daha" click.
-    const cacheKey = visionCacheKey(user.id, storage_path, occasion);
-    let visionContent = getCachedVision(cacheKey);
+    const lookupKeys = requestedOccasion
+      ? [visionCacheKey(user.id, storage_path, requestedOccasion)]
+      : ["spor", "gundelik", "aksam", "ev", "is", "sahil"].map((occ) =>
+          visionCacheKey(user.id, storage_path, occ)
+        );
+    let visionContent: string | null = null;
+    for (const key of lookupKeys) {
+      visionContent = getCachedVision(key);
+      if (visionContent) break;
+    }
 
     if (!visionContent) {
-      const { data: historyRow } = await supabase
+      let historyQuery = supabase
         .from("search_history")
-        .select("results")
+        .select("results, context")
         .eq("user_id", user.id)
-        .eq("photo_url", photo_url)
-        .eq("context", OCCASION_TO_CONTEXT[occasion])
+        .eq("photo_url", photo_url);
+      if (requestedOccasion) {
+        historyQuery = historyQuery.eq("context", OCCASION_TO_CONTEXT[requestedOccasion]);
+      }
+      const { data: historyRow } = await historyQuery
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -166,14 +174,25 @@ export async function POST(req: NextRequest) {
             role: "user",
             content: [
               { type: "image_url", image_url: { url: visionImageUrl } },
-              { type: "text", text: visionPromptForOccasion(occasion) },
+              { type: "text", text: visionPromptForOccasion(requestedOccasion) },
             ],
           },
         ],
         max_tokens: 2000,
       });
     }
-    setCachedVision(cacheKey, visionContent);
+
+    if (!visionContent) {
+      return NextResponse.json(
+        { error: "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene." },
+        { status: 500 }
+      );
+    }
+
+    const occasion = resolveDecideOccasion(requestedOccasion, visionContent);
+    user_profile.occasion = occasion;
+    const occasionKeyword = getOccasionKeyword(occasion);
+    setCachedVision(visionCacheKey(user.id, storage_path, occasion), visionContent);
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
     let target = visionPieces[0];

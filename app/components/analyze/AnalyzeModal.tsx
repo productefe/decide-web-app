@@ -1,11 +1,11 @@
 "use client";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { ImagePlus } from "lucide-react";
+import { ChevronDown, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecideLogo } from "@/components/decide-logo";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
-import { OCCASION_OPTIONS, OCCASION_ROW_VALUES } from "@/lib/preferences";
+import { OCCASION_OPTIONS } from "@/lib/preferences";
 import { useAnalyze } from "./useAnalyze";
 import { ResultList } from "./ResultList";
 import { AnalyzeLoadingProgress, DEFAULT_LOADING_STEPS } from "./AnalyzeLoadingProgress";
@@ -44,6 +44,8 @@ export default function AnalyzeModal({
     close,
     analyzeAnother,
   } = useAnalyze(userId, { guestMode, onAnalysisComplete });
+
+  const [occasionOpen, setOccasionOpen] = useState(false);
 
   useBodyScrollLock(open);
 
@@ -91,24 +93,50 @@ export default function AnalyzeModal({
         </label>
 
         <div className="mt-4 shrink-0">
-          <p className="text-center text-sm font-medium text-foreground">Giyim amacı</p>
-          <p className="mt-1 text-center text-xs text-muted-foreground">
-            Nerede giyeceksin?
-          </p>
-          <div className="mt-3 flex flex-col items-center gap-2">
-            {OCCASION_ROW_VALUES.map((row) => (
-              <div key={row.join("-")} className="flex flex-wrap justify-center gap-2">
-                {row.map((value) => {
-                  const opt = OCCASION_OPTIONS.find((o) => o.value === value)!;
+          <p className="text-center text-sm font-medium text-foreground">Nerede giyeceksin?</p>
+          <div className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex min-h-11 items-center pl-4">
+              <span className="flex-1 text-sm text-foreground">
+                {OCCASION_OPTIONS.find((o) => o.value === occasion)?.label ?? "Otomatik"}
+              </span>
+              <button
+                type="button"
+                aria-label="Yer seçeneklerini aç"
+                aria-expanded={occasionOpen}
+                onClick={() => setOccasionOpen((open) => !open)}
+                className="flex size-11 items-center justify-center text-foreground"
+              >
+                <ChevronDown className={`size-5 transition-transform ${occasionOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+            {occasionOpen ? (
+              <div className="border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOccasion(null);
+                    setOccasionOpen(false);
+                  }}
+                  className={`flex min-h-11 w-full items-center px-4 text-left text-sm ${
+                    !occasion ? "bg-secondary text-secondary-foreground" : "text-foreground hover:bg-muted"
+                  }`}
+                >
+                  Otomatik
+                </button>
+                {OCCASION_OPTIONS.map((opt) => {
+                  const selected = occasion === opt.value;
                   return (
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setOccasion(value)}
-                      className={`min-h-[40px] rounded-xl border px-3 py-2 text-sm transition-all ${
-                        occasion === opt.value
-                          ? "border-secondary bg-secondary text-secondary-foreground shadow-sm"
-                          : "border-border bg-muted text-foreground hover:border-accent/50"
+                      onClick={() => {
+                        setOccasion(selected ? null : opt.value);
+                        setOccasionOpen(false);
+                      }}
+                      className={`flex min-h-11 w-full items-center px-4 text-left text-sm ${
+                        selected
+                          ? "bg-secondary text-secondary-foreground"
+                          : "text-foreground hover:bg-muted"
                       }`}
                     >
                       {opt.label}
@@ -116,7 +144,7 @@ export default function AnalyzeModal({
                   );
                 })}
               </div>
-            ))}
+            ) : null}
           </div>
         </div>
 
@@ -128,7 +156,7 @@ export default function AnalyzeModal({
 
         <Button
           onClick={start}
-          disabled={!selectedFile || !occasion || stage === "loading"}
+          disabled={!selectedFile || stage === "loading"}
           variant="default"
           size="full"
           className="relative mt-4 min-h-[48px] shrink-0 shadow-sm"

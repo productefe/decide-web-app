@@ -22,6 +22,7 @@ import {
   enforceRateLimit,
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
+import { resolveDecideOccasion } from "@/lib/occasion-guide";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -93,17 +94,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const photo_url: string | undefined = body?.photo_url;
     const storage_path: string | undefined = body?.storage_path;
-    const occasion: Occasion | null =
+    const requestedOccasion: Occasion | null =
       parseOccasion(body?.occasion) || parseOccasion(body?.context);
     if (!photo_url) {
       return NextResponse.json(
         { error: "Fotoğraf bulunamadı." },
-        { status: 400 }
-      );
-    }
-    if (!occasion) {
-      return NextResponse.json(
-        { error: "Giyim amacı seçmelisin." },
         { status: 400 }
       );
     }
@@ -152,10 +147,9 @@ export async function POST(req: NextRequest) {
       preferences: userPrefs?.preferences || [],
       sizes,
       price_mode,
-      occasion,
+      occasion: requestedOccasion,
       gender: userGender,
     };
-    const occasionKeyword = getOccasionKeyword(occasion);
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
     const visionContent = await openAIContent(OPENAI_API_KEY, {
@@ -165,12 +159,16 @@ export async function POST(req: NextRequest) {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: visionImageUrl } },
-            { type: "text", text: visionPromptForOccasion(occasion) },
+            { type: "text", text: visionPromptForOccasion(requestedOccasion) },
           ],
         },
       ],
       max_tokens: 2000,
     });
+
+    const occasion = resolveDecideOccasion(requestedOccasion, visionContent);
+    user_profile.occasion = occasion;
+    const occasionKeyword = getOccasionKeyword(occasion);
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
     const profiles = visionPieces.map(({ label, profile }) => {

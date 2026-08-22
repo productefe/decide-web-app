@@ -45,29 +45,40 @@ export const COMBINE_SLOT_CATEGORY_TR: Record<CombineOutfitSlot, string> = {
   accessory: "aksesuar",
 };
 
-export type AnalysisContext = "sport" | "casual" | "evening" | "home" | "work";
+export type AnalysisContext = "sport" | "casual" | "evening" | "home" | "work" | "beach";
 
-export const ANALYSIS_CONTEXT_VALUES = ["sport", "casual", "evening", "home", "work"] as const;
+export const ANALYSIS_CONTEXT_VALUES = [
+  "sport",
+  "casual",
+  "evening",
+  "home",
+  "work",
+  "beach",
+] as const;
 
 export const CONTEXT_TO_OCCASION: Record<
   AnalysisContext,
-  "spor" | "gundelik" | "aksam" | "ev" | "is"
+  "spor" | "gundelik" | "aksam" | "ev" | "is" | "sahil"
 > = {
   sport: "spor",
   casual: "gundelik",
   evening: "aksam",
   home: "ev",
   work: "is",
+  beach: "sahil",
 };
 
-export const OCCASION_TO_CONTEXT: Record<"spor" | "gundelik" | "aksam" | "ev" | "is", AnalysisContext> =
-  {
-    spor: "sport",
-    gundelik: "casual",
-    aksam: "evening",
-    ev: "home",
-    is: "work",
-  };
+export const OCCASION_TO_CONTEXT: Record<
+  "spor" | "gundelik" | "aksam" | "ev" | "is" | "sahil",
+  AnalysisContext
+> = {
+  spor: "sport",
+  gundelik: "casual",
+  aksam: "evening",
+  ev: "home",
+  is: "work",
+  sahil: "beach",
+};
 
 export const CONTEXT_LABEL_TR: Record<AnalysisContext, string> = {
   sport: "Spor",
@@ -75,6 +86,7 @@ export const CONTEXT_LABEL_TR: Record<AnalysisContext, string> = {
   evening: "Akşam",
   home: "Ev",
   work: "İş",
+  beach: "Sahil",
 };
 
 /** Map vision / piece labels to a CombinePieceCategory. */
@@ -93,6 +105,7 @@ export function resolveCombinePieceCategory(
   ) {
     return "accessory";
   }
+  if (/bikini|mayo|swimsuit|pareo/.test(blob)) return "top";
   if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
   if (/ayakkabı|sneaker|bot|sandal|loafer|heel|oxford|shoe/.test(blob)) return "shoes";
   if (/ceket|jacket|blazer|kaban|coat|trenç|trench|outer|yelek|vest/.test(blob)) {
@@ -122,12 +135,12 @@ export function parseAnalysisContext(raw: unknown): AnalysisContext | null {
   if (raw && typeof raw === "object" && "value" in raw) {
     return parseAnalysisContext((raw as { value: unknown }).value);
   }
-  if (raw === "sport" || raw === "casual" || raw === "evening" || raw === "home" || raw === "work") {
+  if (raw === "sport" || raw === "casual" || raw === "evening" || raw === "home" || raw === "work" || raw === "beach") {
     return raw;
   }
   if (typeof raw === "string") {
     const v = asLower(raw).trim();
-    if (v === "sport" || v === "casual" || v === "evening" || v === "home" || v === "work") {
+    if (v === "sport" || v === "casual" || v === "evening" || v === "home" || v === "work" || v === "beach") {
       return v;
     }
   }

@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { Stage, Results, PieceResult } from "./types";
-import type { Occasion } from "@/lib/preferences";
+import { parseOccasion, type Occasion } from "@/lib/preferences";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { markGuestAnalysisUsed, saveGuestResultsLocal } from "@/lib/guest";
 import { sanitizeUploadFileName, validateImageFile } from "@/lib/upload";
@@ -48,7 +48,7 @@ export function useAnalyze(
   };
 
   const start = async () => {
-    if (!selectedFile || !occasion || stage === "loading") return;
+    if (!selectedFile || stage === "loading") return;
 
     const validationError = validateImageFile(selectedFile);
     if (validationError) {
@@ -82,8 +82,8 @@ export function useAnalyze(
         body: JSON.stringify({
           photo_url: publicUrl,
           storage_path: fileName,
-          occasion,
-          context: OCCASION_TO_CONTEXT[occasion],
+          occasion: occasion || undefined,
+          context: occasion ? OCCASION_TO_CONTEXT[occasion] : undefined,
         }),
       });
 
@@ -108,6 +108,9 @@ export function useAnalyze(
       if (parsedPieces.length === 0) {
         throw new Error("Sonuç alınamadı, lütfen tekrar dene.");
       }
+
+      const resolved = parseOccasion(item?.occasion) || parseOccasion(item?.context);
+      if (resolved) setOccasion(resolved);
 
       setPieces(parsedPieces);
       setStage("result");

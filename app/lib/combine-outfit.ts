@@ -197,7 +197,7 @@ Rules:
 - searchQuery must be Turkish shopping keywords, 4–10 words, MUST fit ${contextTr}, and MUST encode layered product attributes when relevant:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
-- shoes: tip + renk — NEVER write generic "ayakkabı" alone. For erkek: sneaker/bot/loafer/oxford only. For kadın: sneaker/bot/loafer/topuklu as occasion allows.
+- shoes: tip + renk — NEVER write generic "ayakkabı" alone. For erkek: sneaker/bot/loafer/oxford/sandalet only. For kadın: sneaker/bot/loafer/topuklu/sandalet as occasion allows.
 - accessory: concrete type only (kemer/çanta/saat/gözlük/şapka/kolye/küpe…)
   - NEVER write generic "aksesuar"
   - NEVER write garment words (elbise, tişört, pantolon, gömlek, yelek, ayakkabı, abiye)
@@ -418,6 +418,9 @@ function inferShoeSubcategory(
   if (/\b(sneaker|spor ayakkabı|koşu)\b/.test(t) || context === "sport" || context === "home") {
     return { subcategory: "sneaker", subcategory_tr: "spor ayakkabı" };
   }
+  if (context === "beach") {
+    return { subcategory: "sandal", subcategory_tr: "sandalet" };
+  }
   if (context === "evening") {
     return genderWord === "kadın"
       ? { subcategory: "heel", subcategory_tr: "topuklu ayakkabı" }
@@ -443,6 +446,17 @@ function sanitizeSlotForGender(
   if (!raw) return null;
   const next: CombineSlotSuggestion = { ...raw };
   if (genderWord === "erkek") {
+    next.searchQuery = next.searchQuery
+      .replace(/\b(bikini|bralet|crop\s*top)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    next.styleDescriptor = next.styleDescriptor
+      .replace(/\b(bikini|bralet|crop\s*top)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (next.slot === "bottom" && context === "beach" && !/\b(şort|short|mayo)\b/i.test(next.searchQuery)) {
+      next.searchQuery = `${next.searchQuery} deniz şortu`.trim();
+    }
     if (next.slot === "shoes") {
       next.searchQuery = next.searchQuery
         .replace(/topuklu|stiletto|\bpump\b|kitten/gi, " ")
@@ -457,7 +471,7 @@ function sanitizeSlotForGender(
         context,
         genderWord
       );
-      if (!/\b(sneaker|bot|loafer|oxford|derby|ayakkabı)\b/i.test(next.searchQuery)) {
+      if (!/\b(sneaker|bot|loafer|oxford|derby|sandal|sandalet|ayakkabı)\b/i.test(next.searchQuery)) {
         next.searchQuery = `${next.searchQuery} ${shoe.subcategory_tr}`.trim();
       }
       if (!next.styleDescriptor) next.styleDescriptor = shoe.subcategory_tr;

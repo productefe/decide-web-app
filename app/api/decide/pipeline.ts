@@ -407,12 +407,14 @@ export function defaultAccessoryKind(
   if (men) {
     if (context === "sport" || context === "spor") return "şapka";
     if (context === "work" || context === "is") return "kemer";
+    if (context === "beach" || context === "sahil") return "gözlük";
     return "saat";
   }
   if (context === "sport" || context === "spor") return "şapka";
   if (context === "evening" || context === "aksam") return "küpe";
   if (context === "work" || context === "is") return "kemer";
   if (context === "home" || context === "ev") return "atkı";
+  if (context === "beach" || context === "sahil") return "çanta";
   return "çanta";
 }
 
@@ -1590,6 +1592,8 @@ const categoryTR: Record<string, string> = {
   chino: "chino pantolon", jeans: "kot pantolon", denim: "kot pantolon",
   shorts: "şort", "cargo pants": "kargo pantolon", joggers: "jogger pantolon",
   sweatpants: "eşofman altı", leggings: "tayt", tracksuit: "eşofman",
+  bikini: "bikini", mayo: "mayo", swimsuit: "mayo", "swim shorts": "deniz şortu",
+  pareo: "pareo", "beach bag": "plaj çantası",
   sneaker: "spor ayakkabı", sneakers: "spor ayakkabı", "running shoe": "koşu ayakkabısı",
   boot: "bot", sandal: "sandalet", loafer: "loafer",
   "high heel": "topuklu ayakkabı", oxford: "oxford ayakkabı",
@@ -1643,6 +1647,10 @@ const subcategoryTR: Record<string, string> = {
   dress: "elbise",
   elbise: "elbise",
   jumpsuit: "tulum",
+  bikini: "bikini",
+  mayo: "mayo",
+  swimsuit: "mayo",
+  "swim-shorts": "deniz şortu",
   sneaker: "spor ayakkabı",
   sneakers: "spor ayakkabı",
   boot: "bot",
@@ -1691,6 +1699,10 @@ const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
   skirt: "bottom",
   dress: "dress",
   jumpsuit: "dress",
+  bikini: "top",
+  mayo: "top",
+  swimsuit: "top",
+  "swim-shorts": "bottom",
   sneaker: "shoes",
   sneakers: "shoes",
   boot: "shoes",
@@ -1884,6 +1896,9 @@ function canonicalSubcategory(raw: string): string {
     return "askili-ust";
   }
   if (key === "tank" || key === "tank top" || key === "atlet") return "tank-top";
+  if (key === "bikini" || key === "swimsuit") return "bikini";
+  if (key === "mayo") return "mayo";
+  if (key === "swim shorts" || key === "deniz şortu" || key === "swim-shorts") return "swim-shorts";
   if (SUBCATEGORY_TO_FAMILY[key]) return key;
   if (SUBCATEGORY_TO_FAMILY[key.replace(/ /g, "-")]) return key.replace(/ /g, "-");
   return key;
@@ -1894,7 +1909,7 @@ function inferFamily(sub: string, cat: string): string {
   if (SUBCATEGORY_TO_FAMILY[sub]) return SUBCATEGORY_TO_FAMILY[sub];
   const blob = `${sub} ${cat}`.toLowerCase();
   if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
-  if (/crop|tişört|t-shirt|bluz|askı|gömlek|hoodie|sweat|polo|tank/.test(blob)) return "top";
+  if (/crop|tişört|t-shirt|bluz|askı|gömlek|hoodie|sweat|polo|tank|bikini|mayo/.test(blob)) return "top";
   if (/pantolon|jean|etek|şort|short|tayt/.test(blob)) return "bottom";
   if (/ayakkabı|sneaker|bot|sandal/.test(blob)) return "shoes";
   if (/çanta|bag/.test(blob)) return "bag";
@@ -2255,9 +2270,24 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
 
   const occasion = parseOccasion(rebuilt.user_profile?.occasion);
   const accessorySearch = isAccessoryProfile(rebuilt);
-  const occasionCore = withOccasionSearchPhrase(core, occasion, { forAccessory: accessorySearch });
-  const occasionStrong = withOccasionSearchPhrase(strong, occasion, { forAccessory: accessorySearch });
-  const occasionFull = withOccasionSearchPhrase(full, occasion, { forAccessory: accessorySearch });
+  const occasionCore = withOccasionSearchPhrase(core, occasion, {
+    forAccessory: accessorySearch,
+    category: rebuilt.category,
+    subcategory: rebuilt.subcategory,
+    category_tr: rebuilt.category_tr,
+  });
+  const occasionStrong = withOccasionSearchPhrase(strong, occasion, {
+    forAccessory: accessorySearch,
+    category: rebuilt.category,
+    subcategory: rebuilt.subcategory,
+    category_tr: rebuilt.category_tr,
+  });
+  const occasionFull = withOccasionSearchPhrase(full, occasion, {
+    forAccessory: accessorySearch,
+    category: rebuilt.category,
+    subcategory: rebuilt.subcategory,
+    category_tr: rebuilt.category_tr,
+  });
 
   const sizeQuery = firstSize
     ? uniqueJoin([occasionFull || occasionStrong || full || strong, firstSize])
@@ -2268,6 +2298,9 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
   const storedQuery = asText(rebuilt.search_query).trim().replace(/\s+/g, " ");
   const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion, {
     forAccessory: accessorySearch,
+    category: rebuilt.category,
+    subcategory: rebuilt.subcategory,
+    category_tr: rebuilt.category_tr,
   });
 
   const base = [
@@ -2585,16 +2618,16 @@ function scoreShoppingItems(
     if (lightOnly.length >= 3) validResults = lightOnly;
   }
 
-  // Prefer listings that match the chosen giyim amacı; drop clashing styles when enough remain.
+  // Hard-drop listings that clash with the chosen place (spor ≠ kumaş pantolon).
   if (occasion) {
-    const boosted = validResults.filter(
-      (item) => occasionTitleFit(item.title || "", occasion, pieceBlob) === "boost"
-    );
-    if (boosted.length >= 3) validResults = boosted;
     const notAvoid = validResults.filter(
       (item) => occasionTitleFit(item.title || "", occasion, pieceBlob) !== "avoid"
     );
-    if (notAvoid.length >= 3) validResults = notAvoid;
+    if (notAvoid.length > 0) validResults = notAvoid;
+    const boosted = validResults.filter(
+      (item) => occasionTitleFit(item.title || "", occasion, pieceBlob) === "boost"
+    );
+    if (boosted.length >= 2) validResults = boosted;
   }
 
   // Prefer titles that explicitly mark the user's gender (erkek/kadın) when enough exist.
@@ -2683,8 +2716,8 @@ function scoreShoppingItems(
     if (iconicBrandHit) matchScore += 8;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     const occFit = occasionTitleFit(item.title || "", occasion, pieceBlob);
-    if (occFit === "boost") matchScore += 18;
-    if (occFit === "avoid") matchScore = Math.max(0, matchScore - 22);
+    if (occFit === "boost") matchScore += 24;
+    if (occFit === "avoid") matchScore = Math.max(0, matchScore - 45);
     matchScore += getSizeMatchBoost(item.title || "", userProfile.sizes as string[] | undefined);
     if (priceMode === "luks" && luxury) matchScore += 18;
     if (wantsWomenTrendRank(productProfile, priceMode)) {

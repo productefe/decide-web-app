@@ -1,4 +1,4 @@
-import type { Occasion } from "@/lib/preferences";
+import { parseOccasion, type Occasion } from "@/lib/preferences";
 import { asLower, asText } from "@/lib/text";
 
 export type OccasionGuide = {
@@ -12,6 +12,11 @@ export type OccasionGuide = {
    * describe the source piece (hoodie photo + iş still finds hoodies).
    */
   avoidTerms: string[];
+  /**
+   * Always-clash tokens — dropped even if the photo itself matches them
+   * (spor never returns kumaş pantolon; iş never returns eşofman).
+   */
+  hardAvoidTerms?: string[];
   /** Extra GPT-4o extraction guidance — never change visible garment type. */
   visionNote: string;
   /** Stylist rules for complementary Combine slots. */
@@ -21,7 +26,7 @@ export type OccasionGuide = {
 const GUIDES: Record<Occasion, OccasionGuide> = {
   spor: {
     labelTr: "Spor",
-    searchPhrase: "spor athleisure antrenman",
+    searchPhrase: "spor antrenman eşofman jogger",
     boostTerms: [
       "spor",
       "athleisure",
@@ -31,6 +36,7 @@ const GUIDES: Record<Occasion, OccasionGuide> = {
       "koşu",
       "running",
       "eşofman",
+      "esofman",
       "jogger",
       "tayt",
       "leggings",
@@ -38,6 +44,7 @@ const GUIDES: Record<Occasion, OccasionGuide> = {
       "hoodie",
       "sneaker",
       "spor ayakkabı",
+      "antrenman şort",
     ],
     avoidTerms: [
       "blazer",
@@ -51,24 +58,36 @@ const GUIDES: Record<Occasion, OccasionGuide> = {
       "abiye",
       "davet",
       "smokin",
-      "kumaş pantolon",
+      "kumaş",
+      "kumas",
+      "chino",
       "oxford",
+      "loafer",
+      "smart casual",
+      "business",
+      "pileli",
+      "palazzo",
+      "bikini",
+      "mayo",
+      "plaj",
     ],
-    visionNote: `User will shop alternatives for SPORT / training / athleisure.
+    hardAvoidTerms: ["kumaş", "kumas", "chino", "oxford", "loafer", "topuklu", "stiletto", "blazer"],
+    visionNote: `User will shop alternatives for SPORT / training / gym / athleisure.
 Extract the visible garments faithfully — do not swap a blouse for a tank or heels for sneakers.
 Emphasize sport-relevant attributes in distinctive_details and style_tags: athletic cut, stretch/performance fabric impression, jogger cuff, mesh panels, sneaker type (running vs lifestyle).
-style_tags must include "spor" plus 1–2 of: athleisure, antrenman, fitness, casual-sport.
+style_tags must include "spor" plus 1–2 of: athleisure, antrenman, fitness, jogger.
+NEVER tag or describe the piece as ofis / kumaş pantolon / chino / gömlek / loafer.
 If the piece is NOT sporty, still extract it as-is and tag the closest wearable sport reading (e.g. cotton tee → antrenman tişört), never invent a different subcategory.`,
-    combineNote: `OCCASION = Spor (training / athleisure). Every complementary piece must look gym-or-street-sport, never office or evening.
-- top: tişört / atlet / sweatshirt / hoodie — no gömlek, no bluz, no blazer
-- bottom: jogger, eşofman, tayt, spor şort — no chino, no kumaş pantolon, no jean ofis
-- shoes: ONLY sneaker / spor ayakkabı — never topuklu, loafer, oxford, bot (unless trail)
+    combineNote: `OCCASION = Spor (training / gym / athleisure). HARD RULE: never office or evening garments.
+- top: tişört / atlet / sweatshirt / hoodie — no gömlek, no bluz, no blazer, no polo ofis
+- bottom: ONLY jogger, eşofman, tayt, spor şort — NEVER chino, NEVER kumaş pantolon, NEVER klasik/ofis pantolon, NEVER pileli
+- shoes: ONLY sneaker / spor ayakkabı — never topuklu, loafer, oxford, klasik bot
 - accessory: spor çanta, cap, silikon kayışlı saat — no clutch, no inci, no kravat
-searchQuery MUST include at least one of: spor, athleisure, antrenman, jogger, sneaker.`,
+searchQuery MUST include at least one of: spor, antrenman, jogger, eşofman, sneaker.`,
   },
   gundelik: {
     labelTr: "Gündelik",
-    searchPhrase: "günlük casual rahat",
+    searchPhrase: "günlük casual street",
     boostTerms: [
       "günlük",
       "gunluk",
@@ -93,6 +112,15 @@ searchQuery MUST include at least one of: spor, athleisure, antrenman, jogger, s
       "lounge",
       "antrenman",
       "gym",
+      "eşofman",
+      "esofman",
+      "jogger",
+      "kumaş pantolon",
+      "ofis gömleği",
+      "smart casual",
+      "bikini",
+      "mayo",
+      "plaj",
     ],
     visionNote: `User will shop alternatives for EVERYDAY / casual wear (street, campus, weekend — not gym, not office, not evening).
 Extract the visible garments faithfully.
@@ -108,7 +136,7 @@ searchQuery MUST include at least one of: günlük, casual, rahat.`,
   },
   aksam: {
     labelTr: "Akşam",
-    searchPhrase: "akşam davet şık abiye",
+    searchPhrase: "akşam davet şık abiye cocktail",
     boostTerms: [
       "akşam",
       "aksam",
@@ -137,6 +165,7 @@ searchQuery MUST include at least one of: günlük, casual, rahat.`,
       "pijama",
       "lounge",
       "ev giyim",
+      "chino",
     ],
     visionNote: `User will shop alternatives for EVENING / going-out / davet.
 Extract the visible garments faithfully — a t-shirt stays a t-shirt; do not relabel it as a dress.
@@ -189,7 +218,7 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
   },
   is: {
     labelTr: "İş",
-    searchPhrase: "iş ofis smart casual",
+    searchPhrase: "iş ofis smart casual business casual",
     boostTerms: [
       "iş",
       "ofis",
@@ -199,9 +228,12 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "chino",
       "kumaş",
       "klasik",
-      "smart",
+      "smart casual",
+      "business casual",
       "oxford",
       "loafer",
+      "polo",
+      "ofis pantolon",
     ],
     avoidTerms: [
       "eşofman",
@@ -213,22 +245,109 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "kapuson",
       "hoodie",
       "tayt",
+      "leggings",
       "pijama",
       "lounge",
-      "spor",
+      "spor ayakkabı",
+      "sneaker",
+      "koşu",
+      "running",
+      "yırtık",
+      "ripped",
       "crop sweat",
+      "bel çantası",
+      "cap",
+      "bikini",
+      "mayo",
+      "plaj",
     ],
-    visionNote: `User will shop alternatives for WORK / office / smart casual.
+    hardAvoidTerms: [
+      "eşofman",
+      "esofman",
+      "jogger",
+      "hoodie",
+      "tayt",
+      "spor ayakkabı",
+      "koşu",
+      "yırtık",
+    ],
+    visionNote: `User will shop alternatives for WORK / office / business casual / smart casual.
 Extract the visible garments faithfully — a hoodie stays a hoodie; do not relabel it as a gömlek.
 Emphasize work-relevant attributes: collar structure, tailored vs regular, chino vs jean, loafer/oxford vs sneaker, wrinkle-resistant / woven impression.
-style_tags must include "iş" or "ofis" plus 1–2 of: smart-casual, klasik, ofis.
+style_tags must include "iş" or "ofis" plus 1–2 of: smart-casual, business-casual, klasik, ofis.
 If the piece is casual, extract it as-is and note the most office-appropriate reading of THAT type (e.g. düz polo), never invent a different subcategory.`,
-    combineNote: `OCCASION = İş (office / smart casual). Polished enough for work; not gym, not lounge, not davet-abiye.
-- top: gömlek, polo, bluz, ince triko, blazer — no hoodie, no grafik tişört, no spor atlet
-- bottom: chino, kumaş pantolon, ofis eteği, koyu düz jean — no jogger, no eşofman, no yırtık jean, no tayt
-- shoes: loafer, oxford, sade bot, temiz sneaker only if leather-look — NEVER spor koşu / topuklu gece
+    combineNote: `OCCASION = İş (office / business casual / smart casual). Polished enough for work; not gym, not lounge, not davet-abiye.
+- top: gömlek, polo, bluz, ince triko, blazer — no hoodie, no grafik tişört, no spor atlet, no sweat
+- bottom: chino, kumaş pantolon, ofis eteği, koyu düz jean — NEVER jogger, NEVER eşofman, NEVER yırtık jean, NEVER tayt
+- shoes: loafer, oxford, sade deri bot — NEVER spor koşu sneaker, NEVER topuklu gece
 - accessory: deri kemer, klasik kol saati (deri/metal), sade çanta — no spor cap, no clutch, no bel çantası
-searchQuery MUST include at least one of: iş, ofis, smart casual, gömlek, chino, loafer.`,
+searchQuery MUST include at least one of: iş, ofis, smart casual, business casual, gömlek, chino, loafer.`,
+  },
+  sahil: {
+    labelTr: "Sahil",
+    searchPhrase: "sahil plaj şort bikini mayo",
+    boostTerms: [
+      "sahil",
+      "plaj",
+      "şort",
+      "short",
+      "bikini",
+      "mayo",
+      "swimsuit",
+      "pareo",
+      "plaj çantası",
+      "hasır çanta",
+      "sandalet",
+      "terlik",
+      "güneş gözlüğü",
+      "deniz",
+    ],
+    avoidTerms: [
+      "blazer",
+      "gömlek",
+      "gomlek",
+      "kumaş",
+      "kumas",
+      "chino",
+      "ofis",
+      "klasik",
+      "oxford",
+      "loafer",
+      "topuklu",
+      "stiletto",
+      "abiye",
+      "hoodie",
+      "eşofman",
+      "esofman",
+      "jogger",
+      "kaban",
+      "trenç",
+    ],
+    hardAvoidTerms: [
+      "kumaş",
+      "kumas",
+      "chino",
+      "blazer",
+      "gömlek",
+      "gomlek",
+      "oxford",
+      "topuklu",
+      "eşofman",
+      "jogger",
+      "hoodie",
+    ],
+    visionNote: `User will shop alternatives for BEACH / sahil / plaj.
+Extract the visible garments faithfully.
+Emphasize beach-relevant attributes: şort vs pantolon, bikini/mayo vs tişört, sandalet vs sneaker, plaj çantası vs city bag, hasır/straw, open weave.
+style_tags must include "sahil" plus 1–2 of: plaj, bikini, şort, mayo.
+If the piece is a regular tee or trousers, extract it as-is and tag the closest beach reading of THAT type (e.g. keten şort, crop), never invent a different subcategory unless the photo clearly shows swimwear.`,
+    combineNote: `OCCASION = Sahil (beach / plaj). HARD RULE: resort/beach only — never office, never evening, never gym jogger.
+- top: bikini, mayo, crop, atlet, keten gömlek açık — no hoodie, no blazer, no ofis gömleği
+- bottom: ONLY şort / deniz şortu / bikini alt — NEVER kumaş pantolon, NEVER chino, NEVER jogger, NEVER eşofman
+- shoes: sandalet, plaj terliği — NEVER topuklu, oxford, loafer, koşu sneaker
+- accessory: plaj çantası, hasır çanta, güneş gözlüğü, şapka — no clutch, no kravat, no spor bel çantası
+For kadın prefer bikini / mayo. For erkek prefer deniz şortu / mayo — NEVER bikini.
+searchQuery MUST include at least one of: sahil, plaj, şort, bikini, mayo, plaj çantası, sandalet.`,
   },
 };
 
@@ -251,12 +370,118 @@ const ACCESSORY_OCCASION_PHRASE: Record<Occasion, string> = {
   gundelik: "günlük casual",
   aksam: "akşam şık davet",
   ev: "rahat",
-  is: "ofis",
+  is: "ofis smart casual",
+  sahil: "plaj çantası hasır",
+};
+
+type PieceFamily = "bottom" | "shoes" | "top" | "dress" | "other";
+
+function pieceFamily(category: string, subcategory: string, categoryTr = ""): PieceFamily {
+  const blob = `${category} ${subcategory} ${categoryTr}`.toLocaleLowerCase("tr-TR");
+  if (/bikini|mayo|swimsuit|pareo/.test(blob)) return "top";
+  if (/bottom|pantolon|jean|chino|jogger|eşofman|esofman|şort|short|tayt|legging|etek|skirt/.test(blob)) {
+    return "bottom";
+  }
+  if (/shoe|ayakkabı|ayakkabi|sneaker|loafer|oxford|bot|sandal|heel|topuk/.test(blob)) {
+    return "shoes";
+  }
+  if (/dress|elbise|jumpsuit|tulum/.test(blob)) return "dress";
+  if (/top|tişört|tisort|gömlek|gomlek|hoodie|sweat|bluz|polo|shirt|kazak/.test(blob)) {
+    return "top";
+  }
+  return "other";
+}
+
+const PIECE_SEARCH_PHRASE: Record<Occasion, Partial<Record<PieceFamily, string>>> = {
+  spor: {
+    bottom: "jogger eşofman tayt spor şort antrenman",
+    shoes: "sneaker spor ayakkabı",
+    top: "spor tişört athleisure antrenman",
+    dress: "spor athleisure",
+  },
+  gundelik: {
+    bottom: "jean günlük casual",
+    shoes: "sneaker loafer bot günlük",
+    top: "günlük casual tişört",
+  },
+  aksam: {
+    bottom: "kumaş pantolon şık etek abiye",
+    shoes: "topuklu şık loafer",
+    top: "saten bluz şık gömlek akşam",
+    dress: "abiye davet elbise",
+  },
+  ev: {
+    bottom: "eşofman lounge jogger rahat",
+    shoes: "terlik ev ayakkabısı",
+    top: "lounge sweatshirt polar rahat",
+  },
+  is: {
+    bottom: "chino kumaş pantolon ofis smart casual",
+    shoes: "loafer oxford klasik",
+    top: "gömlek polo blazer smart casual ofis",
+    dress: "ofis elbise smart casual",
+  },
+  sahil: {
+    bottom: "şort plaj deniz şortu",
+    shoes: "sandalet plaj terliği",
+    top: "bikini mayo crop atlet plaj",
+    dress: "pareo plaj elbisesi mayo",
+  },
 };
 
 export function getAccessoryOccasionPhrase(occasion: Occasion | null | undefined): string {
   if (!occasion) return "";
   return ACCESSORY_OCCASION_PHRASE[occasion] || "";
+}
+
+export function getOccasionKeywordForPiece(
+  occasion: Occasion | null | undefined,
+  opts: { forAccessory?: boolean; category?: string; subcategory?: string; category_tr?: string } = {}
+): string {
+  if (!occasion) return "";
+  if (opts.forAccessory) return getAccessoryOccasionPhrase(occasion);
+  const family = pieceFamily(
+    asText(opts.category),
+    asText(opts.subcategory),
+    asText(opts.category_tr)
+  );
+  return PIECE_SEARCH_PHRASE[occasion][family] || getOccasionKeyword(occasion);
+}
+
+/** Read inferred wear context from GPT-4o JSON (`occasion` root or style_tags). */
+export function parseVisionWearOccasion(visionContent: string): Occasion | null {
+  try {
+    const clean = visionContent.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean) as {
+      occasion?: unknown;
+      wear_context?: unknown;
+      context?: unknown;
+      items?: Array<{ style_tags?: unknown }>;
+    };
+    const direct =
+      parseOccasion(parsed.occasion) ||
+      parseOccasion(parsed.wear_context) ||
+      parseOccasion(parsed.context);
+    if (direct) return direct;
+    const tags = (parsed.items || [])
+      .flatMap((item) => (Array.isArray(item.style_tags) ? item.style_tags : []))
+      .map((t) => asText(t))
+      .join(" ");
+    for (const token of tags.split(/\s+/)) {
+      const hit = parseOccasion(token);
+      if (hit) return hit;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveDecideOccasion(
+  userOccasion: Occasion | null | undefined,
+  visionContent: string
+): Occasion {
+  return userOccasion || parseVisionWearOccasion(visionContent) || "gundelik";
 }
 
 export function pieceBlobForOccasion(profile: {
@@ -309,7 +534,9 @@ export function occasionTitleFit(
   const guide = getOccasionGuide(occasion);
   if (!guide || !title) return "neutral";
   const boostHit = guide.boostTerms.some((w) => titleHasTerm(title, w));
-  const avoidHit = avoidTermsForPiece(guide, pieceBlob).some((w) => titleHasTerm(title, w));
+  const avoidHit =
+    avoidTermsForPiece(guide, pieceBlob).some((w) => titleHasTerm(title, w)) ||
+    (guide.hardAvoidTerms || []).some((w) => titleHasTerm(title, w));
   if (avoidHit) return "avoid";
   if (boostHit) return "boost";
   return "neutral";
@@ -319,11 +546,14 @@ export function occasionTitleFit(
 export function withOccasionSearchPhrase(
   query: string,
   occasion: Occasion | null | undefined,
-  opts: { forAccessory?: boolean } = {}
+  opts: {
+    forAccessory?: boolean;
+    category?: string;
+    subcategory?: string;
+    category_tr?: string;
+  } = {}
 ): string {
-  const phrase = opts.forAccessory
-    ? getAccessoryOccasionPhrase(occasion)
-    : getOccasionKeyword(occasion);
+  const phrase = getOccasionKeywordForPiece(occasion, opts);
   const raw = asText(query);
   if (!raw.trim()) return phrase;
   if (!phrase) return raw.trim().replace(/\s+/g, " ");
