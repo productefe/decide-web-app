@@ -386,7 +386,8 @@ export const ACCESSORY_KIND_NEEDLES: { type: string; re: RegExp }[] = [
   { type: "kemer", re: /kemer|belt/i },
   { type: "çanta", re: /çanta|canta|bag|clutch|tote|backpack|sırt/i },
   { type: "saat", re: /saat|watch/i },
-  { type: "gözlük", re: /gözlük|gozluk|glasses|sunglasses|eyewear/i },
+  { type: "güneş gözlüğü", re: /güneş gözlüğü|güneş gozluk|sunglasses?|sun\s*glasses/i },
+  { type: "gözlük", re: /gözlük|gozluk|glasses|eyewear/i },
   { type: "şapka", re: /şapka|sapka|hat|bere|beanie|cap\b/i },
   { type: "atkı", re: /atkı|atki|scarf/i },
 ];
@@ -407,14 +408,14 @@ export function defaultAccessoryKind(
   if (men) {
     if (context === "sport" || context === "spor") return "şapka";
     if (context === "work" || context === "is") return "kemer";
-    if (context === "beach" || context === "sahil") return "gözlük";
+    if (context === "beach" || context === "sahil") return "güneş gözlüğü";
     return "saat";
   }
   if (context === "sport" || context === "spor") return "şapka";
   if (context === "evening" || context === "aksam") return "küpe";
   if (context === "work" || context === "is") return "kemer";
   if (context === "home" || context === "ev") return "atkı";
-  if (context === "beach" || context === "sahil") return "çanta";
+  if (context === "beach" || context === "sahil") return "güneş gözlüğü";
   return "çanta";
 }
 
@@ -813,6 +814,42 @@ const FIT_TR: Record<string, string> = {
   "crop top": "crop",
 };
 
+const EYEWEAR_CASE_RE =
+  /\b(kutu|kutusu|kılıf|kilif|kılıfı|case\b|pouch|saklama|gözlük kutu|gunes kutu|lens bezi|temizlik bezi|mikrofiber|mikro fiber|klips|clip[- ]?on)\b/i;
+const SUNGLASSES_TITLE_RE =
+  /\b(güneş gözlüğü|güneş gozluk|sunglasses?|sunglass\b|sun\s*glasses)\b/i;
+const SUNGLASSES_CUE_RE = /\b(güneş|sunglass|aviator|wayfarer|pilot gözlük)\b/i;
+const OPTICAL_GLASSES_RE =
+  /\b(okuma gözlüğü|okuma gozluk|numaralı|numarali|reçeteli|receteli|optik|mavi ışık|mavi isik|blue[- ]?light|night[- ]?drive|bilgisayar gözlük)\b/i;
+
+function profileEyewearBlob(profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">): string {
+  return `${asText(profile.category)} ${asText(profile.category_tr)} ${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)}`.toLowerCase();
+}
+
+export function profileWantsSunglasses(
+  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">
+): boolean {
+  return /güneş|sunglass/.test(profileEyewearBlob(profile));
+}
+
+export function profileWantsEyewear(
+  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">
+): boolean {
+  return /gözlük|gozluk|glasses|sunglasses|eyewear|optik/.test(profileEyewearBlob(profile));
+}
+
+/** Cases, optical glasses, or the wrong eyewear family vs the source piece. */
+export function titleContradictsEyewearKind(title: string, wantsSunglasses: boolean): boolean {
+  const t = asLower(title);
+  if (!t) return true;
+  if (EYEWEAR_CASE_RE.test(t)) return true;
+  if (wantsSunglasses) {
+    if (OPTICAL_GLASSES_RE.test(t)) return true;
+    return !SUNGLASSES_TITLE_RE.test(t) && !SUNGLASSES_CUE_RE.test(t);
+  }
+  return SUNGLASSES_TITLE_RE.test(t);
+}
+
 function fitToken(fit: unknown): string {
   const raw = asLower(fit).trim();
   if (!raw || raw === "none") return "";
@@ -900,6 +937,10 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     return true;
   }
 
+  if (profileWantsEyewear(profile) && titleContradictsEyewearKind(title, profileWantsSunglasses(profile))) {
+    return true;
+  }
+
   // Accessory searches must never surface garments — not even when requireType is relaxed.
   if (isAccessoryProfile(profile) && titleLooksLikeGarment(title)) return true;
 
@@ -930,14 +971,13 @@ export function contradictsCategoryFit(
 
   const isOversize = /\b(oversize|oversized)\b/.test(fit) || /\b(oversize|oversized|bol kesim)\b/.test(blob);
 
-  // --- Eyewear (glasses photo must not become t-shirts) ---
+  // --- Eyewear: sunglasses stay sunglasses (never cases / optical / reading). ---
   if (/gözlük|glasses|sunglasses|eyewear|optik/.test(blob)) {
     const isSun = /güneş|sunglass/.test(blob);
+    if (titleContradictsEyewearKind(title, isSun)) return true;
     if (requireType) {
-      if (isSun && !/\b(güneş gözlüğü|sunglasses?|sun\s*glasses)\b/.test(t) && !/\bgözlük\b/.test(t)) {
-        return true;
-      }
-      if (!/\b(gözlük|güneş gözlüğü|sunglasses?|glasses|eyewear|optik)\b/.test(t)) return true;
+      if (isSun && !SUNGLASSES_TITLE_RE.test(t) && !SUNGLASSES_CUE_RE.test(t)) return true;
+      if (!isSun && !/\b(gözlük|glasses|eyewear)\b/.test(t)) return true;
     }
     if (
       /\b(tişört|t-?shirt|tshirt|tee|gömlek|pantolon|elbise|sweatshirt|hoodie|ceket|etek|şort|ayakkabı|sneaker|kazak|crop)\b/.test(
@@ -1300,8 +1340,10 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
 
   const aliases: string[] = [];
   const blob = `${cat} ${catTr} ${sub} ${subTr}`;
-  if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) {
-    aliases.push("gözlük", "güneş gözlüğü", "sunglasses", "glasses", "eyewear");
+  if (/güneş|sunglass/.test(blob)) {
+    aliases.push("güneş gözlüğü", "sunglasses", "sunglass");
+  } else if (/gözlük|glasses|eyewear/.test(blob)) {
+    aliases.push("gözlük", "glasses", "eyewear");
   } else if (/kolye|necklace|pendant/.test(blob)) {
     aliases.push("kolye", "necklace", "pendant");
   } else if (/küpe|kupe|earring/.test(blob)) {
@@ -1370,7 +1412,11 @@ export function buildShortReason(
 /** Type token: subcategory if present, else category. Empty → low confidence. */
 export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "category_tr" | "category" | "subcategory" | "search_query" | "user_profile">): string {
   const sub = asText(profile.subcategory_tr).trim();
-  if (sub && !/^aksesuar$/i.test(sub)) return sub;
+  if (sub && !/^aksesuar$/i.test(sub)) {
+    if (/^gözlük$/i.test(sub) && profileWantsSunglasses(profile)) return "güneş gözlüğü";
+    return sub;
+  }
+  if (profileWantsSunglasses(profile)) return "güneş gözlüğü";
   const cat = asText(profile.category_tr).trim();
   if (/^aksesuar$/i.test(cat) || asLower(profile.category) === "accessory") {
     const detected =

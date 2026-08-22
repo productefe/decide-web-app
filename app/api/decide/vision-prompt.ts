@@ -18,7 +18,7 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - Shoes: sneaker, boot, sandal, loafer, and heel are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
 - Swimwear: bikini, mayo, and swim shorts are DISTINCT from t-shirt / trousers. If the photo shows a bikini or swimsuit, subcategory MUST be bikini or mayo — never t-shirt, never dress.
 - Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
-- Glasses/sunglasses: distinctive_details MUST include frame shape + color when visible (yuvarlak çerçeve, siyah kare çerçeve, aviator).
+- Glasses vs sunglasses are DISTINCT. Sunglasses (güneş gözlüğü) are NEVER optical/reading glasses, and NEVER a glasses case / kutu / kılıf. If the photo shows sunglasses, subcategory MUST be sunglasses. If it shows clear optical frames, subcategory MUST be glasses.
 - Accessories (watch, bag, glasses, hat, belt, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
 - If you are not sure about a field, leave it "" or []. Never guess.
 

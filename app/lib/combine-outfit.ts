@@ -21,6 +21,7 @@ import {
   defaultAccessoryKind,
   sanitizeAccessoryQuery,
   titleLooksLikeGarment,
+  titleContradictsEyewearKind,
   type ProductProfile,
   type UserProfile,
 } from "@/api/decide/pipeline";
@@ -38,7 +39,8 @@ const ACCESSORY_KINDS: { type: string; re: RegExp }[] = [
   { type: "kemer", re: /kemer|belt/i },
   { type: "çanta", re: /çanta|canta|bag|clutch|tote|backpack|sırt/i },
   { type: "saat", re: /saat|watch/i },
-  { type: "gözlük", re: /gözlük|gozluk|glasses|sunglasses|eyewear/i },
+  { type: "güneş gözlüğü", re: /güneş gözlüğü|güneş gozluk|sunglasses?|sun\s*glasses/i },
+  { type: "gözlük", re: /gözlük|gozluk|glasses|eyewear/i },
   { type: "şapka", re: /şapka|sapka|hat|bere|beanie|cap\b/i },
   { type: "atkı", re: /atkı|atki|scarf/i },
 ];
@@ -212,7 +214,9 @@ Rules:
   - accessoryType, styleDescriptor, and searchQuery MUST all refer to that SAME type.
   - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
   - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons. Always mention strap (deri kayış / metal kordon / silikon kayış).
-  - For gözlük: always mention frame shape (yuvarlak/kare/aviator) and frame color.
+  - For güneş gözlüğü: ONLY wearable sunglasses. NEVER gözlük kutusu, kılıf, okuma gözlüğü, optik, numaralı, or generic "gözlük".
+  - For gözlük: prescription / optical frames only — NEVER güneş gözlüğü and NEVER a case.
+  - Always mention frame shape (yuvarlak/kare/aviator) and frame color for eyewear.
   - Match metal/color to the source piece when suggesting jewelry.${accessoryField}`;
 }
 
@@ -235,6 +239,9 @@ function normalizeAccessorySuggestion(
 
   if (genderWord === "erkek" && /küpe|kolye|bileklik|yüzük/.test(asLower(type))) {
     type = fallbackType;
+  }
+  if (context === "beach" && type === "gözlük") {
+    type = "güneş gözlüğü";
   }
 
   let styleDescriptor = raw.styleDescriptor;
@@ -490,7 +497,7 @@ function accessoryDetailsFromText(text: string, accessoryType?: string): string[
     else if (/\b(silikon|silicone|kauçuk)\b/.test(t)) out.push("silikon kayış");
     else if (/\b(metal|çelik|hasır)\b/.test(t)) out.push("metal kordon");
   }
-  if (accessoryType === "gözlük" || /gözlük|glasses|sunglasses/.test(t)) {
+  if (accessoryType === "gözlük" || accessoryType === "güneş gözlüğü" || /gözlük|glasses|sunglasses/.test(t)) {
     if (/\b(yuvarlak|round|oval)\b/.test(t)) out.push("yuvarlak çerçeve");
     else if (/\b(kare|square|dikdörtgen)\b/.test(t)) out.push("kare çerçeve");
     else if (/\b(aviator|damla|pilot)\b/.test(t)) out.push("aviator çerçeve");
@@ -625,6 +632,11 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
         suggestion.accessoryType === "saat" ||
         /saat|watch/i.test(suggestion.searchQuery) ||
         /saat|watch/i.test(profile.category_tr);
+      const eyewearKind = asLower(
+        `${suggestion.accessoryType || ""} ${suggestion.searchQuery} ${profile.category_tr} ${profile.subcategory_tr}`
+      );
+      const isEyewearSlot = /gözlük|glasses|sunglasses|eyewear/.test(eyewearKind);
+      const wantsSunglasses = /güneş|sunglass/.test(eyewearKind);
 
       const piece = await processPiece(
         profile,
@@ -638,9 +650,12 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
           mustFind: true,
           denyTitle: isWatchSlot
             ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)
-            : suggestion.slot === "accessory"
-              ? titleLooksLikeGarment
-              : undefined,
+            : isEyewearSlot
+              ? (title) =>
+                  titleLooksLikeGarment(title) || titleContradictsEyewearKind(title, wantsSunglasses)
+              : suggestion.slot === "accessory"
+                ? titleLooksLikeGarment
+                : undefined,
         }
       );
 
