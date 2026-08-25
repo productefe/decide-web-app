@@ -54,13 +54,19 @@ export class RequestTimer {
       ([name, dur]) => `${name.replace(/[^a-zA-Z0-9_-]/g, "_")};dur=${dur}`
     );
     parts.push(`total;dur=${snap.total_ms}`);
+    // Headers must be Latin-1. piece_label / Turkish text stays in the JSON body only.
+    const headerSnap = {
+      total_ms: snap.total_ms,
+      ms: snap.ms,
+      route: typeof snap.route === "string" ? snap.route : undefined,
+    };
     return NextResponse.json(
       { ...body, _timing: snap },
       {
         status: init?.status,
         headers: {
           "Server-Timing": parts.join(", "),
-          "X-Decide-Timing": JSON.stringify(snap),
+          "X-Decide-Timing": JSON.stringify(headerSnap),
         },
       }
     );

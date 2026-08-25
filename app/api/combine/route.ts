@@ -148,89 +148,92 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .single();
 
+    const rateLimitPromise = isShowMore
+      ? enforceRateLimit(supabase, "combine_more", 100)
+      : // Soft hourly cap only — daily combines_used quota is off until product gates it.
+        enforceRateLimit(supabase, "combine", 100);
+
+    let photoUrl = typeof body?.photo_url === "string" ? body.photo_url : "";
+    let context: AnalysisContext | null = saveContext;
+    let piece: PieceAttrsStored | null = null;
+
+    const historyPromise = historyId
+      ? supabase
+          .from("search_history")
+          .select("id, user_id, photo_url, results, context")
+          .eq("id", historyId)
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null });
+
     try {
-      if (isShowMore) {
-        await enforceRateLimit(supabase, "combine_more", 100);
+      const [, historyRes] = await Promise.all([rateLimitPromise, historyPromise]);
+
+      if (historyId) {
+        const { data: row, error: histError } = historyRes;
+        if (histError || !row) {
+          return NextResponse.json({ error: "Analiz bulunamadı." }, { status: 404 });
+        }
+
+        photoUrl = row.photo_url || photoUrl;
+        piece = findPiece(row.results as StoredResults, pieceLabel);
+
+        if (!context) {
+          context = parseAnalysisContext(row.context);
+        }
+
+        // Legacy rows: require context chip selection, then persist
+        if (!context) {
+          return NextResponse.json(
+            { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
+            { status: 400 }
+          );
+        }
+
+        if (saveContext && row.context !== saveContext) {
+          void supabase
+            .from("search_history")
+            .update({ context: saveContext })
+            .eq("id", historyId)
+            .eq("user_id", user.id)
+            .then(({ error: updErr }) => {
+              if (updErr) console.error("search_history context update:", updErr.message);
+            });
+        }
       } else {
-        // Soft hourly cap only — daily combines_used quota is off until product gates it.
-        await enforceRateLimit(supabase, "combine", 100);
+        // Live results session without history_id — attrs must come from body
+        if (!context) {
+          return NextResponse.json(
+            { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
+            { status: 400 }
+          );
+        }
+        if (!photoUrl) {
+          return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 400 });
+        }
+        piece = {
+          label: pieceLabel,
+          category_tr: typeof body?.category_tr === "string" ? body.category_tr : pieceLabel,
+          results: { recommended: null, cheaper: null, style: null },
+          category: typeof body?.category === "string" ? body.category : undefined,
+          color_tr: typeof body?.color_tr === "string" ? body.color_tr : undefined,
+          fit: typeof body?.fit === "string" ? body.fit : undefined,
+          gender:
+            typeof body?.piece_gender === "string"
+              ? body.piece_gender
+              : typeof body?.attributes?.gender === "string"
+                ? body.attributes.gender
+                : undefined,
+          style_tags: Array.isArray(body?.style_tags)
+            ? body.style_tags.filter((t: unknown): t is string => typeof t === "string")
+            : undefined,
+        };
       }
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });
       }
       throw err;
-    }
-
-    let photoUrl = typeof body?.photo_url === "string" ? body.photo_url : "";
-    let context: AnalysisContext | null = saveContext;
-    let piece: PieceAttrsStored | null = null;
-
-    if (historyId) {
-      const { data: row, error: histError } = await supabase
-        .from("search_history")
-        .select("id, user_id, photo_url, results, context")
-        .eq("id", historyId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (histError || !row) {
-        return NextResponse.json({ error: "Analiz bulunamadı." }, { status: 404 });
-      }
-
-      photoUrl = row.photo_url || photoUrl;
-      piece = findPiece(row.results as StoredResults, pieceLabel);
-
-      if (!context) {
-        context = parseAnalysisContext(row.context);
-      }
-
-      // Legacy rows: require context chip selection, then persist
-      if (!context) {
-        return NextResponse.json(
-          { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
-          { status: 400 }
-        );
-      }
-
-      if (saveContext && row.context !== saveContext) {
-        void supabase
-          .from("search_history")
-          .update({ context: saveContext })
-          .eq("id", historyId)
-          .eq("user_id", user.id)
-          .then(({ error: updErr }) => {
-            if (updErr) console.error("search_history context update:", updErr.message);
-          });
-      }
-    } else {
-      // Live results session without history_id — attrs must come from body
-      if (!context) {
-        return NextResponse.json(
-          { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
-          { status: 400 }
-        );
-      }
-      if (!photoUrl) {
-        return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 400 });
-      }
-      piece = {
-        label: pieceLabel,
-        category_tr: typeof body?.category_tr === "string" ? body.category_tr : pieceLabel,
-        results: { recommended: null, cheaper: null, style: null },
-        category: typeof body?.category === "string" ? body.category : undefined,
-        color_tr: typeof body?.color_tr === "string" ? body.color_tr : undefined,
-        fit: typeof body?.fit === "string" ? body.fit : undefined,
-        gender:
-          typeof body?.piece_gender === "string"
-            ? body.piece_gender
-            : typeof body?.attributes?.gender === "string"
-              ? body.attributes.gender
-              : undefined,
-        style_tags: Array.isArray(body?.style_tags)
-          ? body.style_tags.filter((t: unknown): t is string => typeof t === "string")
-          : undefined,
-      };
     }
 
     if (!piece) {

@@ -12,7 +12,6 @@ import {
   type UserProfile,
 } from "../pipeline";
 import { processPiece } from "../run-piece";
-import { getVisionImageDataUrl } from "../vision-image";
 import { getCachedVision, setCachedVision, visionCacheKey } from "../vision-cache";
 import type { PieceResult, Results } from "@/components/analyze/types";
 import {
@@ -20,7 +19,6 @@ import {
   assertOwnStoragePath,
   enforceRateLimit,
 } from "@/lib/api-security";
-import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
 import { RequestTimer } from "@/lib/timing";
 
@@ -109,11 +107,57 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    const { data: userPrefs } = await supabase
+    // Prefs and vision reuse are independent — overlap them.
+    const prefsPromise = supabase
       .from("user_preferences")
       .select("preferences, gender, sizes, price_mode")
       .eq("id", user.id)
       .single();
+
+    // Reuse the vision analysis from the original /api/decide run when
+    // possible — the photo has not changed, so re-running GPT-4o only adds
+    // 4-8 seconds to every "3 alternatif daha" click.
+    // Try every occasion key: cache is stored under the *resolved* occasion,
+    // which may differ from the requested one.
+    const lookupKeys = [
+      ...(requestedOccasion ? [visionCacheKey(user.id, storage_path, requestedOccasion)] : []),
+      ...(["spor", "gundelik", "aksam", "ev", "is", "sahil"] as const).map((occ) =>
+        visionCacheKey(user.id, storage_path, occ)
+      ),
+    ];
+
+    const visionLookupPromise = (async (): Promise<{
+      content: string | null;
+      source: "cache" | "history" | "openai";
+    }> => {
+      const seen = new Set<string>();
+      for (const key of lookupKeys) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const hit = getCachedVision(key);
+        if (hit) return { content: hit, source: "cache" };
+      }
+
+      // Photo-level match — vision JSON does not depend on the occasion chip.
+      const { data: historyRow } = await supabase
+        .from("search_history")
+        .select("results, context")
+        .eq("user_id", user.id)
+        .eq("photo_url", photo_url)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const storedContent = (historyRow?.results as { vision_content?: unknown } | null)
+        ?.vision_content;
+      if (typeof storedContent === "string" && storedContent.trim()) {
+        return { content: storedContent, source: "history" };
+      }
+      return { content: null, source: "openai" };
+    })();
+
+    const [{ data: userPrefs }, visionLookup] = await timer.span("vision_lookup", () =>
+      Promise.all([prefsPromise, visionLookupPromise])
+    );
 
     const sizesFromBody = parseSizes(body?.sizes);
     const genderFromBody = parseGender(body?.gender);
@@ -133,64 +177,26 @@ export async function POST(req: NextRequest) {
     };
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    // Reuse the vision analysis from the original /api/decide run when
-    // possible — the photo has not changed, so re-running GPT-4o only adds
-    // 4-8 seconds to every "3 alternatif daha" click.
-    const lookupKeys = requestedOccasion
-      ? [visionCacheKey(user.id, storage_path, requestedOccasion)]
-      : ["spor", "gundelik", "aksam", "ev", "is", "sahil"].map((occ) =>
-          visionCacheKey(user.id, storage_path, occ)
-        );
-    let visionContent: string | null = null;
-    let visionSource: "cache" | "history" | "openai" = "cache";
-
-    await timer.span("vision_lookup", async () => {
-      for (const key of lookupKeys) {
-        visionContent = getCachedVision(key);
-        if (visionContent) {
-          visionSource = "cache";
-          return;
-        }
-      }
-
-      let historyQuery = supabase
-        .from("search_history")
-        .select("results, context")
-        .eq("user_id", user.id)
-        .eq("photo_url", photo_url);
-      if (requestedOccasion) {
-        historyQuery = historyQuery.eq("context", OCCASION_TO_CONTEXT[requestedOccasion]);
-      }
-      const { data: historyRow } = await historyQuery
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const storedContent = (historyRow?.results as { vision_content?: unknown } | null)
-        ?.vision_content;
-      if (typeof storedContent === "string" && storedContent.trim()) {
-        visionContent = storedContent;
-        visionSource = "history";
-      }
-    });
+    let visionContent = visionLookup.content;
+    let visionSource = visionLookup.source;
 
     if (!visionContent) {
       visionSource = "openai";
-      visionContent = await timer.span("vision", async () => {
-        const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
-        return openAIContent(OPENAI_API_KEY, {
+      visionContent = await timer.span("vision", () =>
+        openAIContent(OPENAI_API_KEY, {
           model: "gpt-4o",
           messages: [
             {
               role: "user",
               content: [
-                { type: "image_url", image_url: { url: visionImageUrl } },
+                { type: "image_url", image_url: { url: photo_url } },
                 { type: "text", text: visionPromptForOccasion(requestedOccasion) },
               ],
             },
           ],
           max_tokens: 2000,
-        });
-      });
+        })
+      );
     }
 
     if (!visionContent) {
@@ -204,6 +210,9 @@ export async function POST(req: NextRequest) {
     user_profile.occasion = occasion;
     const occasionKeyword = getOccasionKeyword(occasion);
     setCachedVision(visionCacheKey(user.id, storage_path, occasion), visionContent);
+    if (requestedOccasion && requestedOccasion !== occasion) {
+      setCachedVision(visionCacheKey(user.id, storage_path, requestedOccasion), visionContent);
+    }
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
     let target = visionPieces[0];
@@ -225,7 +234,7 @@ export async function POST(req: NextRequest) {
     const piece = await timer.span("search", () =>
       processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, excludeTitles, {
         mustFind: true,
-        immersiveMode: "recommended",
+        immersiveMode: "none",
       })
     );
 

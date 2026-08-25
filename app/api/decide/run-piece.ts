@@ -51,9 +51,17 @@ function dedupeItems(items: SerpShoppingItem[]): SerpShoppingItem[] {
   return out;
 }
 
+/**
+ * Safety cap for hung Serp calls. Wall-clock is dominated by waiting for the
+ * slowest query in a Promise.all — we instead settle as soon as the pool is
+ * filled, so this timeout only matters when every query is slow/stuck.
+ */
+const SERP_TIMEOUT_MS = 8_000;
+
 async function serpShoppingSearch(
   query: string,
-  apiKey: string
+  apiKey: string,
+  num = 12
 ): Promise<SerpShoppingItem[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -62,19 +70,27 @@ async function serpShoppingSearch(
     engine: "google_shopping",
     q: trimmed,
     api_key: apiKey,
-    num: "20",
+    num: String(num),
     gl: "tr",
     hl: "tr",
   });
-  const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`);
-  const serpData = await serpRes.json();
+  try {
+    const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`, {
+      signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
+    });
+    const serpData = await serpRes.json();
 
-  if (serpData?.error) {
-    console.warn("SerpAPI:", trimmed, "→", serpData.error);
+    if (serpData?.error) {
+      console.warn("SerpAPI:", trimmed, "→", serpData.error);
+      return [];
+    }
+
+    return serpData?.shopping_results || [];
+  } catch (err) {
+    const aborted = err instanceof Error && err.name === "TimeoutError";
+    console.warn("SerpAPI:", trimmed, "→", aborted ? `timeout ${SERP_TIMEOUT_MS}ms` : String(err));
     return [];
   }
-
-  return serpData?.shopping_results || [];
 }
 
 function emptyScoring(productProfile: ProductProfile): ScoringResult {
@@ -104,39 +120,85 @@ export function linkNeedsImmersive(link: string | null | undefined): boolean {
   }
 }
 
+function poolSurvivesExclude(
+  scoring: ScoringResult,
+  excludeTitles: Set<string>
+): number {
+  if (!excludeTitles.size) return scoring.pool.length;
+  return scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles)).length;
+}
+
+/**
+ * Fire queries in parallel but do not wait for the slowest. As soon as enough
+ * unique products exist (after excludeTitles), return; stragglers are ignored.
+ */
 async function searchQueries(
   queries: string[],
   productProfile: ProductProfile,
-  apiKey: string
+  apiKey: string,
+  num = 12,
+  minPool = 3,
+  excludeTitles: Set<string> = new Set()
 ): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
   const ordered = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
   if (ordered.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "", items: [] };
   }
 
-  // Fire the whole (already small) query ladder at once: one network round-trip
-  // instead of sequential adaptive expansion.
-  const batches = await Promise.all(ordered.map((q) => serpShoppingSearch(q, apiKey)));
-  const merged = dedupeItems(batches.flat());
-  const scoring = scoreProducts(merged, productProfile);
-  console.log("SerpAPI parallel:", ordered.join(" | "), `(pool=${scoring.pool.length})`);
+  const collected: SerpShoppingItem[] = [];
+  let pending = ordered.length;
 
-  return { scoring, queryUsed: ordered[0], items: merged };
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (why: string) => {
+      if (settled) return;
+      settled = true;
+      const items = dedupeItems(collected);
+      const scoring = scoreProducts(items, productProfile);
+      console.log(
+        "SerpAPI parallel:",
+        ordered.join(" | "),
+        `(pool=${scoring.pool.length}, alive=${poolSurvivesExclude(scoring, excludeTitles)}, ${why})`
+      );
+      resolve({ scoring, queryUsed: ordered[0], items });
+    };
+
+    for (const q of ordered) {
+      void serpShoppingSearch(q, apiKey, num)
+        .then((batch) => {
+          if (settled) return;
+          collected.push(...batch);
+          pending--;
+          const scoring = scoreProducts(dedupeItems(collected), productProfile);
+          const alive = poolSurvivesExclude(scoring, excludeTitles);
+          if (alive >= minPool) finish("early");
+          else if (pending <= 0) finish("complete");
+        })
+        .catch(() => {
+          if (settled) return;
+          pending--;
+          if (pending <= 0) finish("complete");
+        });
+    }
+  });
 }
 
-function compactExtraLimit(searchMode: "full" | "compact"): number {
-  return searchMode === "compact" ? 2 : 4;
+function compactExtraLimit(_searchMode: "full" | "compact"): number {
+  return 2;
 }
 
 async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string,
   rotation = 0,
-  searchMode: "full" | "compact" = "full"
+  searchMode: "full" | "compact" = "full",
+  excludeTitles: Set<string> = new Set()
 ): Promise<{ scoring: ScoringResult; queryUsed: string }> {
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
+  const serpNum = compact ? 8 : 12;
+  const minPool = excludeTitles.size ? Math.min(6, excludeTitles.size + 3) : 3;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
@@ -148,55 +210,86 @@ async function searchWithFallback(
     );
     const firstBatch = compact
       ? [...new Set([luxuryQueries[0], genericLuks[0] || luxuryQueries[1]].filter(Boolean))]
-      : [...new Set([...luxuryQueries.slice(0, 4), genericLuks[0]].filter(Boolean))];
-    const result = await searchQueries(firstBatch, productProfile, apiKey);
-    if (!result.scoring.error && result.scoring.recommended) {
+      : [...new Set([...luxuryQueries.slice(0, 2), genericLuks[0]].filter(Boolean))];
+    const result = await searchQueries(
+      firstBatch,
+      productProfile,
+      apiKey,
+      serpNum,
+      minPool,
+      excludeTitles
+    );
+    if (!result.scoring.error && poolSurvivesExclude(result.scoring, excludeTitles) > 0) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
     if (compact) return { scoring: result.scoring, queryUsed: result.queryUsed };
 
-    const luksFallback = genericLuks.filter((q) => !firstBatch.includes(q)).slice(0, 3);
+    const luksFallback = genericLuks.filter((q) => !firstBatch.includes(q)).slice(0, 2);
     if (luksFallback.length === 0) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
-    const luksBatches = await Promise.all(luksFallback.map((q) => serpShoppingSearch(q, apiKey)));
+    const extra = await searchQueries(
+      luksFallback,
+      productProfile,
+      apiKey,
+      serpNum,
+      minPool,
+      excludeTitles
+    );
     const scoring = scoreProducts(
-      dedupeItems([...result.items, ...luksBatches.flat()]),
+      dedupeItems([...result.items, ...extra.items]),
       productProfile
     );
     console.log("SerpAPI lüks fallback:", luksFallback.join(" | "), `(pool=${scoring.pool.length})`);
-    return { scoring, queryUsed: result.queryUsed || luksFallback[0] || "" };
+    return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  const brandQs = brandQueries.slice(0, compact ? 1 : 3);
+  // Full karma: 1 brand + 1 primary + 1 luxury (was 3+1+2). Compact stays 1+1.
+  const brandQs = brandQueries.slice(0, 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
   const primary = genericQs[0] || queries[0];
-  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 2) : [];
+  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 1) : [];
   const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
 
-  const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey);
-  if (!firstPass.scoring.error || compact) {
+  const firstPass = await searchQueries(
+    uniqueParallel,
+    productProfile,
+    apiKey,
+    serpNum,
+    minPool,
+    excludeTitles
+  );
+  if (poolSurvivesExclude(firstPass.scoring, excludeTitles) > 0 || compact) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
 
   const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
   if (fallbackQs.length === 0) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
 
-  const fallbackBatches = await Promise.all(fallbackQs.map((q) => serpShoppingSearch(q, apiKey)));
+  const extra = await searchQueries(
+    fallbackQs,
+    productProfile,
+    apiKey,
+    serpNum,
+    minPool,
+    excludeTitles
+  );
   const scoring = scoreProducts(
-    dedupeItems([...firstPass.items, ...fallbackBatches.flat()]),
+    dedupeItems([...firstPass.items, ...extra.items]),
     productProfile
   );
   console.log("SerpAPI fallback parallel:", fallbackQs.join(" | "), `(pool=${scoring.pool.length})`);
-  return { scoring, queryUsed: firstPass.queryUsed || fallbackQs[0] || "" };
+  return { scoring, queryUsed: firstPass.queryUsed || extra.queryUsed || "" };
 }
 
 async function fetchImmersive(url: string | null | undefined, serpKey: string) {
   if (!url) return null;
   try {
-    const res = await fetch(`${url}&api_key=${serpKey}`);
+    const res = await fetch(`${url}&api_key=${serpKey}`, {
+      signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
+    });
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -279,7 +372,13 @@ export async function processPiece(
   const immersiveMode = options.immersiveMode ?? "all";
   const searchMode = options.searchMode ?? "full";
   const rotation = excludeTitles.size;
-  let { scoring } = await searchWithFallback(productProfile, serpKey, rotation, searchMode);
+  let { scoring } = await searchWithFallback(
+    productProfile,
+    serpKey,
+    rotation,
+    searchMode,
+    excludeTitles
+  );
   scoring = applyPoolFilters(
     scoring,
     excludeTitles,
@@ -287,15 +386,15 @@ export async function processPiece(
     options.denyTitle
   );
 
-  if (
-    (!scoring.recommended || (searchMode === "full" && scoring.pool.length < 3)) &&
-    options.mustFind
-  ) {
+  // Only broaden when we have no recommended card. Do not re-query just because
+  // excludeTitles left fewer than 3 — that added ~4 Serp RTTs on every "more".
+  if (!scoring.recommended && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
+    const serpNum = searchMode === "compact" ? 8 : 12;
     const broaden = [
       productProfile.search_query,
       productProfile.fallback_query,
@@ -343,7 +442,7 @@ export async function processPiece(
           price_mode: priceMode,
           gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
         },
-        4,
+        2,
         seedQuery,
         rotation + 5
       );
@@ -351,8 +450,15 @@ export async function processPiece(
     }
     const extraQs = [...new Set(broaden)].slice(0, compactExtraLimit(searchMode));
     if (extraQs.length) {
-      const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
-      const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);
+      const extra = await searchQueries(
+        extraQs,
+        productProfile,
+        serpKey,
+        serpNum,
+        3,
+        excludeTitles
+      );
+      const extraScoring = scoreProducts(dedupeItems(extra.items), productProfile);
       const seen = new Set<string>();
       for (const p of scoring.pool) rememberProduct(p, seen);
       const mergedPool = [...scoring.pool];

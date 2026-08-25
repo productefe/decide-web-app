@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { parseGender, parseOccasion, parsePriceMode, parseSizes, type Occasion, type PriceMode } from "@/lib/preferences";
 import { isAnonymousUser } from "@/lib/auth-user";
@@ -12,7 +13,6 @@ import {
   type UserProfile,
 } from "./pipeline";
 import { processPiece } from "./run-piece";
-import { getVisionImageDataUrl } from "./vision-image";
 import { setCachedVision, visionCacheKey } from "./vision-cache";
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import {
@@ -115,22 +115,22 @@ export async function POST(req: NextRequest) {
     }
 
     const anonymous = isAnonymousUser(user);
-    await timer.span("auth_gates", async () => {
-      await enforceGuestAnalysisCap(supabase, anonymous);
-      await enforceRateLimit(supabase, "decide", anonymous ? 10 : 100);
-    });
-
-    // Preferences read and storage image download are independent — overlap them.
-    const [{ data: userPrefs }, visionImageUrl] = await timer.span("prefs_image", () =>
+    await timer.span("auth_gates", () =>
       Promise.all([
-        supabase
-          .from("user_preferences")
-          .select("preferences, gender, sizes, price_mode")
-          .eq("id", user.id)
-          .single(),
-        getVisionImageDataUrl(supabase, storage_path!),
+        enforceGuestAnalysisCap(supabase, anonymous),
+        enforceRateLimit(supabase, "decide", anonymous ? 10 : 100),
       ])
     );
+
+    // Preferences only — OpenAI fetches the public storage URL directly (no base64 round-trip).
+    const { data: userPrefs } = await timer.span("prefs", async () => {
+      const res = await supabase
+        .from("user_preferences")
+        .select("preferences, gender, sizes, price_mode")
+        .eq("id", user.id)
+        .single();
+      return res;
+    });
 
     // Body prefs win when present — avoids stale DB reads right after profile save.
     const bodySizes = parseSizes(body?.sizes);
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: visionImageUrl } },
+              { type: "image_url", image_url: { url: photo_url } },
               { type: "text", text: visionPromptForOccasion(requestedOccasion) },
             ],
           },
@@ -183,6 +183,7 @@ export async function POST(req: NextRequest) {
           if (profile.low_confidence) return Promise.resolve(null);
           return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
             mustFind: true,
+            immersiveMode: "none",
           }).then((piece) =>
             piece
               ? ({
@@ -219,27 +220,32 @@ export async function POST(req: NextRequest) {
 
     // Persist + memory-cache the raw vision JSON so "3 alternatif daha" can
     // reuse it instead of re-running GPT-4o on the same photo.
-    setCachedVision(visionCacheKey(user.id, storage_path!, occasion), visionContent);
+    if (storage_path) {
+      setCachedVision(visionCacheKey(user.id, storage_path, occasion), visionContent);
+      if (requestedOccasion && requestedOccasion !== occasion) {
+        setCachedVision(visionCacheKey(user.id, storage_path, requestedOccasion), visionContent);
+      }
+    }
     const stored: StoredResults = { pieces: pieceResults, vision_content: visionContent };
     const firstResults = pieceResults[0].results;
     const context = OCCASION_TO_CONTEXT[occasion];
-    let history_id: string | null = null;
+    // Return history_id immediately; persist in the background so insert RTT
+    // does not block the client. Mobile treats history_id as optional.
+    const history_id = !isAnonymousUser(user) ? randomUUID() : null;
 
-    if (!isAnonymousUser(user)) {
-      await timer.span("history", async () => {
-        const { data: inserted, error: insertError } = await supabase
-          .from("search_history")
-          .insert({
-            user_id: user.id,
-            photo_url,
-            results: stored,
-            context,
-          })
-          .select("id")
-          .single();
-        if (insertError) console.error("search_history insert:", insertError.message);
-        else history_id = inserted?.id ?? null;
-      });
+    if (history_id) {
+      void supabase
+        .from("search_history")
+        .insert({
+          id: history_id,
+          user_id: user.id,
+          photo_url,
+          results: stored,
+          context,
+        })
+        .then(({ error: insertError }) => {
+          if (insertError) console.error("search_history insert:", insertError.message);
+        });
     }
 
     const snap = timer.snapshot({
