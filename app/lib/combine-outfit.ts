@@ -599,6 +599,10 @@ function buildSlotProductProfile(
 /**
  * One structured LLM call (unless reuseSuggestion), then existing processPiece
  * search pipeline per outfit slot from COMBINE_RULES.
+ *
+ * Full combine overlaps LLM with heuristic Serp so wall-clock ≈ max(LLM, Serp)
+ * instead of LLM + Serp. Product cards come from the heuristic search; LLM only
+ * refreshes slot labels / accessoryType (no second Serp round).
  */
 export async function combineOutfit(input: CombineOutfitInput): Promise<CombineOutfitResult> {
   const allSlots = resolveCombineSlots(input.pieceCategory);
@@ -608,84 +612,106 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
   const genderWord =
     genderTr(input.userProfile.gender) || genderTr(input.attributes.gender);
 
-  let suggestions: CombineSlotSuggestion[];
+  const occasion = CONTEXT_TO_OCCASION[input.context];
+  const occasionKeyword = getOccasionKeyword(occasion);
+  const exclude = input.excludeTitles || new Set<string>();
+
+  async function searchSlot(suggestion: CombineSlotSuggestion): Promise<CombineSlotResult> {
+    const profile = buildSlotProductProfile(input, suggestion);
+    if (!profile.user_profile.price_mode) {
+      profile.user_profile.price_mode = "karma" as PriceMode;
+    }
+
+    const isWatchSlot =
+      suggestion.accessoryType === "saat" ||
+      /saat|watch/i.test(suggestion.searchQuery) ||
+      /saat|watch/i.test(profile.category_tr);
+    const eyewearKind = asLower(
+      `${suggestion.accessoryType || ""} ${suggestion.searchQuery} ${profile.category_tr} ${profile.subcategory_tr}`
+    );
+    const isEyewearSlot = /gözlük|glasses|sunglasses|eyewear/.test(eyewearKind);
+    const wantsSunglasses = /güneş|sunglass/.test(eyewearKind);
+
+    const piece = await processPiece(
+      profile,
+      occasionKeyword,
+      input.serpKey,
+      input.affiliateTag,
+      exclude,
+      {
+        immersiveMode: "none",
+        searchMode: "compact",
+        mustFind: true,
+        denyTitle: isWatchSlot
+          ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)
+          : isEyewearSlot
+            ? (title) =>
+                titleLooksLikeGarment(title) || titleContradictsEyewearKind(title, wantsSunglasses)
+            : suggestion.slot === "accessory"
+              ? titleLooksLikeGarment
+              : undefined,
+      }
+    );
+
+    const accessoryLabel = suggestion.accessoryType || profile.subcategory_tr;
+    const labelTr =
+      suggestion.slot === "accessory" && accessoryLabel
+        ? accessoryLabel.charAt(0).toUpperCase() + accessoryLabel.slice(1)
+        : COMBINE_SLOT_LABEL_TR[suggestion.slot];
+
+    return {
+      slot: suggestion.slot,
+      label_tr: labelTr,
+      suggestion,
+      piece: piece || {
+        label: labelTr,
+        category_tr: profile.category_tr,
+        results: { recommended: null, cheaper: null, style: null },
+      },
+    } satisfies CombineSlotResult;
+  }
+
   if (input.reuseSuggestion && input.onlySlot) {
     const normalized = sanitizeSlotForGender(
       normalizeAccessorySuggestion(input.reuseSuggestion, input.context, genderWord),
       input.context,
       genderWord
     );
-    suggestions = [normalized || input.reuseSuggestion];
-  } else {
-    suggestions = await generateSlotSuggestions(
-      input.openaiKey,
-      slots,
-      input.attributes,
-      input.context,
-      genderWord
-    );
+    const suggestion = normalized || input.reuseSuggestion;
+    const result = await searchSlot(suggestion);
+    return { slots: [result], suggestions: [suggestion] };
   }
 
-  const occasion = CONTEXT_TO_OCCASION[input.context];
-  const occasionKeyword = getOccasionKeyword(occasion);
-  const exclude = input.excludeTitles || new Set<string>();
-
-  const results = await Promise.all(
-    suggestions.map(async (suggestion) => {
-      const profile = buildSlotProductProfile(input, suggestion);
-      if (!profile.user_profile.price_mode) {
-        profile.user_profile.price_mode = "karma" as PriceMode;
-      }
-
-      const isWatchSlot =
-        suggestion.accessoryType === "saat" ||
-        /saat|watch/i.test(suggestion.searchQuery) ||
-        /saat|watch/i.test(profile.category_tr);
-      const eyewearKind = asLower(
-        `${suggestion.accessoryType || ""} ${suggestion.searchQuery} ${profile.category_tr} ${profile.subcategory_tr}`
-      );
-      const isEyewearSlot = /gözlük|glasses|sunglasses|eyewear/.test(eyewearKind);
-      const wantsSunglasses = /güneş|sunglass/.test(eyewearKind);
-
-      const piece = await processPiece(
-        profile,
-        occasionKeyword,
-        input.serpKey,
-        input.affiliateTag,
-        exclude,
-        {
-          immersiveMode: "none",
-          searchMode: "compact",
-          mustFind: true,
-          denyTitle: isWatchSlot
-            ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)
-            : isEyewearSlot
-              ? (title) =>
-                  titleLooksLikeGarment(title) || titleContradictsEyewearKind(title, wantsSunglasses)
-              : suggestion.slot === "accessory"
-                ? titleLooksLikeGarment
-                : undefined,
-        }
-      );
-
-      const accessoryLabel = suggestion.accessoryType || profile.subcategory_tr;
-      const labelTr =
-        suggestion.slot === "accessory" && accessoryLabel
-          ? accessoryLabel.charAt(0).toUpperCase() + accessoryLabel.slice(1)
-          : COMBINE_SLOT_LABEL_TR[suggestion.slot];
-
-      return {
-        slot: suggestion.slot,
-        label_tr: labelTr,
-        suggestion,
-        piece: piece || {
-          label: labelTr,
-          category_tr: profile.category_tr,
-          results: { recommended: null, cheaper: null, style: null },
-        },
-      } satisfies CombineSlotResult;
-    })
+  const heuristic = heuristicSlotSuggestions(slots, input.attributes, input.context, genderWord);
+  const llmPromise = generateSlotSuggestions(
+    input.openaiKey,
+    slots,
+    input.attributes,
+    input.context,
+    genderWord
   );
 
-  return { slots: results, suggestions };
+  const [llmSuggestions, serpResults] = await Promise.all([
+    llmPromise,
+    Promise.all(heuristic.map((suggestion) => searchSlot(suggestion))),
+  ]);
+
+  // Prefer LLM labels/accessoryType for display; keep heuristic Serp product cards.
+  const llmBySlot = new Map(llmSuggestions.map((s) => [s.slot, s]));
+  const results = serpResults.map((row) => {
+    const llm = llmBySlot.get(row.slot);
+    if (!llm) return row;
+    const accessoryLabel = llm.accessoryType || row.suggestion.accessoryType;
+    const labelTr =
+      row.slot === "accessory" && accessoryLabel
+        ? accessoryLabel.charAt(0).toUpperCase() + accessoryLabel.slice(1)
+        : COMBINE_SLOT_LABEL_TR[row.slot];
+    return {
+      ...row,
+      label_tr: labelTr,
+      suggestion: llm,
+    } satisfies CombineSlotResult;
+  });
+
+  return { slots: results, suggestions: llmSuggestions };
 }

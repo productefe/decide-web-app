@@ -53,7 +53,8 @@ function dedupeItems(items: SerpShoppingItem[]): SerpShoppingItem[] {
 
 async function serpShoppingSearch(
   query: string,
-  apiKey: string
+  apiKey: string,
+  num = 20
 ): Promise<SerpShoppingItem[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -62,7 +63,7 @@ async function serpShoppingSearch(
     engine: "google_shopping",
     q: trimmed,
     api_key: apiKey,
-    num: "20",
+    num: String(num),
     gl: "tr",
     hl: "tr",
   });
@@ -107,7 +108,8 @@ export function linkNeedsImmersive(link: string | null | undefined): boolean {
 async function searchQueries(
   queries: string[],
   productProfile: ProductProfile,
-  apiKey: string
+  apiKey: string,
+  num = 20
 ): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
   const ordered = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
   if (ordered.length === 0) {
@@ -116,7 +118,7 @@ async function searchQueries(
 
   // Fire the whole (already small) query ladder at once: one network round-trip
   // instead of sequential adaptive expansion.
-  const batches = await Promise.all(ordered.map((q) => serpShoppingSearch(q, apiKey)));
+  const batches = await Promise.all(ordered.map((q) => serpShoppingSearch(q, apiKey, num)));
   const merged = dedupeItems(batches.flat());
   const scoring = scoreProducts(merged, productProfile);
   console.log("SerpAPI parallel:", ordered.join(" | "), `(pool=${scoring.pool.length})`);
@@ -124,8 +126,8 @@ async function searchQueries(
   return { scoring, queryUsed: ordered[0], items: merged };
 }
 
-function compactExtraLimit(searchMode: "full" | "compact"): number {
-  return searchMode === "compact" ? 2 : 4;
+function compactExtraLimit(_searchMode: "full" | "compact"): number {
+  return 2;
 }
 
 async function searchWithFallback(
@@ -137,6 +139,7 @@ async function searchWithFallback(
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
+  const serpNum = compact ? 10 : 20;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
@@ -149,7 +152,7 @@ async function searchWithFallback(
     const firstBatch = compact
       ? [...new Set([luxuryQueries[0], genericLuks[0] || luxuryQueries[1]].filter(Boolean))]
       : [...new Set([...luxuryQueries.slice(0, 4), genericLuks[0]].filter(Boolean))];
-    const result = await searchQueries(firstBatch, productProfile, apiKey);
+    const result = await searchQueries(firstBatch, productProfile, apiKey, serpNum);
     if (!result.scoring.error && result.scoring.recommended) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
@@ -159,7 +162,9 @@ async function searchWithFallback(
     if (luksFallback.length === 0) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
-    const luksBatches = await Promise.all(luksFallback.map((q) => serpShoppingSearch(q, apiKey)));
+    const luksBatches = await Promise.all(
+      luksFallback.map((q) => serpShoppingSearch(q, apiKey, serpNum))
+    );
     const scoring = scoreProducts(
       dedupeItems([...result.items, ...luksBatches.flat()]),
       productProfile
@@ -168,15 +173,16 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || luksFallback[0] || "" };
   }
 
-  const brandQs = brandQueries.slice(0, compact ? 1 : 3);
+  // Full karma: 2 brand + 1 primary + 1 luxury (was 3+1+2). Compact stays 1+1.
+  const brandQs = brandQueries.slice(0, compact ? 1 : 2);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
   const primary = genericQs[0] || queries[0];
-  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 2) : [];
+  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 1) : [];
   const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
 
-  const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey);
+  const firstPass = await searchQueries(uniqueParallel, productProfile, apiKey, serpNum);
   if (!firstPass.scoring.error || compact) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
@@ -184,7 +190,9 @@ async function searchWithFallback(
   const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
   if (fallbackQs.length === 0) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
 
-  const fallbackBatches = await Promise.all(fallbackQs.map((q) => serpShoppingSearch(q, apiKey)));
+  const fallbackBatches = await Promise.all(
+    fallbackQs.map((q) => serpShoppingSearch(q, apiKey, serpNum))
+  );
   const scoring = scoreProducts(
     dedupeItems([...firstPass.items, ...fallbackBatches.flat()]),
     productProfile
@@ -287,15 +295,15 @@ export async function processPiece(
     options.denyTitle
   );
 
-  if (
-    (!scoring.recommended || (searchMode === "full" && scoring.pool.length < 3)) &&
-    options.mustFind
-  ) {
+  // Only broaden when we have no recommended card. Do not re-query just because
+  // excludeTitles left fewer than 3 — that added ~4 Serp RTTs on every "more".
+  if (!scoring.recommended && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
+    const serpNum = searchMode === "compact" ? 10 : 20;
     const broaden = [
       productProfile.search_query,
       productProfile.fallback_query,
@@ -343,7 +351,7 @@ export async function processPiece(
           price_mode: priceMode,
           gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
         },
-        4,
+        2,
         seedQuery,
         rotation + 5
       );
@@ -351,7 +359,7 @@ export async function processPiece(
     }
     const extraQs = [...new Set(broaden)].slice(0, compactExtraLimit(searchMode));
     if (extraQs.length) {
-      const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey)));
+      const extra = await Promise.all(extraQs.map((q) => serpShoppingSearch(q, serpKey, serpNum)));
       const extraScoring = scoreProducts(dedupeItems(extra.flat()), productProfile);
       const seen = new Set<string>();
       for (const p of scoring.pool) rememberProduct(p, seen);
