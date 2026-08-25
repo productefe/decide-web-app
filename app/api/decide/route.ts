@@ -229,23 +229,17 @@ export async function POST(req: NextRequest) {
     const stored: StoredResults = { pieces: pieceResults, vision_content: visionContent };
     const firstResults = pieceResults[0].results;
     const context = OCCASION_TO_CONTEXT[occasion];
-    // Return history_id immediately; persist in the background so insert RTT
-    // does not block the client. Mobile treats history_id as optional.
     const history_id = !isAnonymousUser(user) ? randomUUID() : null;
 
     if (history_id) {
-      void supabase
-        .from("search_history")
-        .insert({
-          id: history_id,
-          user_id: user.id,
-          photo_url,
-          results: stored,
-          context,
-        })
-        .then(({ error: insertError }) => {
-          if (insertError) console.error("search_history insert:", insertError.message);
-        });
+      const { error: insertError } = await supabase.from("search_history").insert({
+        id: history_id,
+        user_id: user.id,
+        photo_url,
+        results: stored,
+        context,
+      });
+      if (insertError) console.error("search_history insert:", insertError.message);
     }
 
     const snap = timer.snapshot({

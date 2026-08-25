@@ -171,37 +171,37 @@ export async function POST(req: NextRequest) {
 
       if (historyId) {
         const { data: row, error: histError } = historyRes;
-        if (histError || !row) {
-          return NextResponse.json({ error: "Analiz bulunamadı." }, { status: 404 });
-        }
+        if (!histError && row) {
+          photoUrl = row.photo_url || photoUrl;
+          piece = findPiece(row.results as StoredResults, pieceLabel);
 
-        photoUrl = row.photo_url || photoUrl;
-        piece = findPiece(row.results as StoredResults, pieceLabel);
+          if (!context) {
+            context = parseAnalysisContext(row.context);
+          }
 
-        if (!context) {
-          context = parseAnalysisContext(row.context);
-        }
+          // Legacy rows: require context chip selection, then persist
+          if (!context) {
+            return NextResponse.json(
+              { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
+              { status: 400 }
+            );
+          }
 
-        // Legacy rows: require context chip selection, then persist
-        if (!context) {
-          return NextResponse.json(
-            { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
-            { status: 400 }
-          );
+          if (saveContext && row.context !== saveContext) {
+            void supabase
+              .from("search_history")
+              .update({ context: saveContext })
+              .eq("id", historyId)
+              .eq("user_id", user.id)
+              .then(({ error: updErr }) => {
+                if (updErr) console.error("search_history context update:", updErr.message);
+              });
+          }
         }
+      }
 
-        if (saveContext && row.context !== saveContext) {
-          void supabase
-            .from("search_history")
-            .update({ context: saveContext })
-            .eq("id", historyId)
-            .eq("user_id", user.id)
-            .then(({ error: updErr }) => {
-              if (updErr) console.error("search_history context update:", updErr.message);
-            });
-        }
-      } else {
-        // Live results session without history_id — attrs must come from body
+      if (!piece) {
+        // Live results, or history_id returned before the row was visible.
         if (!context) {
           return NextResponse.json(
             { error: "context_required", message: "Önce nerede giyeceğini seçmelisin." },
@@ -209,7 +209,10 @@ export async function POST(req: NextRequest) {
           );
         }
         if (!photoUrl) {
-          return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 400 });
+          return NextResponse.json(
+            { error: historyId ? "Analiz bulunamadı." : "Fotoğraf bulunamadı." },
+            { status: 404 }
+          );
         }
         piece = {
           label: pieceLabel,
