@@ -22,6 +22,7 @@ import {
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
+import { RequestTimer } from "@/lib/timing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -62,6 +63,7 @@ function collectTitles(results: Results): string[] {
  * Re-run search for one piece (or first piece), excluding previously shown titles.
  */
 export async function POST(req: NextRequest) {
+  const timer = new RequestTimer();
   try {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     const SERPAPI_KEY = process.env.SERPAPI_KEY;
@@ -140,12 +142,17 @@ export async function POST(req: NextRequest) {
           visionCacheKey(user.id, storage_path, occ)
         );
     let visionContent: string | null = null;
-    for (const key of lookupKeys) {
-      visionContent = getCachedVision(key);
-      if (visionContent) break;
-    }
+    let visionSource: "cache" | "history" | "openai" = "cache";
 
-    if (!visionContent) {
+    await timer.span("vision_lookup", async () => {
+      for (const key of lookupKeys) {
+        visionContent = getCachedVision(key);
+        if (visionContent) {
+          visionSource = "cache";
+          return;
+        }
+      }
+
       let historyQuery = supabase
         .from("search_history")
         .select("results, context")
@@ -162,23 +169,27 @@ export async function POST(req: NextRequest) {
         ?.vision_content;
       if (typeof storedContent === "string" && storedContent.trim()) {
         visionContent = storedContent;
+        visionSource = "history";
       }
-    }
+    });
 
     if (!visionContent) {
-      const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
-      visionContent = await openAIContent(OPENAI_API_KEY, {
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: visionImageUrl } },
-              { type: "text", text: visionPromptForOccasion(requestedOccasion) },
-            ],
-          },
-        ],
-        max_tokens: 2000,
+      visionSource = "openai";
+      visionContent = await timer.span("vision", async () => {
+        const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
+        return openAIContent(OPENAI_API_KEY, {
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: visionImageUrl } },
+                { type: "text", text: visionPromptForOccasion(requestedOccasion) },
+              ],
+            },
+          ],
+          max_tokens: 2000,
+        });
       });
     }
 
@@ -211,13 +222,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const piece = await processPiece(
-      profile,
-      occasionKeyword,
-      SERPAPI_KEY,
-      AFFILIATE_TAG,
-      excludeTitles,
-      { mustFind: true, immersiveMode: "recommended" }
+    const piece = await timer.span("search", () =>
+      processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, excludeTitles, {
+        mustFind: true,
+        immersiveMode: "recommended",
+      })
     );
 
     if (!piece) {
@@ -233,10 +242,19 @@ export async function POST(req: NextRequest) {
       ...pieceAttrsFromProfile(profile),
     };
 
-    return NextResponse.json({
-      piece: labeled,
-      exclude_titles: [...excludeTitles, ...collectTitles(labeled.results)],
+    const snap = timer.snapshot({
+      route: "/api/decide/more",
+      vision_source: visionSource,
+      occasion,
+      piece_label: labeled.label,
     });
+    return timer.json(
+      {
+        piece: labeled,
+        exclude_titles: [...excludeTitles, ...collectTitles(labeled.results)],
+      },
+      snap
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
     console.error("/api/decide/more:", message);

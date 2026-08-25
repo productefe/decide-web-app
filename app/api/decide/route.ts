@@ -23,6 +23,7 @@ import {
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
+import { RequestTimer } from "@/lib/timing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -67,6 +68,7 @@ function collectTitles(results: Results): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  const timer = new RequestTimer();
   try {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     const SERPAPI_KEY = process.env.SERPAPI_KEY;
@@ -113,25 +115,22 @@ export async function POST(req: NextRequest) {
     }
 
     const anonymous = isAnonymousUser(user);
-    try {
+    await timer.span("auth_gates", async () => {
       await enforceGuestAnalysisCap(supabase, anonymous);
       await enforceRateLimit(supabase, "decide", anonymous ? 10 : 100);
-    } catch (err) {
-      if (err instanceof ApiSecurityError) {
-        return NextResponse.json({ error: err.message }, { status: err.status });
-      }
-      throw err;
-    }
+    });
 
     // Preferences read and storage image download are independent — overlap them.
-    const [{ data: userPrefs }, visionImageUrl] = await Promise.all([
-      supabase
-        .from("user_preferences")
-        .select("preferences, gender, sizes, price_mode")
-        .eq("id", user.id)
-        .single(),
-      getVisionImageDataUrl(supabase, storage_path!),
-    ]);
+    const [{ data: userPrefs }, visionImageUrl] = await timer.span("prefs_image", () =>
+      Promise.all([
+        supabase
+          .from("user_preferences")
+          .select("preferences, gender, sizes, price_mode")
+          .eq("id", user.id)
+          .single(),
+        getVisionImageDataUrl(supabase, storage_path!),
+      ])
+    );
 
     // Body prefs win when present — avoids stale DB reads right after profile save.
     const bodySizes = parseSizes(body?.sizes);
@@ -152,19 +151,21 @@ export async function POST(req: NextRequest) {
     };
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    const visionContent = await openAIContent(OPENAI_API_KEY, {
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: visionImageUrl } },
-            { type: "text", text: visionPromptForOccasion(requestedOccasion) },
-          ],
-        },
-      ],
-      max_tokens: 2000,
-    });
+    const visionContent = await timer.span("vision", () =>
+      openAIContent(OPENAI_API_KEY, {
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: visionImageUrl } },
+              { type: "text", text: visionPromptForOccasion(requestedOccasion) },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      })
+    );
 
     const occasion = resolveDecideOccasion(requestedOccasion, visionContent);
     user_profile.occasion = occasion;
@@ -176,21 +177,23 @@ export async function POST(req: NextRequest) {
       return { label, profile: p };
     });
 
-    const rawPieces = await Promise.all(
-      profiles.map(({ label, profile }) => {
-        if (profile.low_confidence) return Promise.resolve(null);
-        return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
-          mustFind: true,
-        }).then((piece) =>
-          piece
-            ? ({
-                ...piece,
-                label,
-                ...pieceAttrsFromProfile(profile),
-              } satisfies PieceResult)
-            : null
-        );
-      })
+    const rawPieces = await timer.span("search", () =>
+      Promise.all(
+        profiles.map(({ label, profile }) => {
+          if (profile.low_confidence) return Promise.resolve(null);
+          return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
+            mustFind: true,
+          }).then((piece) =>
+            piece
+              ? ({
+                  ...piece,
+                  label,
+                  ...pieceAttrsFromProfile(profile),
+                } satisfies PieceResult)
+              : null
+          );
+        })
+      )
     );
     const pieceResults: PieceResult[] = [];
     for (const p of rawPieces) {
@@ -198,12 +201,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (pieceResults.length === 0) {
+      const snap = timer.snapshot({
+        route: "/api/decide",
+        pieces: 0,
+        occasion,
+      });
+      timer.log("/api/decide", snap);
       return NextResponse.json({
         user_id: user.id,
         photo_url,
         pieces: [],
         results: null,
         error: "Bu fotoğraf için sonuç bulunamadı.",
+        _timing: snap,
       });
     }
 
@@ -216,31 +226,42 @@ export async function POST(req: NextRequest) {
     let history_id: string | null = null;
 
     if (!isAnonymousUser(user)) {
-      const { data: inserted, error: insertError } = await supabase
-        .from("search_history")
-        .insert({
-          user_id: user.id,
-          photo_url,
-          results: stored,
-          context,
-        })
-        .select("id")
-        .single();
-      if (insertError) console.error("search_history insert:", insertError.message);
-      else history_id = inserted?.id ?? null;
+      await timer.span("history", async () => {
+        const { data: inserted, error: insertError } = await supabase
+          .from("search_history")
+          .insert({
+            user_id: user.id,
+            photo_url,
+            results: stored,
+            context,
+          })
+          .select("id")
+          .single();
+        if (insertError) console.error("search_history insert:", insertError.message);
+        else history_id = inserted?.id ?? null;
+      });
     }
 
-    return NextResponse.json({
-      user_id: user.id,
-      photo_url,
-      pieces: pieceResults,
-      results: firstResults,
-      exclude_titles: pieceResults.flatMap((p) => collectTitles(p.results)),
+    const snap = timer.snapshot({
+      route: "/api/decide",
+      pieces: pieceResults.length,
       occasion,
-      context,
-      history_id,
       price_mode,
     });
+    return timer.json(
+      {
+        user_id: user.id,
+        photo_url,
+        pieces: pieceResults,
+        results: firstResults,
+        exclude_titles: pieceResults.flatMap((p) => collectTitles(p.results)),
+        occasion,
+        context,
+        history_id,
+        price_mode,
+      },
+      snap
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
     console.error("/api/decide:", message);

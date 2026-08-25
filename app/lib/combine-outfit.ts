@@ -95,6 +95,8 @@ export type CombineOutfitInput = {
 export type CombineOutfitResult = {
   slots: CombineSlotResult[];
   suggestions: CombineSlotSuggestion[];
+  /** Wall-clock ms for LLM suggestion vs shopping search stages. */
+  timing?: { llm_ms: number; serp_ms: number; reused_suggestion: boolean };
 };
 
 interface OpenAIChatResponse {
@@ -609,7 +611,10 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
     genderTr(input.userProfile.gender) || genderTr(input.attributes.gender);
 
   let suggestions: CombineSlotSuggestion[];
+  let llmMs = 0;
+  let reused = false;
   if (input.reuseSuggestion && input.onlySlot) {
+    reused = true;
     const normalized = sanitizeSlotForGender(
       normalizeAccessorySuggestion(input.reuseSuggestion, input.context, genderWord),
       input.context,
@@ -617,6 +622,7 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
     );
     suggestions = [normalized || input.reuseSuggestion];
   } else {
+    const llmStart = Date.now();
     suggestions = await generateSlotSuggestions(
       input.openaiKey,
       slots,
@@ -624,12 +630,14 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       input.context,
       genderWord
     );
+    llmMs = Date.now() - llmStart;
   }
 
   const occasion = CONTEXT_TO_OCCASION[input.context];
   const occasionKeyword = getOccasionKeyword(occasion);
   const exclude = input.excludeTitles || new Set<string>();
 
+  const serpStart = Date.now();
   const results = await Promise.all(
     suggestions.map(async (suggestion) => {
       const profile = buildSlotProductProfile(input, suggestion);
@@ -686,6 +694,11 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       } satisfies CombineSlotResult;
     })
   );
+  const serpMs = Date.now() - serpStart;
 
-  return { slots: results, suggestions };
+  return {
+    slots: results,
+    suggestions,
+    timing: { llm_ms: llmMs, serp_ms: serpMs, reused_suggestion: reused },
+  };
 }

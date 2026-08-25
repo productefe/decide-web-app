@@ -22,6 +22,7 @@ import {
 } from "@/lib/combine-outfit";
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import type { UserProfile } from "@/api/decide/pipeline";
+import { RequestTimer } from "@/lib/timing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -98,6 +99,7 @@ function parseReuseSuggestion(raw: unknown): CombineSlotSuggestion | null {
 }
 
 export async function POST(req: NextRequest) {
+  const timer = new RequestTimer();
   try {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     const SERPAPI_KEY = process.env.SERPAPI_KEY;
@@ -299,20 +301,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const result = await combineOutfit({
-      pieceCategory,
-      attributes,
-      context,
-      userProfile: user_profile,
-      photoUrl,
-      userId: user.id,
-      openaiKey: OPENAI_API_KEY,
-      serpKey: SERPAPI_KEY,
-      affiliateTag: AFFILIATE_TAG,
-      onlySlot: onlySlot || undefined,
-      reuseSuggestion: reuseSuggestion || undefined,
-      excludeTitles,
-    });
+    const result = await timer.span("combine", () =>
+      combineOutfit({
+        pieceCategory,
+        attributes,
+        context,
+        userProfile: user_profile,
+        photoUrl,
+        userId: user.id,
+        openaiKey: OPENAI_API_KEY,
+        serpKey: SERPAPI_KEY,
+        affiliateTag: AFFILIATE_TAG,
+        onlySlot: onlySlot || undefined,
+        reuseSuggestion: reuseSuggestion || undefined,
+        excludeTitles,
+      })
+    );
+
+    if (result.timing) {
+      timer.set("llm", result.timing.llm_ms);
+      timer.set("serp", result.timing.serp_ms);
+    }
 
     if (!isShowMore) {
       void trackAnalyticsEvent(supabase, user.id, "combine_result_viewed", {
@@ -327,20 +336,30 @@ export async function POST(req: NextRequest) {
       ...result.slots.flatMap((s) => collectTitles(s.piece.results)),
     ];
 
-    return NextResponse.json({
-      history_id: historyId || null,
+    const snap = timer.snapshot({
+      route: "/api/combine",
+      slots: result.slots.length,
       context,
-      piece_label: pieceLabel,
-      piece_category: pieceCategory,
-      source: {
-        label: attributes.label,
-        category_tr: attributes.category_tr,
-        color_tr: attributes.color_tr || null,
-        photo_url: photoUrl,
-      },
-      slots: result.slots,
-      exclude_titles,
+      show_more: isShowMore,
+      reused_suggestion: result.timing?.reused_suggestion ?? false,
     });
+    return timer.json(
+      {
+        history_id: historyId || null,
+        context,
+        piece_label: pieceLabel,
+        piece_category: pieceCategory,
+        source: {
+          label: attributes.label,
+          category_tr: attributes.category_tr,
+          color_tr: attributes.color_tr || null,
+          photo_url: photoUrl,
+        },
+        slots: result.slots,
+        exclude_titles,
+      },
+      snap
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bir hata oluştu";
     console.error("/api/combine:", message);
