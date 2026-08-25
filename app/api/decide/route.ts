@@ -12,6 +12,7 @@ import {
   type UserProfile,
 } from "./pipeline";
 import { processPiece } from "./run-piece";
+import { getVisionImageDataUrl } from "./vision-image";
 import { setCachedVision, visionCacheKey } from "./vision-cache";
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import {
@@ -22,7 +23,6 @@ import {
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
-import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -114,10 +114,8 @@ export async function POST(req: NextRequest) {
 
     const anonymous = isAnonymousUser(user);
     try {
-      await Promise.all([
-        enforceGuestAnalysisCap(supabase, anonymous),
-        enforceRateLimit(supabase, "decide", anonymous ? 10 : 100),
-      ]);
+      await enforceGuestAnalysisCap(supabase, anonymous);
+      await enforceRateLimit(supabase, "decide", anonymous ? 10 : 100);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });
@@ -125,12 +123,15 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    // Preferences only — OpenAI fetches the public storage URL directly (no base64 round-trip).
-    const { data: userPrefs } = await supabase
-      .from("user_preferences")
-      .select("preferences, gender, sizes, price_mode")
-      .eq("id", user.id)
-      .single();
+    // Preferences read and storage image download are independent — overlap them.
+    const [{ data: userPrefs }, visionImageUrl] = await Promise.all([
+      supabase
+        .from("user_preferences")
+        .select("preferences, gender, sizes, price_mode")
+        .eq("id", user.id)
+        .single(),
+      getVisionImageDataUrl(supabase, storage_path!),
+    ]);
 
     // Body prefs win when present — avoids stale DB reads right after profile save.
     const bodySizes = parseSizes(body?.sizes);
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
         {
           role: "user",
           content: [
-            { type: "image_url", image_url: { url: photo_url } },
+            { type: "image_url", image_url: { url: visionImageUrl } },
             { type: "text", text: visionPromptForOccasion(requestedOccasion) },
           ],
         },
@@ -180,7 +181,6 @@ export async function POST(req: NextRequest) {
         if (profile.low_confidence) return Promise.resolve(null);
         return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
           mustFind: true,
-          immersiveMode: "recommended",
         }).then((piece) =>
           piece
             ? ({
@@ -213,23 +213,21 @@ export async function POST(req: NextRequest) {
     const stored: StoredResults = { pieces: pieceResults, vision_content: visionContent };
     const firstResults = pieceResults[0].results;
     const context = OCCASION_TO_CONTEXT[occasion];
-    // Return history_id immediately; persist in the background so insert RTT
-    // does not block the client. Mobile treats history_id as optional.
-    const history_id = !isAnonymousUser(user) ? randomUUID() : null;
+    let history_id: string | null = null;
 
-    if (history_id) {
-      void supabase
+    if (!isAnonymousUser(user)) {
+      const { data: inserted, error: insertError } = await supabase
         .from("search_history")
         .insert({
-          id: history_id,
           user_id: user.id,
           photo_url,
           results: stored,
           context,
         })
-        .then(({ error: insertError }) => {
-          if (insertError) console.error("search_history insert:", insertError.message);
-        });
+        .select("id")
+        .single();
+      if (insertError) console.error("search_history insert:", insertError.message);
+      else history_id = inserted?.id ?? null;
     }
 
     return NextResponse.json({

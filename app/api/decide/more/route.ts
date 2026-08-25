@@ -12,6 +12,7 @@ import {
   type UserProfile,
 } from "../pipeline";
 import { processPiece } from "../run-piece";
+import { getVisionImageDataUrl } from "../vision-image";
 import { getCachedVision, setCachedVision, visionCacheKey } from "../vision-cache";
 import type { PieceResult, Results } from "@/components/analyze/types";
 import {
@@ -106,52 +107,11 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    // Prefs and vision reuse are independent — overlap them.
-    const prefsPromise = supabase
+    const { data: userPrefs } = await supabase
       .from("user_preferences")
       .select("preferences, gender, sizes, price_mode")
       .eq("id", user.id)
       .single();
-
-    // Reuse the vision analysis from the original /api/decide run when
-    // possible — the photo has not changed, so re-running GPT-4o only adds
-    // 4-8 seconds to every "3 alternatif daha" click.
-    const lookupKeys = requestedOccasion
-      ? [visionCacheKey(user.id, storage_path, requestedOccasion)]
-      : ["spor", "gundelik", "aksam", "ev", "is", "sahil"].map((occ) =>
-          visionCacheKey(user.id, storage_path, occ)
-        );
-
-    const visionLookupPromise = (async (): Promise<string | null> => {
-      for (const key of lookupKeys) {
-        const hit = getCachedVision(key);
-        if (hit) return hit;
-      }
-
-      let historyQuery = supabase
-        .from("search_history")
-        .select("results, context")
-        .eq("user_id", user.id)
-        .eq("photo_url", photo_url);
-      if (requestedOccasion) {
-        historyQuery = historyQuery.eq("context", OCCASION_TO_CONTEXT[requestedOccasion]);
-      }
-      const { data: historyRow } = await historyQuery
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const storedContent = (historyRow?.results as { vision_content?: unknown } | null)
-        ?.vision_content;
-      if (typeof storedContent === "string" && storedContent.trim()) {
-        return storedContent;
-      }
-      return null;
-    })();
-
-    const [{ data: userPrefs }, cachedVision] = await Promise.all([
-      prefsPromise,
-      visionLookupPromise,
-    ]);
 
     const sizesFromBody = parseSizes(body?.sizes);
     const genderFromBody = parseGender(body?.gender);
@@ -171,17 +131,49 @@ export async function POST(req: NextRequest) {
     };
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
-    let visionContent: string | null = cachedVision;
+    // Reuse the vision analysis from the original /api/decide run when
+    // possible — the photo has not changed, so re-running GPT-4o only adds
+    // 4-8 seconds to every "3 alternatif daha" click.
+    const lookupKeys = requestedOccasion
+      ? [visionCacheKey(user.id, storage_path, requestedOccasion)]
+      : ["spor", "gundelik", "aksam", "ev", "is", "sahil"].map((occ) =>
+          visionCacheKey(user.id, storage_path, occ)
+        );
+    let visionContent: string | null = null;
+    for (const key of lookupKeys) {
+      visionContent = getCachedVision(key);
+      if (visionContent) break;
+    }
 
     if (!visionContent) {
-      // Public storage URL — skip base64 download round-trip.
+      let historyQuery = supabase
+        .from("search_history")
+        .select("results, context")
+        .eq("user_id", user.id)
+        .eq("photo_url", photo_url);
+      if (requestedOccasion) {
+        historyQuery = historyQuery.eq("context", OCCASION_TO_CONTEXT[requestedOccasion]);
+      }
+      const { data: historyRow } = await historyQuery
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const storedContent = (historyRow?.results as { vision_content?: unknown } | null)
+        ?.vision_content;
+      if (typeof storedContent === "string" && storedContent.trim()) {
+        visionContent = storedContent;
+      }
+    }
+
+    if (!visionContent) {
+      const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
       visionContent = await openAIContent(OPENAI_API_KEY, {
         model: "gpt-4o",
         messages: [
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: photo_url } },
+              { type: "image_url", image_url: { url: visionImageUrl } },
               { type: "text", text: visionPromptForOccasion(requestedOccasion) },
             ],
           },
