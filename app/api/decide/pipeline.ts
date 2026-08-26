@@ -1,7 +1,9 @@
 import { Product, Results } from "@/components/analyze/types";
 import { parseOccasion, type Occasion, type PriceMode } from "@/lib/preferences";
 import {
+  allPoolBrandNames,
   isCropCasualSubcategory,
+  normalizeBrandName,
   pickDecidePoolBrands,
   resolvePoolCategories,
   textHasIconicPoolBrand,
@@ -1873,6 +1875,42 @@ const materialTR: Record<string, string> = {
   none: "",
 };
 
+/** Distinct fabric cues — a linen tee must not lose to a "triko" listing. */
+const MATERIAL_CUE_WORDS = [
+  "keten",
+  "triko",
+  "saten",
+  "deri",
+  "denim",
+  "pamuklu",
+  "pamuk",
+  "kadife",
+  "polar",
+  "örme",
+];
+
+function materialSearchTokens(profile: ProductProfile): string[] {
+  const want = asLower(profile.material_tr);
+  if (!want) return [];
+  const tokens = new Set<string>([want]);
+  if (want.includes("deri")) tokens.add("deri");
+  if (want === "pamuklu") tokens.add("pamuk");
+  if (want === "denim") tokens.add("kot");
+  return [...tokens].filter((t) => t.length >= 3);
+}
+
+function titleHasWantedMaterial(lowerTitle: string, profile: ProductProfile): boolean {
+  return materialSearchTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
+
+function titleMaterialConflicts(lowerTitle: string, profile: ProductProfile): boolean {
+  const want = materialSearchTokens(profile);
+  if (!want.length || titleHasWantedMaterial(lowerTitle, profile)) return false;
+  return MATERIAL_CUE_WORDS.some(
+    (w) => !want.some((t) => t.includes(w) || w.includes(t)) && lowerTitle.includes(w)
+  );
+}
+
 const genderTR: Record<string, string> = { men: "erkek", women: "kadın", unisex: "" };
 
 const collarTR = necklineTR;
@@ -2875,6 +2913,8 @@ function scoreShoppingItems(
     const strayPatternHit = STRAY_PATTERN_WORDS.some(
       (w) => title.includes(w) && !patternTokens.includes(w)
     );
+    const materialHit = titleHasWantedMaterial(title, productProfile);
+    const materialConflict = titleMaterialConflicts(title, productProfile);
     const queryTokens = asLower(productProfile.search_query)
       .split(/\s+/)
       .filter((w) => w.length > 2 && !["erkek", "kadın", "kadin", "için"].includes(w));
@@ -2894,6 +2934,8 @@ function scoreShoppingItems(
     if (collarHit) matchScore += 14;
     if (patternHit) matchScore += 28;
     if (strayPatternHit) matchScore = Math.max(0, matchScore - 35);
+    if (materialHit) matchScore += 14;
+    if (materialConflict) matchScore = Math.max(0, matchScore - 20);
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
     if (poolBrandHit) matchScore += 15;
@@ -3008,7 +3050,42 @@ function scoreShoppingItems(
 
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
   const trendOrdered = preferTrendOverBudget(scored, productProfile, priceMode);
-  return preferLuxuryScored(mixKarmaScored(trendOrdered, priceMode), priceMode);
+  const luxuryOrdered = preferLuxuryScored(mixKarmaScored(trendOrdered, priceMode), priceMode);
+  return preferPoolBrandsFirst(luxuryOrdered);
+}
+
+/**
+ * Known brands first (score order preserved within each group). Unbranded /
+ * obscure sellers only fill the pool when familiar brands are scarce.
+ */
+function preferPoolBrandsFirst(scored: ScoredProduct[]): ScoredProduct[] {
+  const branded: ScoredProduct[] = [];
+  const rest: ScoredProduct[] = [];
+  for (const p of scored) {
+    if (textHasPoolBrand(`${p.title} ${p.source}`)) branded.push(p);
+    else rest.push(p);
+  }
+  if (!branded.length) return scored;
+  return [...branded, ...rest];
+}
+
+let cachedPoolBrandKeys: string[] | null = null;
+function poolBrandKeys(): string[] {
+  if (!cachedPoolBrandKeys) {
+    cachedPoolBrandKeys = allPoolBrandNames()
+      .map((b) => normalizeBrandName(b))
+      .filter((n) => n.length >= 3);
+  }
+  return cachedPoolBrandKeys;
+}
+
+/** Prefer a concrete pool brand name; fall back to store for diversity. */
+function productBrandKey(p: ScoredProduct): string {
+  const hay = asLower(`${p.title} ${p.source}`);
+  for (const name of poolBrandKeys()) {
+    if (hay.includes(name)) return name;
+  }
+  return p.store || "other";
 }
 
 function pickCheaperProduct(
@@ -3054,18 +3131,23 @@ export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfil
   }
 
   const usedStores = new Set<string>();
+  const usedBrands = new Set<string>();
   const usedKeys = new Set<string>();
   const topPool: ScoredProduct[] = [];
-  const tryPush = (p: ScoredProduct, requireNewStore: boolean) => {
+  const tryPush = (p: ScoredProduct, requireNewStore: boolean, requireNewBrand: boolean) => {
     if (topPool.length >= 3) return;
     if (hasProductOverlap(p, usedKeys)) return;
     if (requireNewStore && usedStores.has(p.store)) return;
+    const brand = productBrandKey(p);
+    if (requireNewBrand && usedBrands.has(brand)) return;
     topPool.push(p);
     rememberProduct(p, usedKeys);
     usedStores.add(p.store);
+    usedBrands.add(brand);
   };
-  for (const p of scoredProducts) tryPush(p, true);
-  for (const p of scoredProducts) tryPush(p, false);
+  for (const p of scoredProducts) tryPush(p, true, true);
+  for (const p of scoredProducts) tryPush(p, true, false);
+  for (const p of scoredProducts) tryPush(p, false, false);
 
   const recommended = topPool[0] || null;
   const cheaper = recommended ? pickCheaperProduct(scoredProducts, recommended, null) : null;
@@ -3220,6 +3302,41 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
 
   return SLOTS.map((slot) => ({ slot, product: validated[slot] }))
     .filter((s): s is { slot: Slot; product: ScoredProduct } => Boolean(s.product));
+}
+
+/**
+ * Fast pre-render check (no extra API): drop / replace slots that clash on
+ * color, print-as-body, or category. Empty slot when no faithful replacement.
+ */
+export function sanitizeSlots(
+  slots: { slot: Slot; product: ScoredProduct }[],
+  pool: ScoredProduct[],
+  profile: ProductProfile
+): { slot: Slot; product: ScoredProduct }[] {
+  const passes = (p: ScoredProduct): boolean => {
+    const t = asLower(p.title);
+    if (titleIsPrintColorAsBody(t, profile)) return false;
+    if (titleColorConflicts(t, profile)) return false;
+    if (asText(profile.category_tr) && !p.signals.category) return false;
+    if (asText(profile.color_tr) && !p.signals.color) return false;
+    return true;
+  };
+
+  const used = new Set<string>();
+  for (const s of slots) rememberProduct(s.product, used);
+
+  const out: { slot: Slot; product: ScoredProduct }[] = [];
+  for (const entry of slots) {
+    if (passes(entry.product)) {
+      out.push(entry);
+      continue;
+    }
+    const replacement = pool.find((p) => !hasProductOverlap(p, used) && passes(p));
+    if (!replacement) continue;
+    rememberProduct(replacement, used);
+    out.push({ slot: entry.slot, product: replacement });
+  }
+  return out;
 }
 
 /**

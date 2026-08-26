@@ -3,6 +3,7 @@ import {
   buildSearchPlan,
   pickTrustedFallback,
   getSlots,
+  sanitizeSlots,
   mergeLinks,
   buildResults,
   titleIsExcluded,
@@ -17,7 +18,7 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
-import { pickDecidePoolBrands } from "@/constants/brandPool";
+import { pickDecidePoolBrands, resolvePoolCategories } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
@@ -104,6 +105,21 @@ function emptyScoring(productProfile: ProductProfile): ScoringResult {
     pool: [],
     error: "Bu ürün için sonuç bulunamadı.",
   };
+}
+
+/** Only Google Shopping URLs need immersive to resolve a merchant page. */
+export function linkNeedsImmersive(link: string | null | undefined): boolean {
+  const raw = (link || "").trim();
+  if (!raw) return true;
+  try {
+    const host = new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
+    if (!host) return true;
+    if (/(^|\.)google\.(com|com\.tr)$/.test(host)) return true;
+    if (host.includes("googleusercontent.com")) return true;
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 function poolFaithfulCount(
@@ -242,8 +258,12 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  // Full karma: 1 brand + 1 primary + 1 luxury (was 3+1+2). Compact stays 1+1.
-  const brandQs = brandQueries.slice(0, 1);
+  // Full karma: 2 brand queries for apparel (tops/crop/dress) so familiar brands
+  // show up in the first batch; compact stays lean for combine.
+  const poolCats = resolvePoolCategories(productProfile);
+  const wantsBrandVariety =
+    !compact && poolCats.some((c) => c === "tops" || c === "crop" || c === "dress");
+  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 2 : 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
@@ -408,7 +428,7 @@ export async function processPiece(
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = searchMode === "compact" ? 8 : 12;
-    const extraRounds = excludeTitles.size > 0 ? (scoring.recommended ? 2 : 3) : 1;
+    const extraRounds = excludeTitles.size > 0 ? 2 : 1;
     const typeBit =
       accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
     const colorTypeQuery = [
@@ -458,7 +478,7 @@ export async function processPiece(
       }
       const extraQs = [...new Set(broaden)].slice(
         0,
-        excludeTitles.size ? 4 : compactExtraLimit(searchMode)
+        excludeTitles.size ? 3 : compactExtraLimit(searchMode)
       );
       if (!extraQs.length) continue;
       const extra = await searchQueries(
@@ -522,10 +542,26 @@ export async function processPiece(
     pickTrustedFallback(scoring.pool, usedTitles);
 
   const finalScoring: ScoringResult = { ...scoring, style: styleProduct };
-  const slots = getSlots(finalScoring);
+  let slots = getSlots(finalScoring);
+  slots = sanitizeSlots(slots, scoring.pool, productProfile);
+  const slotByKey = Object.fromEntries(slots.map((s) => [s.slot, s.product])) as Partial<
+    Record<"recommended" | "cheaper" | "style", (typeof scoring.pool)[number]>
+  >;
+  const sanitizedScoring: ScoringResult = {
+    ...finalScoring,
+    recommended: slotByKey.recommended || null,
+    cheaper: slotByKey.cheaper || null,
+    style: slotByKey.style || null,
+  };
 
   if (immersiveMode === "none" || slots.length === 0) {
-    const merged = mergeLinks(finalScoring, slots, slots.map(() => null), affiliateTag, productProfile);
+    const merged = mergeLinks(
+      sanitizedScoring,
+      slots,
+      slots.map(() => null),
+      affiliateTag,
+      productProfile
+    );
     return {
       label: productProfile.category_tr || productProfile.category || "Parça",
       category_tr: productProfile.category_tr,
@@ -537,12 +573,20 @@ export async function processPiece(
     immersiveMode === "recommended" ? slots.slice(0, 1) : slots;
   const immersiveResponses = await Promise.all(
     immersiveTargets.map(({ product }) =>
-      fetchImmersive(product.serpapi_immersive_product_api, serpKey)
+      linkNeedsImmersive(product.link)
+        ? fetchImmersive(product.serpapi_immersive_product_api, serpKey)
+        : Promise.resolve(null)
     )
   );
   while (immersiveResponses.length < slots.length) immersiveResponses.push(null);
 
-  const merged = mergeLinks(finalScoring, slots, immersiveResponses, affiliateTag, productProfile);
+  const merged = mergeLinks(
+    sanitizedScoring,
+    slots,
+    immersiveResponses,
+    affiliateTag,
+    productProfile
+  );
   return {
     label: productProfile.category_tr || productProfile.category || "Parça",
     category_tr: productProfile.category_tr,
