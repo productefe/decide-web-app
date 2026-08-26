@@ -349,6 +349,21 @@ export async function POST(req: NextRequest) {
       ...result.slots.flatMap((s) => collectTitles(s.piece.results)),
     ];
 
+    if (isShowMore) {
+      const found = result.slots.some(
+        (s) =>
+          Boolean(s.piece.results.recommended) ||
+          Boolean(s.piece.results.cheaper) ||
+          Boolean(s.piece.results.style)
+      );
+      if (!found) {
+        return NextResponse.json(
+          { error: "Yeni alternatif bulunamadı. Tekrar dene." },
+          { status: 404 }
+        );
+      }
+    }
+
     const snap = timer.snapshot({
       route: "/api/combine",
       slots: result.slots.length,

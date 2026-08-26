@@ -2637,6 +2637,32 @@ function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): Scor
   return scored;
 }
 
+/**
+ * Keep listings that match the garment body color (and print, on later rounds).
+ * `strict` is show-more: never fill empty color hits with random other colors.
+ */
+export function keepLookFaithful(
+  pool: ScoredProduct[],
+  profile: ProductProfile,
+  strict: boolean
+): ScoredProduct[] {
+  if (!pool.length) return pool;
+  let next = pool;
+  if (asText(profile.color_tr)) {
+    const colored = next.filter((p) => p.signals.color);
+    if (colored.length) next = colored;
+    else if (strict) return [];
+  }
+  if (hasPrintMotif(profile) && strict) {
+    const printed = next.filter((p) => {
+      const t = asLower(p.title);
+      return titleHasPrintCue(t) || titleHasPrintColor(t, profile);
+    });
+    if (printed.length) next = printed;
+  }
+  return next;
+}
+
 function scoreShoppingItems(
   shoppingResults: SerpShoppingItem[],
   productProfile: ProductProfile,
@@ -2670,7 +2696,9 @@ function scoreShoppingItems(
 
   // If strict type-require emptied the pool, keep family rejects but drop require.
   // Absolute denylist (crop/askılı → never dress) still applies.
-  if (validResults.length < 3) {
+  // Only when the pool is actually empty — filling a short list with jackets /
+  // dresses for a t-shirt search is how "random alternatives" appear.
+  if (validResults.length === 0) {
     const relaxed = (shoppingResults || [])
       .filter(isValidShoppingItem)
       .filter((item) => !isKidsProduct(item.title))
@@ -2705,6 +2733,12 @@ function scoreShoppingItems(
   // color token, drop the ones that don't — the pool stays on-model instead of
   // drifting to loosely related pieces.
   const lcTitle = (item: SerpShoppingItem) => asLower(item.title);
+  validResults = validResults.filter((item) => {
+    const t = lcTitle(item);
+    if (titleIsPrintColorAsBody(t, productProfile)) return false;
+    if (titleColorConflicts(t, productProfile)) return false;
+    return true;
+  });
   const subToken = asLower(productProfile.subcategory_tr).split(" ")[0];
   const catToken = asLower(productProfile.category_tr).split(" ")[0];
   if (subToken.length >= 3 && subToken !== catToken) {

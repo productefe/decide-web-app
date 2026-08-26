@@ -13,6 +13,7 @@ import {
   sanitizeAccessoryQuery,
   productDedupeKeys,
   LUXURY_SEARCH_STORES,
+  keepLookFaithful,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
@@ -274,9 +275,13 @@ async function searchWithFallback(
     excludeTitles
   );
   if (
-    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0 ||
-    compact
+    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
   ) {
+    return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
+  }
+  // Compact (combine first pass) stops here. Show-more with an empty unique
+  // pool must keep looking — otherwise the same 2 queries recycle shown titles.
+  if (compact && excludeTitles.size === 0) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
 
@@ -336,6 +341,7 @@ export type ProcessPieceOptions = {
 function applyPoolFilters(
   scoring: ScoringResult,
   excludeTitles: Set<string>,
+  productProfile: ProductProfile,
   denyTitlePattern?: RegExp,
   denyTitle?: (title: string) => boolean
 ): ScoringResult {
@@ -349,6 +355,7 @@ function applyPoolFilters(
   if (excludeTitles.size) {
     pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles));
   }
+  pool = keepLookFaithful(pool, productProfile, excludeTitles.size > 0);
   const used = new Set<string>();
   const unique: typeof pool = [];
   for (const p of pool) {
@@ -399,50 +406,47 @@ export async function processPiece(
   scoring = applyPoolFilters(
     scoring,
     excludeTitles,
+    productProfile,
     options.denyTitlePattern,
     options.denyTitle
   );
 
-  // Only broaden when we have no recommended card. Do not re-query just because
-  // excludeTitles left fewer than 3 — that added ~4 Serp RTTs on every "more".
-  // After a few "3 alternatif daha" clicks the same query is exhausted; rotate
-  // brands/stores (still with color in the seed) so a new card can appear.
-  if (!scoring.recommended && options.mustFind) {
+  // Broaden when the card is empty, or show-more still has fewer than 3 unique
+  // look-faithful hits. Never drop color from the query — that is how random
+  // colorways leak in after a few "3 alternatif daha" clicks.
+  const needsFill =
+    !scoring.recommended || (excludeTitles.size > 0 && scoring.pool.length < 3);
+  if (needsFill && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = searchMode === "compact" ? 8 : 12;
-    const extraRounds = excludeTitles.size > 0 ? 2 : 1;
-    for (let round = 0; round < extraRounds && !scoring.recommended; round++) {
+    const extraRounds = excludeTitles.size > 0 ? (scoring.recommended ? 2 : 3) : 1;
+    const typeBit =
+      accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
+    const colorTypeQuery = [
+      productProfile.gender_tr,
+      productProfile.color_tr,
+      productProfile.pattern_tr,
+      typeBit,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const fallbackWithColor = [productProfile.fallback_query, productProfile.color_tr]
+      .filter(Boolean)
+      .join(" ");
+    for (let round = 0; round < extraRounds && scoring.pool.length < 3; round++) {
       const broaden = [
         productProfile.search_query,
-        productProfile.fallback_query,
-        // Keep the color in the broadest query — a broadened "şapka" search must
-        // still look for the orange one.
-        [
-          productProfile.gender_tr,
-          productProfile.color_tr,
-          accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
-        ]
-          .filter(Boolean)
-          .join(" "),
+        fallbackWithColor,
+        colorTypeQuery,
       ]
         .map((q) => (q || "").trim().replace(/\s+/g, " "))
         .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
         .filter(Boolean);
-      const seedQuery = (
-        productProfile.fallback_query ||
-        productProfile.search_query ||
-        [
-          productProfile.gender_tr,
-          productProfile.color_tr,
-          accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      ).trim();
+      const seedQuery = (colorTypeQuery || fallbackWithColor || productProfile.search_query || "").trim();
       if (priceMode === "luks") {
         if (seedQuery) {
           const offset = (excludeTitles.size + round * 2) % LUXURY_SEARCH_STORES.length;
@@ -492,6 +496,7 @@ export async function processPiece(
       scoring = applyPoolFilters(
         { ...scoring, pool: mergedPool, error: undefined },
         excludeTitles,
+        productProfile,
         options.denyTitlePattern,
         options.denyTitle
       );

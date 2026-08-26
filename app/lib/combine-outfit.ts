@@ -642,7 +642,7 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       exclude,
       {
         immersiveMode: "none",
-        searchMode: "compact",
+        searchMode: exclude.size > 0 ? "full" : "compact",
         mustFind: true,
         denyTitle: isWatchSlot
           ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)
