@@ -2732,11 +2732,9 @@ function scoreShoppingItems(
         })
     );
 
-  // If strict type-require emptied the pool, keep family rejects but drop require.
-  // Absolute denylist (crop/askılı → never dress) still applies.
-  // Only when the pool is actually empty — filling a short list with jackets /
-  // dresses for a t-shirt search is how "random alternatives" appear.
-  if (validResults.length === 0) {
+  // If strict type-require emptied or nearly emptied the pool, relax type
+  // matching. Absolute denylist (crop/askılı → never dress) still applies.
+  if (validResults.length < 3) {
     const relaxed = (shoppingResults || [])
       .filter(isValidShoppingItem)
       .filter((item) => !isKidsProduct(item.title))
@@ -2771,12 +2769,14 @@ function scoreShoppingItems(
   // color token, drop the ones that don't — the pool stays on-model instead of
   // drifting to loosely related pieces.
   const lcTitle = (item: SerpShoppingItem) => asLower(item.title);
-  validResults = validResults.filter((item) => {
-    const t = lcTitle(item);
-    if (titleIsPrintColorAsBody(t, productProfile)) return false;
-    if (titleColorConflicts(t, productProfile)) return false;
-    return true;
-  });
+  // Drop solid print-color garments only. Color clashes are soft-ranked below —
+  // hard-filtering here emptied the pool when titles omit the body color.
+  {
+    const withoutPrintBody = validResults.filter(
+      (item) => !titleIsPrintColorAsBody(lcTitle(item), productProfile)
+    );
+    if (withoutPrintBody.length >= 1) validResults = withoutPrintBody;
+  }
   const subToken = asLower(productProfile.subcategory_tr).split(" ")[0];
   const catToken = asLower(productProfile.category_tr).split(" ")[0];
   if (subToken.length >= 3 && subToken !== catToken) {
@@ -2797,13 +2797,15 @@ function scoreShoppingItems(
     );
     if (plainOnly.length >= 1) validResults = plainOnly;
   }
-  // White tee + green print must not collapse to solid white OR solid green.
+  // White tee + green print: prefer print-like titles, else body color, else keep pool.
   if (hasPrintMotif(productProfile)) {
     const printLike = validResults.filter((item) => {
       const t = lcTitle(item);
-      if (!titleHasWantedColor(t, productProfile)) return false;
       if (titleIsPrintColorAsBody(t, productProfile)) return false;
-      return titleHasPrintCue(t) || titleHasPrintColor(t, productProfile);
+      return (
+        titleHasPrintCue(t) ||
+        (titleHasWantedColor(t, productProfile) && titleHasPrintColor(t, productProfile))
+      );
     });
     if (printLike.length >= 1) {
       validResults = printLike;
@@ -3305,38 +3307,37 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
 }
 
 /**
- * Fast pre-render check (no extra API): drop / replace slots that clash on
- * color, print-as-body, or category. Empty slot when no faithful replacement.
+ * Soft pre-render check: prefer a better pool candidate when the slot hard-clashes
+ * (print color as body, or a clear wrong colorway). Never require color/category
+ * tokens in the title — most merchant titles omit them and that emptied results.
+ * If nothing better exists, keep the original slot.
  */
 export function sanitizeSlots(
   slots: { slot: Slot; product: ScoredProduct }[],
   pool: ScoredProduct[],
   profile: ProductProfile
 ): { slot: Slot; product: ScoredProduct }[] {
-  const passes = (p: ScoredProduct): boolean => {
+  const hardClash = (p: ScoredProduct): boolean => {
     const t = asLower(p.title);
-    if (titleIsPrintColorAsBody(t, profile)) return false;
-    if (titleColorConflicts(t, profile)) return false;
-    if (asText(profile.category_tr) && !p.signals.category) return false;
-    if (asText(profile.color_tr) && !p.signals.color) return false;
-    return true;
+    return titleIsPrintColorAsBody(t, profile) || titleColorConflicts(t, profile);
   };
+  const better = (p: ScoredProduct): boolean =>
+    !hardClash(p) &&
+    (!asText(profile.color_tr) || p.signals.color) &&
+    (!asText(profile.category_tr) || p.signals.category);
 
   const used = new Set<string>();
   for (const s of slots) rememberProduct(s.product, used);
 
-  const out: { slot: Slot; product: ScoredProduct }[] = [];
-  for (const entry of slots) {
-    if (passes(entry.product)) {
-      out.push(entry);
-      continue;
-    }
-    const replacement = pool.find((p) => !hasProductOverlap(p, used) && passes(p));
-    if (!replacement) continue;
+  return slots.map((entry) => {
+    if (!hardClash(entry.product)) return entry;
+    const replacement =
+      pool.find((p) => !hasProductOverlap(p, used) && better(p)) ||
+      pool.find((p) => !hasProductOverlap(p, used) && !hardClash(p));
+    if (!replacement) return entry;
     rememberProduct(replacement, used);
-    out.push({ slot: entry.slot, product: replacement });
-  }
-  return out;
+    return { slot: entry.slot, product: replacement };
+  });
 }
 
 /**
