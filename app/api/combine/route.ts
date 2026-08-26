@@ -5,6 +5,7 @@ import { createClient, getBearerToken } from "@/utils/supabase/server";
 import {
   ApiSecurityError,
   enforceRateLimit,
+  enforceIpRateLimit,
   trackAnalyticsEvent,
 } from "@/lib/api-security";
 import {
@@ -149,9 +150,15 @@ export async function POST(req: NextRequest) {
       .single();
 
     const rateLimitPromise = isShowMore
-      ? enforceRateLimit(supabase, "combine_more", 100)
+      ? Promise.all([
+          enforceRateLimit(supabase, "combine_more", 100),
+          enforceIpRateLimit(req, "combine_more", 20),
+        ])
       : // Soft hourly cap only — daily combines_used quota is off until product gates it.
-        enforceRateLimit(supabase, "combine", 100);
+        Promise.all([
+          enforceRateLimit(supabase, "combine", 100),
+          enforceIpRateLimit(req, "combine", 20),
+        ]);
 
     let photoUrl = typeof body?.photo_url === "string" ? body.photo_url : "";
     let context: AnalysisContext | null = saveContext;

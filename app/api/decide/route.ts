@@ -20,6 +20,7 @@ import {
   assertOwnStoragePath,
   enforceGuestAnalysisCap,
   enforceRateLimit,
+  enforceIpRateLimit,
 } from "@/lib/api-security";
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
@@ -119,6 +120,7 @@ export async function POST(req: NextRequest) {
       Promise.all([
         enforceGuestAnalysisCap(supabase, anonymous),
         enforceRateLimit(supabase, "decide", anonymous ? 10 : 100),
+        enforceIpRateLimit(req, "decide", 20),
       ])
     );
 

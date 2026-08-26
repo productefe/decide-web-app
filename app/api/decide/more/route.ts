@@ -18,6 +18,7 @@ import {
   ApiSecurityError,
   assertOwnStoragePath,
   enforceRateLimit,
+  enforceIpRateLimit,
 } from "@/lib/api-security";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
 import { RequestTimer } from "@/lib/timing";
@@ -99,7 +100,10 @@ export async function POST(req: NextRequest) {
 
     try {
       assertOwnStoragePath(user.id, storage_path);
-      await enforceRateLimit(supabase, "decide_more", isAnonymousUser(user) ? 10 : 100);
+      await Promise.all([
+        enforceRateLimit(supabase, "decide_more", isAnonymousUser(user) ? 10 : 100),
+        enforceIpRateLimit(req, "decide_more", 20),
+      ]);
     } catch (err) {
       if (err instanceof ApiSecurityError) {
         return NextResponse.json({ error: err.message }, { status: err.status });
