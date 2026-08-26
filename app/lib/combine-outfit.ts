@@ -641,7 +641,7 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       input.affiliateTag,
       exclude,
       {
-        immersiveMode: "none",
+        immersiveMode: "all",
         searchMode: exclude.size > 0 ? "full" : "compact",
         mustFind: true,
         denyTitle: isWatchSlot

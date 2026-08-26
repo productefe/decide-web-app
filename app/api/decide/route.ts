@@ -185,7 +185,6 @@ export async function POST(req: NextRequest) {
           if (profile.low_confidence) return Promise.resolve(null);
           return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
             mustFind: true,
-            immersiveMode: "none",
           }).then((piece) =>
             piece
               ? ({

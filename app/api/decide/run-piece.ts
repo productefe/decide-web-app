@@ -106,21 +106,6 @@ function emptyScoring(productProfile: ProductProfile): ScoringResult {
   };
 }
 
-/** Shopping results already include a merchant URL — immersive would not change the card. */
-export function linkNeedsImmersive(link: string | null | undefined): boolean {
-  const raw = (link || "").trim();
-  if (!raw) return true;
-  try {
-    const host = new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
-    if (!host) return true;
-    if (/(^|\.)google\.(com|com\.tr)$/.test(host)) return true;
-    if (host.includes("googleusercontent.com")) return true;
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 function poolFaithfulCount(
   scoring: ScoringResult,
   excludeTitles: Set<string>,
@@ -552,9 +537,7 @@ export async function processPiece(
     immersiveMode === "recommended" ? slots.slice(0, 1) : slots;
   const immersiveResponses = await Promise.all(
     immersiveTargets.map(({ product }) =>
-      linkNeedsImmersive(product.link)
-        ? fetchImmersive(product.serpapi_immersive_product_api, serpKey)
-        : Promise.resolve(null)
+      fetchImmersive(product.serpapi_immersive_product_api, serpKey)
     )
   );
   while (immersiveResponses.length < slots.length) immersiveResponses.push(null);
