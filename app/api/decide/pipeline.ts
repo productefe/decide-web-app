@@ -1904,7 +1904,27 @@ const TITLE_COLOR_WORDS = [
   "siyah", "beyaz", "mavi", "lacivert", "kırmızı", "turuncu", "sarı", "yeşil",
   "mor", "pembe", "fuşya", "gri", "antrasit", "kahverengi", "bej", "krem",
   "ekru", "bordo", "haki", "hardal", "turkuaz", "lila",
+  "black", "white", "blue", "navy", "red", "orange", "yellow", "green",
+  "purple", "pink", "grey", "gray", "brown", "beige", "burgundy", "khaki",
 ];
+
+function colorSearchTokens(profile: ProductProfile): string[] {
+  const want = asLower(profile.color_tr);
+  if (!want) return [];
+  const tokens = new Set<string>([want]);
+  for (const [en, tr] of Object.entries(colorTR)) {
+    if (asLower(tr) === want && en.length >= 3) tokens.add(en);
+  }
+  for (const c of profile.secondary_colors || []) {
+    const lc = asLower(c);
+    if (lc.length >= 3) tokens.add(lc);
+  }
+  return [...tokens];
+}
+
+function titleHasWantedColor(lowerTitle: string, profile: ProductProfile): boolean {
+  return colorSearchTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
 
 /**
  * True when the profile has a color, the title does NOT carry it, and the
@@ -1913,10 +1933,8 @@ const TITLE_COLOR_WORDS = [
  */
 function titleColorConflicts(lowerTitle: string, profile: ProductProfile): boolean {
   const want = asLower(profile.color_tr);
-  if (!want || lowerTitle.includes(want)) return false;
-  const allowed = new Set(
-    [want, ...(profile.secondary_colors || []).map((c) => asLower(c))].filter(Boolean)
-  );
+  if (!want || titleHasWantedColor(lowerTitle, profile)) return false;
+  const allowed = new Set(colorSearchTokens(profile));
   return TITLE_COLOR_WORDS.some(
     (c) =>
       !allowed.has(c) &&
@@ -2637,24 +2655,27 @@ function scoreShoppingItems(
     const patternMatched = validResults.filter((item) =>
       patternTokens.some((tok) => lcTitle(item).includes(tok))
     );
-    if (patternMatched.length >= 3) validResults = patternMatched;
+    if (patternMatched.length >= 1) validResults = patternMatched;
   } else {
     // The piece is plain (or has only a local accent): drop clearly patterned
-    // listings when enough plain ones remain — design fidelity over quantity.
+    // listings when any plain ones remain — design fidelity over quantity.
     const plainOnly = validResults.filter(
       (item) => !STRAY_PATTERN_WORDS.some((w) => lcTitle(item).includes(w))
     );
-    if (plainOnly.length >= 3) validResults = plainOnly;
+    if (plainOnly.length >= 1) validResults = plainOnly;
   }
   const colorToken = asLower(productProfile.color_tr);
   if (colorToken) {
-    const colorMatched = validResults.filter((item) => lcTitle(item).includes(colorToken));
-    if (colorMatched.length >= 3) {
+    const colorMatched = validResults.filter((item) =>
+      titleHasWantedColor(lcTitle(item), productProfile)
+    );
+    if (colorMatched.length >= 1) {
       validResults = colorMatched;
-    } else if (colorMatched.length > 0) {
-      // Even 1-2 color-faithful hits should outrank off-color listings.
-      const rest = validResults.filter((item) => !colorMatched.includes(item));
-      validResults = [...colorMatched, ...rest];
+    } else {
+      const noClash = validResults.filter(
+        (item) => !titleColorConflicts(lcTitle(item), productProfile)
+      );
+      if (noClash.length >= 1) validResults = noClash;
     }
   }
   // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
@@ -2722,9 +2743,7 @@ function scoreShoppingItems(
       if (!typeTr || !placeTr) return false;
       return title.includes(typeTr) && title.includes(placeTr);
     });
-    const colorHit = Boolean(
-      asText(productProfile.color_tr) && title.includes(asLower(productProfile.color_tr))
-    );
+    const colorHit = titleHasWantedColor(title, productProfile);
     const wrongColorHit = !colorHit && titleColorConflicts(title, productProfile);
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
@@ -2748,14 +2767,14 @@ function scoreShoppingItems(
     if (categoryHit) matchScore += 55;
     if (subcategoryHit) matchScore += 25;
     if (lengthHit) matchScore += 15;
-    if (patternPlacementHit) matchScore += 8;
-    if (colorHit) matchScore += 25;
-    if (wrongColorHit) matchScore = Math.max(0, matchScore - 25);
+    if (patternPlacementHit) matchScore += 12;
+    if (colorHit) matchScore += 40;
+    if (wrongColorHit) matchScore = Math.max(0, matchScore - 50);
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
     if (collarHit) matchScore += 14;
-    if (patternHit) matchScore += 12;
-    if (strayPatternHit) matchScore = Math.max(0, matchScore - 15);
+    if (patternHit) matchScore += 28;
+    if (strayPatternHit) matchScore = Math.max(0, matchScore - 35);
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
     if (poolBrandHit) matchScore += 15;
@@ -2773,6 +2792,20 @@ function scoreShoppingItems(
       }
     }
     matchScore = Math.min(matchScore, 100);
+
+    // Color and pattern outrank brand/trust — a black listing must not beat an orange one.
+    if (productProfile.color_tr && wrongColorHit) {
+      matchScore = Math.min(matchScore, 20);
+    }
+    if (productProfile.color_tr && !colorHit) {
+      matchScore = Math.min(matchScore, 55);
+    }
+    if (patternTokens.length && !patternHit) {
+      matchScore = Math.min(matchScore, 60);
+    }
+    if (strayPatternHit) {
+      matchScore = Math.min(matchScore, 40);
+    }
 
     // Require category fidelity when we know the category
     if (productProfile.category_tr && !categoryHit) {
@@ -2808,6 +2841,14 @@ function scoreShoppingItems(
       if (isWomenBudgetHit(asText(item.title), asText(item.source))) recommendationScore -= 12;
     }
     recommendationScore = Math.max(0, Math.min(recommendationScore, 100));
+    if (wrongColorHit) recommendationScore = Math.min(recommendationScore, 28);
+    if (productProfile.color_tr && !colorHit) {
+      recommendationScore = Math.max(0, recommendationScore - 22);
+    }
+    if (patternTokens.length && !patternHit) {
+      recommendationScore = Math.max(0, recommendationScore - 18);
+    }
+    if (strayPatternHit) recommendationScore = Math.min(recommendationScore, 40);
 
     return {
       title: asText(item.title),

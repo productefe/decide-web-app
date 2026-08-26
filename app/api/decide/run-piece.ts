@@ -120,12 +120,20 @@ export function linkNeedsImmersive(link: string | null | undefined): boolean {
   }
 }
 
-function poolSurvivesExclude(
+function poolFaithfulCount(
   scoring: ScoringResult,
-  excludeTitles: Set<string>
+  excludeTitles: Set<string>,
+  requireColor: boolean
 ): number {
-  if (!excludeTitles.size) return scoring.pool.length;
-  return scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles)).length;
+  let pool = excludeTitles.size
+    ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
+    : scoring.pool;
+  if (requireColor) {
+    const colored = pool.filter((p) => p.signals.color);
+    // Wait for a color-faithful hit before settling — don't early-exit on off-color.
+    return colored.length;
+  }
+  return pool.length;
 }
 
 /**
@@ -147,6 +155,7 @@ async function searchQueries(
 
   const collected: SerpShoppingItem[] = [];
   let pending = ordered.length;
+  const needColor = Boolean(productProfile.color_tr);
 
   return new Promise((resolve) => {
     let settled = false;
@@ -158,7 +167,7 @@ async function searchQueries(
       console.log(
         "SerpAPI parallel:",
         ordered.join(" | "),
-        `(pool=${scoring.pool.length}, alive=${poolSurvivesExclude(scoring, excludeTitles)}, ${why})`
+        `(pool=${scoring.pool.length}, alive=${poolFaithfulCount(scoring, excludeTitles, needColor)}, ${why})`
       );
       resolve({ scoring, queryUsed: ordered[0], items });
     };
@@ -170,7 +179,7 @@ async function searchQueries(
           collected.push(...batch);
           pending--;
           const scoring = scoreProducts(dedupeItems(collected), productProfile);
-          const alive = poolSurvivesExclude(scoring, excludeTitles);
+          const alive = poolFaithfulCount(scoring, excludeTitles, needColor);
           if (alive >= minPool) finish("early");
           else if (pending <= 0) finish("complete");
         })
@@ -219,7 +228,10 @@ async function searchWithFallback(
       minPool,
       excludeTitles
     );
-    if (!result.scoring.error && poolSurvivesExclude(result.scoring, excludeTitles) > 0) {
+    if (
+      !result.scoring.error &&
+      poolFaithfulCount(result.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
+    ) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
     if (compact) return { scoring: result.scoring, queryUsed: result.queryUsed };
@@ -261,7 +273,10 @@ async function searchWithFallback(
     minPool,
     excludeTitles
   );
-  if (poolSurvivesExclude(firstPass.scoring, excludeTitles) > 0 || compact) {
+  if (
+    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0 ||
+    compact
+  ) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
 
@@ -371,7 +386,9 @@ export async function processPiece(
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
   const searchMode = options.searchMode ?? "full";
-  const rotation = excludeTitles.size;
+  // Same query plan as the first analysis so "3 alternatif daha" stays on-model;
+  // already-shown titles are dropped in applyPoolFilters, not by rotating brands.
+  const rotation = 0;
   let { scoring } = await searchWithFallback(
     productProfile,
     serpKey,
