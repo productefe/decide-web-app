@@ -1536,10 +1536,13 @@ export function rebuildProfileQueries(profile: ProductProfile): ProductProfile {
       : "",
     ...patternQueryTokens(profile),
   ]);
+  // Print color as a loose token ("yeşil") pulls solid green tees for a white
+  // graphic tee. Distinctive details can still mention the motif.
+  const printMotif = hasPrintMotif(profile);
   const soft = uniqueJoin([
     strong,
     profile.material_tr,
-    profile.secondary_colors[0] || "",
+    printMotif ? "" : profile.secondary_colors[0] || "",
     ...detailQueryTokens(profile.distinctive_details),
   ]);
 
@@ -1908,22 +1911,80 @@ const TITLE_COLOR_WORDS = [
   "purple", "pink", "grey", "gray", "brown", "beige", "burgundy", "khaki",
 ];
 
-function colorSearchTokens(profile: ProductProfile): string[] {
-  const want = asLower(profile.color_tr);
+function tokensForColorLabel(label: string): string[] {
+  const want = asLower(label);
   if (!want) return [];
   const tokens = new Set<string>([want]);
   for (const [en, tr] of Object.entries(colorTR)) {
     if (asLower(tr) === want && en.length >= 3) tokens.add(en);
   }
-  for (const c of profile.secondary_colors || []) {
-    const lc = asLower(c);
-    if (lc.length >= 3) tokens.add(lc);
-  }
   return [...tokens];
 }
 
+/** Garment BODY color only — print/secondary colors must not substitute. */
+function primaryColorTokens(profile: ProductProfile): string[] {
+  return tokensForColorLabel(profile.color_tr);
+}
+
+function printColorTokens(profile: ProductProfile): string[] {
+  const out = new Set<string>();
+  for (const c of profile.secondary_colors || []) {
+    for (const t of tokensForColorLabel(c)) out.add(t);
+  }
+  for (const p of profile.patterns || []) {
+    for (const c of p.colors || []) {
+      for (const t of tokensForColorLabel(translateColor(c) || asText(c))) out.add(t);
+    }
+  }
+  const primary = new Set(primaryColorTokens(profile));
+  return [...out].filter((t) => t.length >= 3 && !primary.has(t));
+}
+
+function colorSearchTokens(profile: ProductProfile): string[] {
+  return primaryColorTokens(profile);
+}
+
 function titleHasWantedColor(lowerTitle: string, profile: ProductProfile): boolean {
-  return colorSearchTokens(profile).some((tok) => lowerTitle.includes(tok));
+  return primaryColorTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
+
+const PRINT_CUE_RE = /baskılı|baskili|\bbaskı\b|\bprint(?:ed)?\b|graphic|motif|logolu|\blogo\b/;
+
+function isPrintPatternType(type: string): boolean {
+  const t = canonKey(type);
+  const tr = translatePattern(type);
+  return (
+    t === "graphic" ||
+    t === "print" ||
+    t === "printed" ||
+    t === "logo" ||
+    tr === "baskılı" ||
+    tr === "logolu"
+  );
+}
+
+function hasPrintMotif(profile: ProductProfile): boolean {
+  if (profile.has_logo) return true;
+  if (asLower(profile.pattern_tr) === "baskılı" || asLower(profile.pattern_tr) === "logolu") {
+    return true;
+  }
+  return (profile.patterns || []).some((p) => isPrintPatternType(p.type));
+}
+
+function titleHasPrintCue(lowerTitle: string): boolean {
+  return PRINT_CUE_RE.test(lowerTitle);
+}
+
+function titleHasPrintColor(lowerTitle: string, profile: ProductProfile): boolean {
+  return printColorTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
+
+/** Solid garment in the PRINT color, e.g. a green tee for a white tee with green graphic. */
+function titleIsPrintColorAsBody(lowerTitle: string, profile: ProductProfile): boolean {
+  if (!hasPrintMotif(profile) || !printColorTokens(profile).length) return false;
+  if (titleHasWantedColor(lowerTitle, profile)) return false;
+  if (titleHasPrintCue(lowerTitle)) return false;
+  return titleHasPrintColor(lowerTitle, profile);
 }
 
 /**
@@ -2327,7 +2388,7 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
   const full = uniqueJoin([
     strong,
     rebuilt.material_tr,
-    rebuilt.secondary_colors[0] || "",
+    hasPrintMotif(rebuilt) ? "" : rebuilt.secondary_colors[0] || "",
     ...detailQueryTokens(rebuilt.distinctive_details),
   ]);
   const colorCore = uniqueJoin([core, rebuilt.color_tr]);
@@ -2651,12 +2712,12 @@ function scoreShoppingItems(
     if (subMatched.length >= 3) validResults = subMatched;
   }
   const patternTokens = queryPatternTokens(productProfile);
-  if (patternTokens.length) {
+  if (patternTokens.length && !hasPrintMotif(productProfile)) {
     const patternMatched = validResults.filter((item) =>
       patternTokens.some((tok) => lcTitle(item).includes(tok))
     );
     if (patternMatched.length >= 1) validResults = patternMatched;
-  } else {
+  } else if (!hasPrintMotif(productProfile)) {
     // The piece is plain (or has only a local accent): drop clearly patterned
     // listings when any plain ones remain — design fidelity over quantity.
     const plainOnly = validResults.filter(
@@ -2664,18 +2725,36 @@ function scoreShoppingItems(
     );
     if (plainOnly.length >= 1) validResults = plainOnly;
   }
-  const colorToken = asLower(productProfile.color_tr);
-  if (colorToken) {
-    const colorMatched = validResults.filter((item) =>
-      titleHasWantedColor(lcTitle(item), productProfile)
-    );
-    if (colorMatched.length >= 1) {
-      validResults = colorMatched;
+  // White tee + green print must not collapse to solid white OR solid green.
+  if (hasPrintMotif(productProfile)) {
+    const printLike = validResults.filter((item) => {
+      const t = lcTitle(item);
+      if (!titleHasWantedColor(t, productProfile)) return false;
+      if (titleIsPrintColorAsBody(t, productProfile)) return false;
+      return titleHasPrintCue(t) || titleHasPrintColor(t, productProfile);
+    });
+    if (printLike.length >= 1) {
+      validResults = printLike;
     } else {
-      const noClash = validResults.filter(
-        (item) => !titleColorConflicts(lcTitle(item), productProfile)
+      const bodyColor = validResults.filter((item) =>
+        titleHasWantedColor(lcTitle(item), productProfile)
       );
-      if (noClash.length >= 1) validResults = noClash;
+      if (bodyColor.length >= 1) validResults = bodyColor;
+    }
+  } else {
+    const colorToken = asLower(productProfile.color_tr);
+    if (colorToken) {
+      const colorMatched = validResults.filter((item) =>
+        titleHasWantedColor(lcTitle(item), productProfile)
+      );
+      if (colorMatched.length >= 1) {
+        validResults = colorMatched;
+      } else {
+        const noClash = validResults.filter(
+          (item) => !titleColorConflicts(lcTitle(item), productProfile)
+        );
+        if (noClash.length >= 1) validResults = noClash;
+      }
     }
   }
   // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
@@ -2744,7 +2823,11 @@ function scoreShoppingItems(
       return title.includes(typeTr) && title.includes(placeTr);
     });
     const colorHit = titleHasWantedColor(title, productProfile);
-    const wrongColorHit = !colorHit && titleColorConflicts(title, productProfile);
+    const printCueHit = titleHasPrintCue(title);
+    const printColorHit = titleHasPrintColor(title, productProfile);
+    const printAsBodyHit = titleIsPrintColorAsBody(title, productProfile);
+    const wrongColorHit =
+      (!colorHit && titleColorConflicts(title, productProfile)) || printAsBodyHit;
     const fitHit = Boolean(fitWord && title.includes(fitWord.split(" ")[0]));
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
@@ -2769,6 +2852,8 @@ function scoreShoppingItems(
     if (lengthHit) matchScore += 15;
     if (patternPlacementHit) matchScore += 12;
     if (colorHit) matchScore += 40;
+    if (hasPrintMotif(productProfile) && printCueHit) matchScore += 22;
+    if (hasPrintMotif(productProfile) && printColorHit && colorHit) matchScore += 16;
     if (wrongColorHit) matchScore = Math.max(0, matchScore - 50);
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
@@ -2805,6 +2890,13 @@ function scoreShoppingItems(
     }
     if (strayPatternHit) {
       matchScore = Math.min(matchScore, 40);
+    }
+
+    if (hasPrintMotif(productProfile) && !printCueHit && !printColorHit) {
+      matchScore = Math.min(matchScore, 48);
+    }
+    if (printAsBodyHit) {
+      matchScore = Math.min(matchScore, 18);
     }
 
     // Require category fidelity when we know the category
@@ -2849,6 +2941,13 @@ function scoreShoppingItems(
       recommendationScore = Math.max(0, recommendationScore - 18);
     }
     if (strayPatternHit) recommendationScore = Math.min(recommendationScore, 40);
+    if (hasPrintMotif(productProfile) && printCueHit && colorHit) {
+      recommendationScore = Math.min(100, recommendationScore + 18);
+    }
+    if (printAsBodyHit) recommendationScore = Math.min(recommendationScore, 24);
+    if (hasPrintMotif(productProfile) && !printCueHit && !printColorHit) {
+      recommendationScore = Math.max(0, recommendationScore - 20);
+    }
 
     return {
       title: asText(item.title),
