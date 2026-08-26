@@ -405,6 +405,8 @@ export async function processPiece(
 
   // Only broaden when we have no recommended card. Do not re-query just because
   // excludeTitles left fewer than 3 — that added ~4 Serp RTTs on every "more".
+  // After a few "3 alternatif daha" clicks the same query is exhausted; rotate
+  // brands/stores (still with color in the seed) so a new card can appear.
   if (!scoring.recommended && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
@@ -412,61 +414,64 @@ export async function processPiece(
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = searchMode === "compact" ? 8 : 12;
-    const broaden = [
-      productProfile.search_query,
-      productProfile.fallback_query,
-      // Keep the color in the broadest query — a broadened "şapka" search must
-      // still look for the orange one.
-      [
-        productProfile.gender_tr,
-        productProfile.color_tr,
-        accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
+    const extraRounds = excludeTitles.size > 0 ? 2 : 1;
+    for (let round = 0; round < extraRounds && !scoring.recommended; round++) {
+      const broaden = [
+        productProfile.search_query,
+        productProfile.fallback_query,
+        // Keep the color in the broadest query — a broadened "şapka" search must
+        // still look for the orange one.
+        [
+          productProfile.gender_tr,
+          productProfile.color_tr,
+          accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
+        ]
+          .filter(Boolean)
+          .join(" "),
       ]
-        .filter(Boolean)
-        .join(" "),
-    ]
-      .map((q) => (q || "").trim().replace(/\s+/g, " "))
-      .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
-      .filter(Boolean);
-    const seedQuery = (
-      productProfile.fallback_query ||
-      productProfile.search_query ||
-      [
-        productProfile.gender_tr,
-        productProfile.color_tr,
-        accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
-      ]
-        .filter(Boolean)
-        .join(" ")
-    ).trim();
-    if (priceMode === "luks") {
-      // Rotate through different luxury stores on each "3 alternatif daha"
-      // click (excludeTitles grows every round) so new items keep appearing.
-      if (seedQuery) {
-        const offset = excludeTitles.size % LUXURY_SEARCH_STORES.length;
-        for (let i = 0; i < 2; i++) {
-          const store = LUXURY_SEARCH_STORES[(offset + i) % LUXURY_SEARCH_STORES.length];
-          broaden.unshift(`${seedQuery} ${store}`);
+        .map((q) => (q || "").trim().replace(/\s+/g, " "))
+        .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
+        .filter(Boolean);
+      const seedQuery = (
+        productProfile.fallback_query ||
+        productProfile.search_query ||
+        [
+          productProfile.gender_tr,
+          productProfile.color_tr,
+          accessoryType || productProfile.subcategory_tr || productProfile.category_tr,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      ).trim();
+      if (priceMode === "luks") {
+        if (seedQuery) {
+          const offset = (excludeTitles.size + round * 2) % LUXURY_SEARCH_STORES.length;
+          for (let i = 0; i < 2; i++) {
+            const store = LUXURY_SEARCH_STORES[(offset + i) % LUXURY_SEARCH_STORES.length];
+            broaden.unshift(`${seedQuery} ${store}`);
+          }
         }
+      } else if (seedQuery) {
+        const nextBrands = pickDecidePoolBrands(
+          {
+            category: productProfile.category,
+            category_tr: productProfile.category_tr,
+            subcategory: productProfile.subcategory,
+            subcategory_tr: productProfile.subcategory_tr,
+            price_mode: priceMode,
+            gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
+          },
+          excludeTitles.size ? 4 : 2,
+          seedQuery,
+          excludeTitles.size + round * 7 + 3
+        );
+        for (const brand of nextBrands) broaden.unshift(`${seedQuery} ${brand}`);
       }
-    } else if (seedQuery) {
-      const nextBrands = pickDecidePoolBrands(
-        {
-          category: productProfile.category,
-          category_tr: productProfile.category_tr,
-          subcategory: productProfile.subcategory,
-          subcategory_tr: productProfile.subcategory_tr,
-          price_mode: priceMode,
-          gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
-        },
-        2,
-        seedQuery,
-        rotation + 5
+      const extraQs = [...new Set(broaden)].slice(
+        0,
+        excludeTitles.size ? 4 : compactExtraLimit(searchMode)
       );
-      for (const brand of nextBrands) broaden.unshift(`${seedQuery} ${brand}`);
-    }
-    const extraQs = [...new Set(broaden)].slice(0, compactExtraLimit(searchMode));
-    if (extraQs.length) {
+      if (!extraQs.length) continue;
       const extra = await searchQueries(
         extraQs,
         productProfile,
