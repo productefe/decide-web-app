@@ -209,7 +209,7 @@ async function searchWithFallback(
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
   const serpNum = 8;
-  const minPool = excludeTitles.size ? Math.min(4, excludeTitles.size + 2) : 2;
+  const minPool = excludeTitles.size ? Math.min(5, excludeTitles.size + 3) : 3;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
@@ -232,7 +232,8 @@ async function searchWithFallback(
     );
     if (
       !result.scoring.error &&
-      poolFaithfulCount(result.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
+      poolFaithfulCount(result.scoring, excludeTitles, Boolean(productProfile.color_tr)) >=
+        Math.min(2, minPool)
     ) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
@@ -279,7 +280,8 @@ async function searchWithFallback(
     excludeTitles
   );
   if (
-    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
+    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) >=
+    Math.min(2, minPool)
   ) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
@@ -415,9 +417,9 @@ export async function processPiece(
     options.denyTitle
   );
 
-  // Broaden only when there is no card yet — do not add Serp rounds just to
-  // pad the pool to 3 on every "3 alternatif daha".
-  const needsFill = !scoring.recommended;
+  // Pad to at least 3 unique cards when possible (one parallel broaden round).
+  const needsFill =
+    !scoring.recommended || (options.mustFind && scoring.pool.length < 3);
   if (needsFill && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
@@ -425,7 +427,7 @@ export async function processPiece(
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = 8;
-    const extraRounds = 1;
+    const extraRounds = scoring.recommended ? 1 : 1;
     const typeBit =
       accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
     const colorTypeQuery = [
@@ -439,7 +441,7 @@ export async function processPiece(
     const fallbackWithColor = [productProfile.fallback_query, productProfile.color_tr]
       .filter(Boolean)
       .join(" ");
-    for (let round = 0; round < extraRounds && !scoring.recommended; round++) {
+    for (let round = 0; round < extraRounds && scoring.pool.length < 3; round++) {
       const broaden = [
         productProfile.search_query,
         fallbackWithColor,

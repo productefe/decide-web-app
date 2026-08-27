@@ -1057,9 +1057,30 @@ export function contradictsCategoryFit(
     }
   }
 
-  if (/gömlek|shirt/.test(blob) && !/t-shirt|tişört|sweatshirt|polo/.test(blob)) {
+  if (/gömlek|shirt/.test(blob) && !/t-shirt|tişört|sweatshirt|polo|blazer/.test(blob)) {
     if (requireType && !/\b(gömlek|shirt)\b/.test(t)) return true;
-    if (/\b(tişört|t-?shirt|gözlük|pantolon|ayakkabı|hoodie|atlet)\b/.test(t)) return true;
+    if (/\b(tişört|t-?shirt|gözlük|pantolon|ayakkabı|hoodie|atlet|blazer)\b/.test(t)) return true;
+  }
+
+  // Blazer must stay blazer — show-more must not drift into gömlek / tişört.
+  if (/\bblazer\b/.test(blob)) {
+    if (requireType && !/\bblazer\b/.test(t)) return true;
+    if (
+      /\b(gömlek|shirt|tişört|t-?shirt|hoodie|sweatshirt|kazak|bluz|elbise|pantolon)\b/.test(t) &&
+      !/\bblazer\b/.test(t)
+    ) {
+      return true;
+    }
+  } else if (/ceket|jacket|kaban|coat|trenç|puffer/.test(blob) && !/\bblazer\b/.test(blob)) {
+    if (
+      requireType &&
+      !/\b(ceket|jacket|kaban|coat|trenç|trench|puffer|mont)\b/.test(t)
+    ) {
+      return true;
+    }
+    if (/\b(gömlek|tişört|t-?shirt|hoodie|sweatshirt|elbise|pantolon)\b/.test(t) && !/\b(ceket|jacket|kaban|mont)\b/.test(t)) {
+      return true;
+    }
   }
 
   if (/hoodie|kapüşonlu|sweatshirt/.test(blob)) {
@@ -1384,6 +1405,10 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
     aliases.push("askılı", "askılı üst", "crop top");
   } else if (/tişört|t-shirt|tshirt|tee/.test(blob)) {
     aliases.push("tişört", "t-shirt", "tshirt", "tee");
+  } else if (/\bblazer\b/.test(blob)) {
+    aliases.push("blazer");
+  } else if (/ceket|jacket|kaban|coat|trenç/.test(blob)) {
+    aliases.push("ceket", "jacket", "kaban", "blazer");
   } else if (/gömlek/.test(blob) || (cat === "shirt" && !/t-shirt/.test(cat))) {
     aliases.push("gömlek", "shirt");
   } else if (/hoodie|sweatshirt|kapüşonlu/.test(blob)) {
@@ -2806,8 +2831,9 @@ function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): Scor
 }
 
 /**
- * Keep listings that match the garment body color (and print, on later rounds).
- * `strict` is show-more: never fill empty color hits with random other colors.
+ * Prefer same body color (and print on later rounds). Always drop clear wrong
+ * colorways so first analysis stays faithful — show-more (`strict`) refuses to
+ * fall back to off-color listings when nothing matches.
  */
 export function keepLookFaithful(
   pool: ScoredProduct[],
@@ -2816,6 +2842,15 @@ export function keepLookFaithful(
 ): ScoredProduct[] {
   if (!pool.length) return pool;
   let next = pool;
+  // Always drop clear wrong colorways — first analysis must not lead with
+  // "siyah şort" for a white short, then flip on show-more.
+  {
+    const noClash = next.filter((p) => {
+      const t = asLower(p.title);
+      return !titleColorConflicts(t, profile) && !titleIsPrintColorAsBody(t, profile);
+    });
+    if (noClash.length) next = noClash;
+  }
   if (asText(profile.color_tr)) {
     const colored = next.filter((p) => p.signals.color);
     if (colored.length) next = colored;
@@ -2911,7 +2946,12 @@ function scoreShoppingItems(
   const catToken = asLower(productProfile.category_tr).split(" ")[0];
   if (subToken.length >= 3 && subToken !== catToken) {
     const subMatched = validResults.filter((item) => lcTitle(item).includes(subToken));
-    const subMin = isCropCasualSubcategory(productProfile) ? 1 : 3;
+    const tightType =
+      isCropCasualSubcategory(productProfile) ||
+      /\b(blazer|ceket|jacket|kaban)\b/.test(
+        asLower(`${productProfile.subcategory} ${productProfile.subcategory_tr}`)
+      );
+    const subMin = tightType ? 1 : 3;
     if (subMatched.length >= subMin) validResults = subMatched;
   }
   const patternTokens = queryPatternTokens(productProfile);
@@ -3093,6 +3133,11 @@ function scoreShoppingItems(
     if (hasPrintMotif(productProfile) && printCueHit) matchScore += 22;
     if (hasPrintMotif(productProfile) && printColorHit && colorHit) matchScore += 16;
     if (wrongColorHit) matchScore = Math.max(0, matchScore - 50);
+    // Prefer titles that name the photo color so first pass stays on-shade
+    // (white short → white listings before random colored ones).
+    else if (asText(productProfile.color_tr) && !colorHit) {
+      matchScore = Math.max(0, matchScore - 18);
+    }
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
     if (collarHit) matchScore += 18;
@@ -3112,6 +3157,13 @@ function scoreShoppingItems(
       if (heavyCrop) matchScore = Math.max(0, matchScore - 28);
       if (asText(productProfile.sleeve_or_strap_tr) && !strapHit && !strapConflict) {
         matchScore = Math.max(0, matchScore - 8);
+      }
+    }
+    // Outerwear type lock in ranking — blazer must beat gömlek on score alone.
+    if (/\bblazer\b/.test(asLower(`${productProfile.subcategory} ${productProfile.subcategory_tr}`))) {
+      if (/\bblazer\b/.test(title)) matchScore += 30;
+      else if (/\b(gömlek|shirt|tişört|t-?shirt)\b/.test(title)) {
+        matchScore = Math.max(0, matchScore - 40);
       }
     }
     if (layeredTokenHits >= 2) matchScore += 10;
@@ -3476,10 +3528,10 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
   };
 
   const rec = take(recommended);
-  const cheaper =
+  let cheaper =
     take(scoring.cheaper) ||
     (rec ? take(pickCheaperProduct(scoring.pool, rec, scoring.style)) : null);
-  const style =
+  let style =
     take(scoring.style) ||
     take(
       pickTrustedFallback(
@@ -3487,6 +3539,25 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
         new Set([rec?.title, cheaper?.title].filter(Boolean) as string[])
       )
     );
+
+  // Prefer 3 distinct cards whenever the pool has them (cheaper pick can fail
+  // on price-only rules and leave a lone recommended).
+  if (!cheaper) {
+    cheaper = take(
+      pickTrustedFallback(
+        scoring.pool,
+        new Set([rec?.title, style?.title].filter(Boolean) as string[])
+      )
+    );
+  }
+  if (!style) {
+    style = take(
+      pickTrustedFallback(
+        scoring.pool,
+        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[])
+      )
+    );
+  }
 
   const validated: ScoringResult = {
     ...scoring,

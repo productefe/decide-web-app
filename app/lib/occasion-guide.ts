@@ -272,6 +272,14 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "kısa kollu",
       "kısa kol",
       "short sleeve",
+      "crop",
+      "crop top",
+      "cropped",
+      "croptop",
+      "bralet",
+      "bralette",
+      "büstiyer",
+      "bustier",
     ],
     hardAvoidTerms: [
       "eşofman",
@@ -290,9 +298,10 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
 Extract the visible garments faithfully — a hoodie stays a hoodie; do not relabel it as a gömlek.
 Emphasize work-relevant attributes: collar structure, tailored vs regular, chino vs jean, loafer/oxford vs sneaker, wrinkle-resistant / woven impression.
 style_tags must include "iş" or "ofis" plus 1–2 of: smart-casual, business-casual, klasik, ofis.
-If the piece is casual, extract it as-is and note the most office-appropriate reading of THAT type (e.g. düz polo), never invent a different subcategory.`,
+If the piece is casual, extract it as-is and note the most office-appropriate reading of THAT type (e.g. düz polo), never invent a different subcategory.
+NEVER suggest crop top / bralet / büstiyer as the office reading of a non-crop piece.`,
     combineNote: `OCCASION = İş (office / business casual / smart casual). Polished enough for work; not gym, not lounge, not davet-abiye.
-- top: uzun kollu gömlek, uzun kollu bluz, ince triko, blazer — NEVER kısa kollu gömlek, NEVER short-sleeve, NEVER grafik tişört, NEVER hoodie, NEVER spor atlet
+- top: uzun kollu gömlek, uzun kollu bluz, ince triko, blazer — NEVER kısa kollu gömlek, NEVER short-sleeve, NEVER grafik tişört, NEVER hoodie, NEVER spor atlet, NEVER crop top, NEVER bralet, NEVER büstiyer
 - bottom: chino, kumaş pantolon, ofis eteği, koyu düz jean — NEVER jogger, NEVER eşofman, NEVER yırtık jean, NEVER tayt
 - shoes: loafer, oxford, sade deri bot — NEVER spor koşu sneaker, NEVER topuklu gece
 - accessory: deri kemer OR kravat when appropriate, klasik kol saati (deri/metal), sade çanta — no spor cap, no clutch, no bel çantası. Kravat ≠ kemer.
