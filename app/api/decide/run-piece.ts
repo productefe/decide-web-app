@@ -18,7 +18,7 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
-import { pickDecidePoolBrands, resolvePoolCategories, textHasPoolBrand } from "@/constants/brandPool";
+import { pickDecidePoolBrands, resolvePoolCategories } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
@@ -58,7 +58,7 @@ function dedupeItems(items: SerpShoppingItem[]): SerpShoppingItem[] {
  * slowest query in a Promise.all — we instead settle as soon as the pool is
  * filled, so this timeout only matters when every query is slow/stuck.
  */
-const SERP_TIMEOUT_MS = 8_000;
+const SERP_TIMEOUT_MS = 5_500;
 
 async function serpShoppingSearch(
   query: string,
@@ -138,23 +138,9 @@ function poolFaithfulCount(
   return pool.length;
 }
 
-function poolBrandedFaithfulCount(
-  scoring: ScoringResult,
-  excludeTitles: Set<string>,
-  requireColor: boolean
-): number {
-  let pool = excludeTitles.size
-    ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
-    : scoring.pool;
-  if (requireColor) pool = pool.filter((p) => p.signals.color);
-  return pool.filter((p) => textHasPoolBrand(`${p.title} ${p.source}`)).length;
-}
-
 /**
- * Fire queries in parallel but do not wait for the slowest. As soon as enough
- * unique products exist (after excludeTitles), return; stragglers are ignored.
- * On first analysis, wait for at least one known-brand hit when brand queries
- * are still in flight — otherwise generics win the early-exit race.
+ * Fire queries in parallel; settle as soon as the pool is full. Brand priority
+ * is handled in scoring — do not wait for slow brand RTTs here.
  */
 async function searchQueries(
   queries: string[],
@@ -162,8 +148,7 @@ async function searchQueries(
   apiKey: string,
   num = 12,
   minPool = 3,
-  excludeTitles: Set<string> = new Set(),
-  preferBrands = false
+  excludeTitles: Set<string> = new Set()
 ): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
   const ordered = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
   if (ordered.length === 0) {
@@ -173,7 +158,6 @@ async function searchQueries(
   const collected: SerpShoppingItem[] = [];
   let pending = ordered.length;
   const needColor = Boolean(productProfile.color_tr);
-  const waitForBrand = preferBrands && excludeTitles.size === 0;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -185,7 +169,7 @@ async function searchQueries(
       console.log(
         "SerpAPI parallel:",
         ordered.join(" | "),
-        `(pool=${scoring.pool.length}, alive=${poolFaithfulCount(scoring, excludeTitles, needColor)}, branded=${poolBrandedFaithfulCount(scoring, excludeTitles, needColor)}, ${why})`
+        `(pool=${scoring.pool.length}, alive=${poolFaithfulCount(scoring, excludeTitles, needColor)}, ${why})`
       );
       resolve({ scoring, queryUsed: ordered[0], items });
     };
@@ -198,16 +182,8 @@ async function searchQueries(
           pending--;
           const scoring = scoreProducts(dedupeItems(collected), productProfile);
           const alive = poolFaithfulCount(scoring, excludeTitles, needColor);
-          const branded = poolBrandedFaithfulCount(scoring, excludeTitles, needColor);
-          if (alive >= minPool) {
-            if (waitForBrand && branded < 1 && pending > 0) {
-              // Keep waiting for brand Serp rounds.
-            } else {
-              finish(waitForBrand && branded > 0 ? "early-brand" : "early");
-            }
-          } else if (pending <= 0) {
-            finish("complete");
-          }
+          if (alive >= minPool) finish("early");
+          else if (pending <= 0) finish("complete");
         })
         .catch(() => {
           if (settled) return;
@@ -232,8 +208,8 @@ async function searchWithFallback(
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
-  const serpNum = compact ? 8 : 12;
-  const minPool = excludeTitles.size ? Math.min(6, excludeTitles.size + 3) : 3;
+  const serpNum = 8;
+  const minPool = excludeTitles.size ? Math.min(4, excludeTitles.size + 2) : 2;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
@@ -282,19 +258,17 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  // Full karma: 3 brand queries for apparel so familiar brands win the first
-  // batch; wait for a branded hit before early-exit. Compact stays lean.
+  // Lean first pass: 1 brand + 1 primary (parallel). Brand ranking is in scoring.
+  // No luxury / brand-refill round on the hot path — those doubled wall-clock.
   const poolCats = resolvePoolCategories(productProfile);
   const wantsBrandVariety =
     !compact && poolCats.some((c) => c === "tops" || c === "crop" || c === "dress");
-  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 3 : 1);
+  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 1 : compact ? 0 : 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
   const primary = genericQs[0] || queries[0];
-  const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 1) : [];
-  const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
-  const preferBrands = wantsBrandVariety && excludeTitles.size === 0;
+  const uniqueParallel = [...new Set([...brandQs, primary].filter(Boolean))];
 
   const firstPass = await searchQueries(
     uniqueParallel,
@@ -302,47 +276,8 @@ async function searchWithFallback(
     apiKey,
     serpNum,
     minPool,
-    excludeTitles,
-    preferBrands
+    excludeTitles
   );
-  // Still no known brand after brand-prefixed queries — try two more brand seeds.
-  if (
-    preferBrands &&
-    poolBrandedFaithfulCount(
-      firstPass.scoring,
-      excludeTitles,
-      Boolean(productProfile.color_tr)
-    ) < 1
-  ) {
-    const moreBrandQs = brandQueries
-      .filter((q) => !uniqueParallel.includes(q))
-      .slice(0, 2);
-    if (moreBrandQs.length) {
-      const brandExtra = await searchQueries(
-        moreBrandQs,
-        productProfile,
-        apiKey,
-        serpNum,
-        minPool,
-        excludeTitles,
-        false
-      );
-      const scoring = scoreProducts(
-        dedupeItems([...firstPass.items, ...brandExtra.items]),
-        productProfile
-      );
-      console.log(
-        "SerpAPI brand refill:",
-        moreBrandQs.join(" | "),
-        `(pool=${scoring.pool.length})`
-      );
-      if (
-        poolFaithfulCount(scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
-      ) {
-        return { scoring, queryUsed: firstPass.queryUsed || brandExtra.queryUsed || "" };
-      }
-    }
-  }
   if (
     poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
   ) {
@@ -354,7 +289,7 @@ async function searchWithFallback(
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
 
-  const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 2);
+  const fallbackQs = genericQs.filter((q) => !uniqueParallel.includes(q)).slice(0, 1);
   if (fallbackQs.length === 0) return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
 
   const extra = await searchQueries(
@@ -480,19 +415,17 @@ export async function processPiece(
     options.denyTitle
   );
 
-  // Broaden when the card is empty, or show-more still has fewer than 3 unique
-  // look-faithful hits. Never drop color from the query — that is how random
-  // colorways leak in after a few "3 alternatif daha" clicks.
-  const needsFill =
-    !scoring.recommended || (excludeTitles.size > 0 && scoring.pool.length < 3);
+  // Broaden only when there is no card yet — do not add Serp rounds just to
+  // pad the pool to 3 on every "3 alternatif daha".
+  const needsFill = !scoring.recommended;
   if (needsFill && options.mustFind) {
     const accessoryType = isAccessoryProfile(productProfile)
       ? typeTokenTr(productProfile)
       : "";
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
-    const serpNum = searchMode === "compact" ? 8 : 12;
-    const extraRounds = excludeTitles.size > 0 ? 2 : 1;
+    const serpNum = 8;
+    const extraRounds = 1;
     const typeBit =
       accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
     const colorTypeQuery = [
@@ -506,7 +439,7 @@ export async function processPiece(
     const fallbackWithColor = [productProfile.fallback_query, productProfile.color_tr]
       .filter(Boolean)
       .join(" ");
-    for (let round = 0; round < extraRounds && scoring.pool.length < 3; round++) {
+    for (let round = 0; round < extraRounds && !scoring.recommended; round++) {
       const broaden = [
         productProfile.search_query,
         fallbackWithColor,
@@ -542,7 +475,7 @@ export async function processPiece(
       }
       const extraQs = [...new Set(broaden)].slice(
         0,
-        excludeTitles.size ? 3 : compactExtraLimit(searchMode)
+        excludeTitles.size ? 2 : compactExtraLimit(searchMode)
       );
       if (!extraQs.length) continue;
       const extra = await searchQueries(

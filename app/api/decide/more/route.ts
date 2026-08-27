@@ -238,6 +238,7 @@ export async function POST(req: NextRequest) {
     const piece = await timer.span("search", () =>
       processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, excludeTitles, {
         mustFind: true,
+        immersiveMode: "recommended",
       })
     );
 
