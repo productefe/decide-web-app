@@ -824,19 +824,39 @@ const SUNGLASSES_TITLE_RE =
 const SUNGLASSES_CUE_RE = /\b(güneş|sunglass|aviator|wayfarer|pilot gözlük)\b/i;
 const OPTICAL_GLASSES_RE =
   /\b(okuma gözlüğü|okuma gozluk|numaralı|numarali|reçeteli|receteli|optik|mavi ışık|mavi isik|blue[- ]?light|night[- ]?drive|bilgisayar gözlük)\b/i;
+/** Clear / transparent lenses — fashion frames, NOT sunglasses. */
+const CLEAR_LENS_RE =
+  /\b(saydam\s*cam(?:lı|li)?|şeffaf\s*cam(?:lı|li)?|seffaf\s*cam(?:lı|li)?|cam(?:ı|i)?\s*saydam|cam(?:ı|i)?\s*şeffaf|clear\s*lens(?:es)?|transparent\s*lens(?:es)?|clear\s*glass(?:es)?|see[- ]?through|saydam\s*gözlük|şeffaf\s*gözlük|clear\s*frame)\b/i;
 
-function profileEyewearBlob(profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">): string {
-  return `${asText(profile.category)} ${asText(profile.category_tr)} ${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)}`.toLowerCase();
+function profileEyewearBlob(profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query"> & {
+  distinctive_details?: string[];
+}): string {
+  const details = asStringList(profile.distinctive_details).join(" ");
+  return `${asText(profile.category)} ${asText(profile.category_tr)} ${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)} ${details}`.toLowerCase();
+}
+
+export function profileHasClearLenses(
+  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query"> & {
+    distinctive_details?: string[];
+  }
+): boolean {
+  return CLEAR_LENS_RE.test(profileEyewearBlob(profile));
 }
 
 export function profileWantsSunglasses(
-  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">
+  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query"> & {
+    distinctive_details?: string[];
+  }
 ): boolean {
+  // Clear / transparent lenses are optical fashion frames — never shop sunglasses.
+  if (profileHasClearLenses(profile)) return false;
   return /güneş|sunglass/.test(profileEyewearBlob(profile));
 }
 
 export function profileWantsEyewear(
-  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query">
+  profile: Pick<ProductProfile, "category" | "category_tr" | "subcategory" | "subcategory_tr" | "search_query"> & {
+    distinctive_details?: string[];
+  }
 ): boolean {
   return /gözlük|gozluk|glasses|sunglasses|eyewear|optik/.test(profileEyewearBlob(profile));
 }
@@ -1847,6 +1867,10 @@ const subcategoryTR: Record<string, string> = {
   hat: "şapka",
   glasses: "gözlük",
   sunglasses: "güneş gözlüğü",
+  "güneş gözlüğü": "güneş gözlüğü",
+  "gunes gozlugu": "güneş gözlüğü",
+  gözlük: "gözlük",
+  gozluk: "gözlük",
   watch: "saat",
   belt: "kemer",
   tie: "kravat",
@@ -2206,6 +2230,12 @@ function canonicalSubcategory(raw: string): string {
   if (key === "bikini" || key === "swimsuit") return "bikini";
   if (key === "mayo") return "mayo";
   if (key === "swim shorts" || key === "deniz şortu" || key === "swim-shorts") return "swim-shorts";
+  if (key === "sunglasses" || key === "güneş gözlüğü" || key === "gunes gozlugu" || key === "sunglass") {
+    return "sunglasses";
+  }
+  if (key === "glasses" || key === "gözlük" || key === "gozluk" || key === "optik gözlük") {
+    return "glasses";
+  }
   if (SUBCATEGORY_TO_FAMILY[key]) return key;
   if (SUBCATEGORY_TO_FAMILY[key.replace(/ /g, "-")]) return key.replace(/ /g, "-");
   return key;
@@ -2336,6 +2366,33 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     subcategoryFixed = "polo";
   }
 
+  const distinctive_details = asStringList(product.distinctive_details)
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  // Clear / transparent lenses are never sunglasses — skip shopping alternatives.
+  const eyewearBlob = asLower(
+    [
+      product.label,
+      family,
+      subcategoryFixed,
+      ...distinctive_details,
+      asText(product.material_impression),
+    ].join(" ")
+  );
+  const isEyewearPiece =
+    /gözlük|gozluk|glasses|sunglasses|eyewear|optik/.test(eyewearBlob) ||
+    labelKind === "güneş gözlüğü" ||
+    labelKind === "gözlük";
+  const hasClearLenses = CLEAR_LENS_RE.test(eyewearBlob);
+  let skipClearEyewear = false;
+  if (isEyewearPiece && hasClearLenses) {
+    subcategoryFixed = "glasses";
+    family = "eyewear";
+    skipClearEyewear = true;
+  }
+
   const subcategory_tr =
     lookupTr(subcategoryTR, subcategoryFixed) || subcategoryTR[subcategoryFixed] || "";
   const category_tr =
@@ -2355,11 +2412,6 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     : hasLogo
       ? "logolu"
       : "";
-
-  const distinctive_details = asStringList(product.distinctive_details)
-    .map((d) => d.trim())
-    .filter(Boolean)
-    .slice(0, 5);
 
   const profile: ProductProfile = {
     photo_url: ctx.photo_url,
@@ -2394,7 +2446,7 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
     search_query: "",
     fallback_query: "",
     core_query: "",
-    low_confidence: false,
+    low_confidence: skipClearEyewear,
   };
 
   return rebuildProfileQueries(profile);
@@ -2456,9 +2508,12 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
     return { label, profile };
   });
 
+  // Drop clear-lens eyewear (not sunglasses — no alternatives) before slot budget.
+  const shoppable = pieces.filter((p) => !p.profile.low_confidence);
+
   const seen = new Set<string>();
   const deduped: VisionPiece[] = [];
-  for (const piece of pieces) {
+  for (const piece of shoppable) {
     const key = pieceFamilyKey(
       piece.profile.category,
       piece.profile.category_tr,

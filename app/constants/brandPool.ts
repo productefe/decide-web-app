@@ -596,7 +596,8 @@ export function resolvePoolCategories(profile: {
   if (isCropCasualSubcategory(profile)) ordered.push("crop");
 
   if (/elbise|dress|jumpsuit|tulum/.test(blob)) ordered.push("dress");
-  else if (/gözlük|sunglasses|eyewear|sunglass/.test(blob)) ordered.push("sunglasses");
+  else if (/güneş|sunglass/.test(blob)) ordered.push("sunglasses");
+  else if (/gözlük|glasses|eyewear|optik/.test(blob)) ordered.push("accessory");
   else if (/saat|watch|wrist/.test(blob)) ordered.push("watch");
   else if (/çanta|bag|backpack|clutch|tote/.test(blob)) ordered.push("bag");
   else if (/şapka|hat|bere|cap|kemer|belt|takı|kolye|küpe|bileklik|yüzük|aksesuar/.test(blob)) ordered.push("accessory");
@@ -636,7 +637,10 @@ function iconicNeedles(profile: {
   if (/sneaker|kanvas/.test(blob)) out.push("kanvas sneaker", "sneaker", "old skool");
   if (/bot/.test(blob)) out.push("bot", "1460");
   if (/loafer/.test(blob)) out.push("loafer");
-  if (/gözlük/.test(blob)) out.push("güneş gözlüğü", "spor gözlük");
+  if (/gözlük|sunglass|güneş/.test(blob)) {
+    if (/güneş|sunglass/.test(blob)) out.push("güneş gözlüğü", "spor gözlük");
+    else out.push("gözlük");
+  }
   if (/legging/.test(blob)) out.push("legging");
   if (/cap|şapka/.test(blob)) out.push("cap");
   if (/kemer/.test(blob)) out.push("kemer");

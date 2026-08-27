@@ -427,7 +427,7 @@ export async function processPiece(
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = 8;
-    const extraRounds = scoring.recommended ? 1 : 1;
+    const extraRounds = 1;
     const typeBit =
       accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
     const colorTypeQuery = [

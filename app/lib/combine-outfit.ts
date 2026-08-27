@@ -219,7 +219,7 @@ Rules:
   - accessoryType, styleDescriptor, and searchQuery MUST all refer to that SAME type.
   - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
   - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons. Always mention strap (deri kayış / metal kordon / silikon kayış).
-  - For güneş gözlüğü: ONLY wearable sunglasses. NEVER gözlük kutusu, kılıf, okuma gözlüğü, optik, numaralı, or generic "gözlük".
+  - For güneş gözlüğü: ONLY wearable sunglasses with dark/tinted lenses. NEVER clear/saydam/şeffaf fashion frames, NEVER gözlük kutusu, kılıf, okuma gözlüğü, optik, numaralı, or generic "gözlük".
   - For gözlük: prescription / optical frames only — NEVER güneş gözlüğü and NEVER a case.
   - Always mention frame shape (yuvarlak/kare/aviator) and frame color for eyewear.
   - Match metal/color to the source piece when suggesting jewelry.${accessoryField}`;

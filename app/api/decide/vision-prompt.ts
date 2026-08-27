@@ -20,7 +20,11 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - Shoes: sneaker, boot, sandal, loafer, and heel are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
 - Swimwear: bikini, mayo, and swim shorts are DISTINCT from t-shirt / trousers. If the photo shows a bikini or swimsuit, subcategory MUST be bikini or mayo — never t-shirt, never dress.
 - Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
-- Glasses vs sunglasses are DISTINCT. Sunglasses (güneş gözlüğü) are NEVER optical/reading glasses, and NEVER a glasses case / kutu / kılıf. If the photo shows sunglasses, subcategory MUST be sunglasses. If it shows clear optical frames, subcategory MUST be glasses.
+- Glasses vs sunglasses are DISTINCT and depend on LENS OPACITY:
+  - Sunglasses ONLY when lenses are dark / tinted / mirrored / polarized (wearer's eyes not clearly visible through them). subcategory MUST be sunglasses. distinctive_details MUST include "koyu cam".
+  - Clear / transparent / see-through lenses (saydam/şeffaf — eyes clearly visible through the lenses) are NEVER sunglasses. subcategory MUST be glasses. distinctive_details MUST include "saydam cam". Do NOT label clear fashion frames as sunglasses.
+  - Sunglasses are NEVER optical/reading glasses, and NEVER a glasses case / kutu / kılıf.
+  - For EVERY eyewear item, distinctive_details MUST include exactly one of: "koyu cam" or "saydam cam".
 - Accessories (watch, bag, glasses, hat, belt, tie, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
 - belt and tie are DISTINCT: necktie/kravat → subcategory tie (label Kravat); belt/kemer → subcategory belt. Never swap them.
 - If you are not sure about a field, leave it "" or []. Never guess.
