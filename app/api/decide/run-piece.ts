@@ -18,7 +18,7 @@ import {
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
-import { pickDecidePoolBrands, resolvePoolCategories } from "@/constants/brandPool";
+import { pickDecidePoolBrands, resolvePoolCategories, textHasPoolBrand } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
@@ -138,9 +138,23 @@ function poolFaithfulCount(
   return pool.length;
 }
 
+function poolBrandedFaithfulCount(
+  scoring: ScoringResult,
+  excludeTitles: Set<string>,
+  requireColor: boolean
+): number {
+  let pool = excludeTitles.size
+    ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
+    : scoring.pool;
+  if (requireColor) pool = pool.filter((p) => p.signals.color);
+  return pool.filter((p) => textHasPoolBrand(`${p.title} ${p.source}`)).length;
+}
+
 /**
  * Fire queries in parallel but do not wait for the slowest. As soon as enough
  * unique products exist (after excludeTitles), return; stragglers are ignored.
+ * On first analysis, wait for at least one known-brand hit when brand queries
+ * are still in flight — otherwise generics win the early-exit race.
  */
 async function searchQueries(
   queries: string[],
@@ -148,7 +162,8 @@ async function searchQueries(
   apiKey: string,
   num = 12,
   minPool = 3,
-  excludeTitles: Set<string> = new Set()
+  excludeTitles: Set<string> = new Set(),
+  preferBrands = false
 ): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
   const ordered = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
   if (ordered.length === 0) {
@@ -158,6 +173,7 @@ async function searchQueries(
   const collected: SerpShoppingItem[] = [];
   let pending = ordered.length;
   const needColor = Boolean(productProfile.color_tr);
+  const waitForBrand = preferBrands && excludeTitles.size === 0;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -169,7 +185,7 @@ async function searchQueries(
       console.log(
         "SerpAPI parallel:",
         ordered.join(" | "),
-        `(pool=${scoring.pool.length}, alive=${poolFaithfulCount(scoring, excludeTitles, needColor)}, ${why})`
+        `(pool=${scoring.pool.length}, alive=${poolFaithfulCount(scoring, excludeTitles, needColor)}, branded=${poolBrandedFaithfulCount(scoring, excludeTitles, needColor)}, ${why})`
       );
       resolve({ scoring, queryUsed: ordered[0], items });
     };
@@ -182,8 +198,16 @@ async function searchQueries(
           pending--;
           const scoring = scoreProducts(dedupeItems(collected), productProfile);
           const alive = poolFaithfulCount(scoring, excludeTitles, needColor);
-          if (alive >= minPool) finish("early");
-          else if (pending <= 0) finish("complete");
+          const branded = poolBrandedFaithfulCount(scoring, excludeTitles, needColor);
+          if (alive >= minPool) {
+            if (waitForBrand && branded < 1 && pending > 0) {
+              // Keep waiting for brand Serp rounds.
+            } else {
+              finish(waitForBrand && branded > 0 ? "early-brand" : "early");
+            }
+          } else if (pending <= 0) {
+            finish("complete");
+          }
         })
         .catch(() => {
           if (settled) return;
@@ -258,18 +282,19 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  // Full karma: 2 brand queries for apparel (tops/crop/dress) so familiar brands
-  // show up in the first batch; compact stays lean for combine.
+  // Full karma: 3 brand queries for apparel so familiar brands win the first
+  // batch; wait for a branded hit before early-exit. Compact stays lean.
   const poolCats = resolvePoolCategories(productProfile);
   const wantsBrandVariety =
     !compact && poolCats.some((c) => c === "tops" || c === "crop" || c === "dress");
-  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 2 : 1);
+  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 3 : 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
   const primary = genericQs[0] || queries[0];
   const luxQs = compact ? [] : priceMode === "karma" ? luxuryQueries.slice(0, 1) : [];
   const uniqueParallel = [...new Set([...brandQs, primary, ...luxQs].filter(Boolean))];
+  const preferBrands = wantsBrandVariety && excludeTitles.size === 0;
 
   const firstPass = await searchQueries(
     uniqueParallel,
@@ -277,8 +302,47 @@ async function searchWithFallback(
     apiKey,
     serpNum,
     minPool,
-    excludeTitles
+    excludeTitles,
+    preferBrands
   );
+  // Still no known brand after brand-prefixed queries — try two more brand seeds.
+  if (
+    preferBrands &&
+    poolBrandedFaithfulCount(
+      firstPass.scoring,
+      excludeTitles,
+      Boolean(productProfile.color_tr)
+    ) < 1
+  ) {
+    const moreBrandQs = brandQueries
+      .filter((q) => !uniqueParallel.includes(q))
+      .slice(0, 2);
+    if (moreBrandQs.length) {
+      const brandExtra = await searchQueries(
+        moreBrandQs,
+        productProfile,
+        apiKey,
+        serpNum,
+        minPool,
+        excludeTitles,
+        false
+      );
+      const scoring = scoreProducts(
+        dedupeItems([...firstPass.items, ...brandExtra.items]),
+        productProfile
+      );
+      console.log(
+        "SerpAPI brand refill:",
+        moreBrandQs.join(" | "),
+        `(pool=${scoring.pool.length})`
+      );
+      if (
+        poolFaithfulCount(scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
+      ) {
+        return { scoring, queryUsed: firstPass.queryUsed || brandExtra.queryUsed || "" };
+      }
+    }
+  }
   if (
     poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) > 0
   ) {

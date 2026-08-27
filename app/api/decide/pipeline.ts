@@ -1505,6 +1505,99 @@ function detailQueryTokens(details: unknown): string[] {
     .filter((d) => d.length >= 4);
 }
 
+/** Visible construction / texture cues from distinctive_details (dantel, ribana…). */
+const STYLE_DETAIL_CUES: { re: RegExp; tokens: string[] }[] = [
+  { re: /dantel|güpür|\blace\b/, tokens: ["dantel", "güpür"] },
+  { re: /ribana|ribbed|fitilli/, tokens: ["ribana", "fitilli"] },
+  { re: /\bfile\b|\bmesh\b|\btül\b/, tokens: ["file", "tül"] },
+  { re: /cut[- ]?out|pencereli|dekolte/, tokens: ["cut out", "dekolte"] },
+  { re: /balen|korse|corset/, tokens: ["balenli", "korse"] },
+  { re: /bağcık|bağcıklı|lace[- ]?up/, tokens: ["bağcıklı"] },
+  { re: /fırfır|volan|ruffle/, tokens: ["fırfır", "volanlı"] },
+];
+
+function styleCueTokens(profile: ProductProfile): string[] {
+  const blob = asLower(asStringList(profile.distinctive_details).join(" "));
+  if (!blob) return [];
+  const out: string[] = [];
+  for (const cue of STYLE_DETAIL_CUES) {
+    if (!cue.re.test(blob)) continue;
+    for (const tok of cue.tokens) {
+      if (!out.includes(tok)) out.push(tok);
+    }
+  }
+  return out.slice(0, 4);
+}
+
+function strapSearchTokens(profile: ProductProfile): string[] {
+  const want = asLower(profile.sleeve_or_strap_tr);
+  if (!want) return [];
+  const tokens = new Set<string>([want]);
+  if (/ince askı/.test(want)) {
+    tokens.add("askılı");
+    tokens.add("ip askı");
+    tokens.add("spaghetti");
+  }
+  if (/kalın askı/.test(want)) tokens.add("askılı");
+  if (/kısa kol/.test(want)) {
+    tokens.add("kısa kollu");
+    tokens.add("short sleeve");
+  }
+  if (/uzun kol/.test(want)) {
+    tokens.add("uzun kollu");
+    tokens.add("long sleeve");
+  }
+  if (/kolsuz/.test(want)) tokens.add("sleeveless");
+  if (/straplez/.test(want)) {
+    tokens.add("strapless");
+    tokens.add("straplez");
+    tokens.add("bandeau");
+  }
+  return [...tokens].filter((t) => t.length >= 3);
+}
+
+function titleHasWantedStrap(lowerTitle: string, profile: ProductProfile): boolean {
+  return strapSearchTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
+
+/** Askılı crop vs kısa kollu crop — soft clash when title names the other construction. */
+function titleStrapConflicts(lowerTitle: string, profile: ProductProfile): boolean {
+  const want = asLower(profile.sleeve_or_strap_tr);
+  if (!want || titleHasWantedStrap(lowerTitle, profile)) return false;
+  if (/askı|straplez/.test(want)) {
+    return /\b(kısa kol|uzun kol|short sleeve|long sleeve)\b/.test(lowerTitle);
+  }
+  if (/kısa kol|uzun kol/.test(want)) {
+    return /\b(askılı|askili|straplez|spaghetti)\b/.test(lowerTitle);
+  }
+  return false;
+}
+
+function collarSearchTokens(profile: ProductProfile): string[] {
+  const want = asLower(profile.collar_tr);
+  if (!want || want.length < 3) return [];
+  const tokens = new Set<string>([want]);
+  if (/kare yaka/.test(want)) tokens.add("kare yaka");
+  if (/v yaka/.test(want)) {
+    tokens.add("v yaka");
+    tokens.add("v-yaka");
+  }
+  if (/bisiklet/.test(want)) {
+    tokens.add("bisiklet yaka");
+    tokens.add("yuvarlak yaka");
+  }
+  if (/halter/.test(want)) tokens.add("halter");
+  if (/omzu açık/.test(want)) {
+    tokens.add("omzu açık");
+    tokens.add("off shoulder");
+  }
+  return [...tokens];
+}
+
+function titleHasWantedCollar(lowerTitle: string, profile: ProductProfile): boolean {
+  return collarSearchTokens(profile).some((tok) => lowerTitle.includes(tok));
+}
+
 export function rebuildProfileQueries(profile: ProductProfile): ProductProfile {
   const type = typeTokenTr(profile);
   const low_confidence = !type;
@@ -1545,6 +1638,7 @@ export function rebuildProfileQueries(profile: ProductProfile): ProductProfile {
     strong,
     profile.material_tr,
     printMotif ? "" : profile.secondary_colors[0] || "",
+    ...styleCueTokens(profile),
     ...detailQueryTokens(profile.distinctive_details),
   ]);
 
@@ -1806,6 +1900,10 @@ const necklineTR: Record<string, string> = {
   "mock neck": "yarım boğazlı",
   halter: "halter yaka",
   square: "kare yaka",
+  scoop: "u yaka",
+  "scoop-neck": "u yaka",
+  "off-shoulder": "omzu açık",
+  "off shoulder": "omzu açık",
   strapless: "straplez",
   collar: "yakalı",
   "button down": "düğmeli yaka",
@@ -2427,6 +2525,7 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
     strong,
     rebuilt.material_tr,
     hasPrintMotif(rebuilt) ? "" : rebuilt.secondary_colors[0] || "",
+    ...styleCueTokens(rebuilt),
     ...detailQueryTokens(rebuilt.distinctive_details),
   ]);
   const colorCore = uniqueJoin([core, rebuilt.color_tr]);
@@ -2831,6 +2930,30 @@ function scoreShoppingItems(
       }
     }
   }
+  // Soft style locks: when enough titles carry the same strap / neckline / texture
+  // as the photo, prefer them — separates spaghetti crop from short-sleeve crop.
+  {
+    const strapMatched = validResults.filter((item) =>
+      titleHasWantedStrap(lcTitle(item), productProfile)
+    );
+    if (strapMatched.length >= 2) validResults = strapMatched;
+  }
+  {
+    const collarMatched = validResults.filter((item) =>
+      titleHasWantedCollar(lcTitle(item), productProfile)
+    );
+    if (collarMatched.length >= 2) validResults = collarMatched;
+  }
+  {
+    const cues = styleCueTokens(productProfile);
+    if (cues.length) {
+      const cueMatched = validResults.filter((item) => {
+        const t = lcTitle(item);
+        return cues.some((c) => t.includes(c));
+      });
+      if (cueMatched.length >= 2) validResults = cueMatched;
+    }
+  }
   // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
   if (isCropCasualSubcategory(productProfile)) {
     const heavyKnit = /sweatshirt|sweat\b|hoodie|kapüşon|kapşon|kazak|hırka|cardigan|triko/;
@@ -2906,9 +3029,11 @@ function scoreShoppingItems(
     const genderHit = titleMatchesUserGender(item.title || "", productProfile);
 
     // Layered attribute hits from collar / pattern / extra tokens in search_query
-    const collarHit = Boolean(
-      asText(productProfile.collar_tr) && title.includes(asLower(productProfile.collar_tr))
-    );
+    const collarHit = titleHasWantedCollar(title, productProfile);
+    const strapHit = titleHasWantedStrap(title, productProfile);
+    const strapConflict = titleStrapConflicts(title, productProfile);
+    const styleCues = styleCueTokens(productProfile);
+    const styleCueHit = styleCues.some((c) => title.includes(c));
     // Only whole-garment pattern words count; a shoulder-only stripe must not
     // boost "çizgili tişört" listings.
     const patternHit = patternTokens.some((tok) => title.includes(asLower(tok)));
@@ -2933,15 +3058,18 @@ function scoreShoppingItems(
     if (wrongColorHit) matchScore = Math.max(0, matchScore - 50);
     if (fitHit) matchScore += 20;
     if (genderHit) matchScore += 22;
-    if (collarHit) matchScore += 14;
+    if (collarHit) matchScore += 18;
+    if (strapHit) matchScore += 20;
+    if (strapConflict) matchScore = Math.max(0, matchScore - 22);
+    if (styleCueHit) matchScore += 18;
     if (patternHit) matchScore += 28;
     if (strayPatternHit) matchScore = Math.max(0, matchScore - 35);
     if (materialHit) matchScore += 14;
     if (materialConflict) matchScore = Math.max(0, matchScore - 20);
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
-    if (poolBrandHit) matchScore += 15;
-    if (iconicBrandHit) matchScore += 8;
+    if (poolBrandHit) matchScore += 28;
+    if (iconicBrandHit) matchScore += 12;
     if (styleWords.some((w) => title.includes(w))) matchScore += 12;
     const occFit = occasionTitleFit(item.title || "", occasion, pieceBlob);
     if (occFit === "boost") matchScore += 24;
@@ -3019,6 +3147,11 @@ function scoreShoppingItems(
       recommendationScore = Math.max(0, recommendationScore - 18);
     }
     if (strayPatternHit) recommendationScore = Math.min(recommendationScore, 40);
+    if (strapConflict) recommendationScore = Math.max(0, recommendationScore - 14);
+    if (strapHit) recommendationScore = Math.min(100, recommendationScore + 10);
+    if (collarHit) recommendationScore = Math.min(100, recommendationScore + 8);
+    if (styleCueHit) recommendationScore = Math.min(100, recommendationScore + 10);
+    if (poolBrandHit) recommendationScore = Math.min(100, recommendationScore + 12);
     if (hasPrintMotif(productProfile) && printCueHit && colorHit) {
       recommendationScore = Math.min(100, recommendationScore + 18);
     }
@@ -3059,16 +3192,20 @@ function scoreShoppingItems(
 /**
  * Known brands first (score order preserved within each group). Unbranded /
  * obscure sellers only fill the pool when familiar brands are scarce.
+ * Women trend brands (Bershka / Stradivarius / Pull&Bear) sit at the very front.
  */
 function preferPoolBrandsFirst(scored: ScoredProduct[]): ScoredProduct[] {
+  const trend: ScoredProduct[] = [];
   const branded: ScoredProduct[] = [];
   const rest: ScoredProduct[] = [];
   for (const p of scored) {
-    if (textHasPoolBrand(`${p.title} ${p.source}`)) branded.push(p);
+    const hay = `${p.title} ${p.source}`;
+    if (isWomenTrendHit(p.title, p.source)) trend.push(p);
+    else if (textHasPoolBrand(hay)) branded.push(p);
     else rest.push(p);
   }
-  if (!branded.length) return scored;
-  return [...branded, ...rest];
+  if (!trend.length && !branded.length) return scored;
+  return [...trend, ...branded, ...rest];
 }
 
 let cachedPoolBrandKeys: string[] | null = null;
