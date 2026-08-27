@@ -12,6 +12,7 @@ import {
   type UserProfile,
 } from "../pipeline";
 import { processPiece } from "../run-piece";
+import { getVisionImageDataUrl } from "../vision-image";
 import { getCachedVision, setCachedVision, visionCacheKey } from "../vision-cache";
 import type { PieceResult, Results } from "@/components/analyze/types";
 import {
@@ -186,6 +187,7 @@ export async function POST(req: NextRequest) {
 
     if (!visionContent) {
       visionSource = "openai";
+      const visionImageUrl = await getVisionImageDataUrl(supabase, storage_path);
       visionContent = await timer.span("vision", () =>
         openAIContent(OPENAI_API_KEY, {
           model: "gpt-4o",
@@ -193,7 +195,7 @@ export async function POST(req: NextRequest) {
             {
               role: "user",
               content: [
-                { type: "image_url", image_url: { url: photo_url } },
+                { type: "image_url", image_url: { url: visionImageUrl } },
                 { type: "text", text: visionPromptForOccasion(requestedOccasion) },
               ],
             },

@@ -13,6 +13,7 @@ import {
   type UserProfile,
 } from "./pipeline";
 import { processPiece } from "./run-piece";
+import { getVisionImageDataUrl } from "./vision-image";
 import { setCachedVision, visionCacheKey } from "./vision-cache";
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import {
@@ -124,15 +125,19 @@ export async function POST(req: NextRequest) {
       ])
     );
 
-    // Preferences only — OpenAI fetches the public storage URL directly (no base64 round-trip).
-    const { data: userPrefs } = await timer.span("prefs", async () => {
-      const res = await supabase
-        .from("user_preferences")
-        .select("preferences, gender, sizes, price_mode")
-        .eq("id", user.id)
-        .single();
-      return res;
-    });
+    // Preferences only — OpenAI cannot reliably fetch private/storage public URLs,
+    // so we download via Supabase and send a data URL.
+    const [{ data: userPrefs }, visionImageUrl] = await timer.span("prefs_image", () =>
+      Promise.all([
+        supabase
+          .from("user_preferences")
+          .select("preferences, gender, sizes, price_mode")
+          .eq("id", user.id)
+          .single()
+          .then((res) => res),
+        getVisionImageDataUrl(supabase, storage_path!),
+      ])
+    );
 
     // Body prefs win when present — avoids stale DB reads right after profile save.
     const bodySizes = parseSizes(body?.sizes);
@@ -160,7 +165,7 @@ export async function POST(req: NextRequest) {
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: photo_url } },
+              { type: "image_url", image_url: { url: visionImageUrl } },
               { type: "text", text: visionPromptForOccasion(requestedOccasion) },
             ],
           },
