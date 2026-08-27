@@ -128,8 +128,9 @@ function poolFaithfulCount(
   excludeTitles: Set<string>,
   requireColor: boolean
 ): number {
+  const familyMatch = lookRelaxLevel(excludeTitles.size) === 0;
   let pool = excludeTitles.size
-    ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
+    ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }))
     : scoring.pool;
   if (requireColor) {
     const colored = pool.filter((p) => p.signals.color);
@@ -365,7 +366,8 @@ function applyPoolFilters(
     pool = pool.filter((p) => !denyTitle(p.title));
   }
   if (excludeTitles.size) {
-    pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles));
+    const familyMatch = lookRelaxLevel(excludeTitles.size) === 0;
+    pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }));
   }
   const shown = excludeTitles.size;
   let relax = lookRelaxLevel(shown);
@@ -373,8 +375,9 @@ function applyPoolFilters(
   // If filters left fewer than 2 cards, step relax up once so "3 daha" still works.
   if (pool.length < 2 && relax < 2) {
     relax = (relax + 1) as 0 | 1 | 2;
+    const familyMatch = false;
     const base = excludeTitles.size
-      ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
+      ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }))
       : scoring.pool;
     const widened = keepLookFaithful(base, productProfile, relax);
     if (widened.length > pool.length) pool = widened;
@@ -546,7 +549,9 @@ export async function processPiece(
   if (scoring.recommended) rememberProduct(scoring.recommended, blockedStyle);
   if (scoring.cheaper) rememberProduct(scoring.cheaper, blockedStyle);
   const isFreeStyle = (p: (typeof scoring.pool)[number]) =>
-    !titleIsExcluded(p.title, usedTitles) && !hasProductOverlap(p, blockedStyle);
+    !titleIsExcluded(p.title, usedTitles, {
+      familyMatch: lookRelaxLevel(excludeTitles.size) === 0,
+    }) && !hasProductOverlap(p, blockedStyle);
   const styleProduct =
     (occasion
       ? scoring.pool.find(

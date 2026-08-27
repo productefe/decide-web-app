@@ -285,13 +285,20 @@ export function rememberProduct(p: ProductKeySource, used: Set<string>): void {
   for (const k of productDedupeKeys(p)) used.add(k);
 }
 
-export function titleIsExcluded(title: string, exclude: Set<string>): boolean {
+export function titleIsExcluded(
+  title: string,
+  exclude: Set<string>,
+  opts?: { familyMatch?: boolean }
+): boolean {
   if (!title || exclude.size === 0) return false;
   if (exclude.has(title)) return true;
   const n = normalizeProductTitle(title);
   if (!n) return false;
-  const fam = productFamilyKey(title);
-  const famOk = familyKeyUsable(fam);
+  // Later show-more taps: only exact/normalized titles — family keys wipe
+  // whole colorways and starve "3 alternatif daha".
+  const useFamily = opts?.familyMatch !== false;
+  const fam = useFamily ? productFamilyKey(title) : "";
+  const famOk = useFamily && familyKeyUsable(fam);
   for (const e of exclude) {
     if (normalizeProductTitle(e) === n) return true;
     if (famOk && familyKeyUsable(productFamilyKey(e)) && productFamilyKey(e) === fam) {
