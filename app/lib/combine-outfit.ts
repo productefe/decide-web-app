@@ -36,6 +36,7 @@ const ACCESSORY_KINDS: { type: string; re: RegExp }[] = [
   { type: "küpe", re: /küpe|kupe|earring/i },
   { type: "bileklik", re: /bileklik|bracelet/i },
   { type: "yüzük", re: /yüzük|yuzuk|ring\b/i },
+  { type: "kravat", re: /kravat|necktie|\btie\b|cravat/i },
   { type: "kemer", re: /kemer|belt/i },
   { type: "çanta", re: /çanta|canta|bag|clutch|tote|backpack|sırt/i },
   { type: "saat", re: /saat|watch/i },
@@ -174,7 +175,7 @@ ${
     ? `- EVERY searchQuery MUST include "erkek". Never suggest kadın/bayan products.
 - shoes: ONLY sneaker, bot, loafer, oxford, derby — NEVER topuklu, stiletto, pump.
 - Never suggest elbise, etek, crop top, bralet, küpe, kolye.
-- accessory: saat, kemer, gözlük, şapka — not küpe/kolye.`
+- accessory: saat, kemer, kravat, gözlük, şapka — not küpe/kolye.`
     : genderWord === "kadın"
       ? `- EVERY searchQuery MUST include "kadın". Never suggest erkek-only products.
 - shoes may be topuklu / sneaker / bot / loafer as the occasion requires.`
@@ -200,11 +201,13 @@ Rules:
 - Never invent product names, brands, or store names.
 - searchQuery must be Turkish shopping keywords, 4–10 words, MUST fit ${contextTr}, and MUST encode layered product attributes when relevant:
   - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
+  - For iş/work tops: MUST include "uzun kollu gömlek" (or uzun kollu bluz). NEVER "kısa kollu", NEVER short-sleeve tişört as the office top.
   - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
 - shoes: tip + renk — NEVER write generic "ayakkabı" alone. For erkek: sneaker/bot/loafer/oxford/sandalet only. For kadın: sneaker/bot/loafer/topuklu/sandalet as occasion allows.
-- accessory: concrete type only (kemer/çanta/saat/gözlük/şapka/kolye/küpe…)
+- accessory: concrete type only (kemer/kravat/çanta/saat/gözlük/şapka/kolye/küpe…)
   - NEVER write generic "aksesuar"
   - NEVER write garment words (elbise, tişört, pantolon, gömlek, yelek, ayakkabı, abiye)
+  - kravat and kemer are DISTINCT — never substitute one for the other.
   - saat: include kayış (deri/metal/silikon) + renk
   - gözlük: include çerçeve şekli (yuvarlak/kare/aviator) + renk
 - Color may complement the source piece, but garment TYPE must follow the occasion rules above.
@@ -382,7 +385,9 @@ function heuristicSlotSuggestions(
     const type =
       slot === "shoes"
         ? inferShoeSubcategory("", context, gender).subcategory_tr
-        : COMBINE_SLOT_CATEGORY_TR[slot];
+        : context === "work" && slot === "top"
+          ? "uzun kollu gömlek"
+          : COMBINE_SLOT_CATEGORY_TR[slot];
     const searchQuery = withOccasionSearchPhrase(
       [gender, color, type].filter(Boolean).join(" "),
       occasion,

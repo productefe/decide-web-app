@@ -21,11 +21,12 @@ Be precise about TYPE vs LENGTH vs STRAPS:
 - Swimwear: bikini, mayo, and swim shorts are DISTINCT from t-shirt / trousers. If the photo shows a bikini or swimsuit, subcategory MUST be bikini or mayo — never t-shirt, never dress.
 - Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
 - Glasses vs sunglasses are DISTINCT. Sunglasses (güneş gözlüğü) are NEVER optical/reading glasses, and NEVER a glasses case / kutu / kılıf. If the photo shows sunglasses, subcategory MUST be sunglasses. If it shows clear optical frames, subcategory MUST be glasses.
-- Accessories (watch, bag, glasses, hat, belt, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
+- Accessories (watch, bag, glasses, hat, belt, tie, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
+- belt and tie are DISTINCT: necktie/kravat → subcategory tie (label Kravat); belt/kemer → subcategory belt. Never swap them.
 - If you are not sure about a field, leave it "" or []. Never guess.
 
 category (family, English): top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
-subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | bikini | mayo | sneaker | boot | sandal | loafer | heel | bag | hat | glasses | sunglasses | watch | belt | scarf | necklace | earring | bracelet | ring
+subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | bikini | mayo | sneaker | boot | sandal | loafer | heel | bag | hat | glasses | sunglasses | watch | belt | tie | scarf | necklace | earring | bracelet | ring
 silhouette_fit: oversize | regular | slim | bodycon | loose | ""
 length: crop | normal | uzun | midi | maxi | mini | ""
 neckline: crew-neck | v-neck | polo | turtleneck | halter | square | scoop | off-shoulder | strapless | ""
@@ -35,7 +36,7 @@ pattern.placement: chest | shoulder | sleeve | all-over | hem | ""
 gender_presentation: men | women | unisex | ""
 material_impression: visual guess only (cotton | knit | denim | satin | leather-look | linen | "") — not a claim.
 
-label must be ONLY the Turkish item name (Tişört, Crop Top, Askılı Üst, Bluz, Elbise, Pantolon, …) — no English, no explanations.
+label must be ONLY the Turkish item name (Tişört, Crop Top, Askılı Üst, Bluz, Elbise, Pantolon, Kravat, Kemer, …) — no English, no explanations.
 
 Return ONLY valid JSON, no markdown:
 {"items":[{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"orange","secondary_colors":["black","white"],"patterns":[{"type":"graphic","colors":["black"],"placement":"chest"},{"type":"striped","colors":["white"],"placement":"shoulder"}],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":["önde siyah motif","omuzlarda beyaz şerit"],"style_tags":["casual"],"has_logo":false}]}

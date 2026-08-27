@@ -385,6 +385,7 @@ export const ACCESSORY_KIND_NEEDLES: { type: string; re: RegExp }[] = [
   { type: "küpe", re: /küpe|kupe|earring/i },
   { type: "bileklik", re: /bileklik|bracelet/i },
   { type: "yüzük", re: /yüzük|yuzuk|ring\b/i },
+  { type: "kravat", re: /kravat|necktie|\btie\b|cravat/i },
   { type: "kemer", re: /kemer|belt/i },
   { type: "çanta", re: /çanta|canta|bag|clutch|tote|backpack|sırt/i },
   { type: "saat", re: /saat|watch/i },
@@ -429,7 +430,7 @@ export function isAccessoryProfile(profile: Pick<ProductProfile, "category" | "c
   const blob = asLower(
     `${asText(profile.category)} ${asText(profile.category_tr)} ${asText(profile.subcategory)} ${asText(profile.subcategory_tr)}`
   );
-  return /aksesuar|kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|çanta|şapka|kemer|saat|gözlük|glasses|sunglasses|atkı|scarf|watch|belt/.test(
+  return /aksesuar|kolye|küpe|bileklik|yüzük|necklace|earring|bracelet|çanta|şapka|kemer|kravat|saat|gözlük|glasses|sunglasses|atkı|scarf|watch|belt|tie/.test(
     blob
   );
 }
@@ -1004,11 +1005,14 @@ export function contradictsCategoryFit(
     return false;
   }
 
-  // --- Crop top: only crop ---
+  // --- Crop top: crop / cropped / crop top (not sweat / dress) ---
   if (isCrop) {
-    if (requireType && !/\bcrop\b/.test(t)) return true;
-    if (/\b(oversize|oversized|bol kesim|boyfriend)\b/.test(t) && !/\bcrop\b/.test(t)) return true;
-    if (/\b(pantolon|etek|elbise|ayakkabı|gözlük|bot|çanta|jean|kot pantolon)\b/.test(t)) return true;
+    const cropCue = /\b(crop(?:ped)?|crop\s*top|croptop)\b/;
+    if (requireType && !cropCue.test(t)) return true;
+    if (/\b(oversize|oversized|bol kesim|boyfriend)\b/.test(t) && !cropCue.test(t)) return true;
+    if (/\b(pantolon|etek|elbise|ayakkabı|gözlük|bot|çanta|jean|kot pantolon|sweatshirt|hoodie|kazak)\b/.test(t)) {
+      return true;
+    }
   }
 
   // --- Oversize fit: only oversize / bol ---
@@ -1120,8 +1124,16 @@ export function contradictsCategoryFit(
     return false;
   }
 
+  if (/kravat|necktie|\btie\b|cravat/.test(blob)) {
+    if (requireType && !/\b(kravat|necktie|\btie\b|cravat)\b/.test(t)) return true;
+    if (/\b(kemer|belt)\b/.test(t) && !/\b(kravat|necktie|\btie\b)\b/.test(t)) return true;
+    if (titleLooksLikeGarment(title)) return true;
+    return false;
+  }
+
   if (/kemer|belt/.test(blob)) {
     if (requireType && !/\b(kemer|belt)\b/.test(t)) return true;
+    if (/\b(kravat|necktie|\btie\b)\b/.test(t) && !/\b(kemer|belt)\b/.test(t)) return true;
     if (titleLooksLikeGarment(title)) return true;
     return false;
   }
@@ -1352,6 +1364,8 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
     aliases.push("küpe", "earring");
   } else if (/bileklik|bracelet/.test(blob)) {
     aliases.push("bileklik", "bracelet");
+  } else if (/kravat|necktie|\btie\b|cravat/.test(blob)) {
+    aliases.push("kravat", "necktie", "tie");
   } else if (/kemer|belt/.test(blob)) {
     aliases.push("kemer", "belt");
   } else if (/çanta|bag|clutch|backpack|tote/.test(blob)) {
@@ -1363,7 +1377,7 @@ export function titleMatchesCategory(title: string, profile: ProductProfile): bo
   } else if (/atkı|scarf/.test(blob)) {
     aliases.push("atkı", "scarf");
   } else if (/crop/.test(blob)) {
-    aliases.push("crop top", "crop");
+    aliases.push("crop top", "crop", "cropped", "croptop");
   } else if (/bluz|blouse/.test(blob)) {
     aliases.push("bluz", "blouse");
   } else if (/askılı|askili|cami|spaghetti/.test(blob)) {
@@ -1423,7 +1437,7 @@ export function typeTokenTr(profile: Pick<ProductProfile, "subcategory_tr" | "ca
   if (/^aksesuar$/i.test(cat) || asLower(profile.category) === "accessory") {
     const detected =
       detectAccessoryKind(
-        `${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)}`
+        `${asText(profile.subcategory)} ${asText(profile.subcategory_tr)} ${asText(profile.search_query)} ${asText(profile.category_tr)}`
       ) || defaultAccessoryKind(
         parseOccasion(profile.user_profile?.occasion),
         asText(profile.user_profile?.gender)
@@ -1744,7 +1758,7 @@ const categoryTR: Record<string, string> = {
   "high heel": "topuklu ayakkabı", oxford: "oxford ayakkabı",
   bag: "çanta", handbag: "el çantası", backpack: "sırt çantası",
   hat: "şapka", cap: "şapka", beanie: "bere",
-  scarf: "atkı", belt: "kemer", wallet: "cüzdan",
+  scarf: "atkı", belt: "kemer", tie: "kravat", necktie: "kravat", kravat: "kravat", wallet: "cüzdan",
   glasses: "gözlük", sunglasses: "güneş gözlüğü", eyewear: "gözlük",
   "sun glasses": "güneş gözlüğü", "güneş gözlüğü": "güneş gözlüğü",
   gözlük: "gözlük", watch: "saat", "wrist watch": "saat",
@@ -1810,6 +1824,9 @@ const subcategoryTR: Record<string, string> = {
   sunglasses: "güneş gözlüğü",
   watch: "saat",
   belt: "kemer",
+  tie: "kravat",
+  necktie: "kravat",
+  kravat: "kravat",
   scarf: "atkı",
   necklace: "kolye",
   earring: "küpe",
@@ -1862,6 +1879,9 @@ const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
   sunglasses: "eyewear",
   watch: "accessory",
   belt: "accessory",
+  tie: "accessory",
+  necktie: "accessory",
+  kravat: "accessory",
   scarf: "accessory",
   necklace: "accessory",
   earring: "accessory",
@@ -2153,6 +2173,7 @@ function canonicalSubcategory(raw: string): string {
   if (key === "crop" || key === "crop top" || key === "croptop") return "crop-top";
   if (key === "tshirt" || key === "tee" || key === "tişört" || key === "t-shirt") return "t-shirt";
   if (key === "bluz") return "blouse";
+  if (key === "tie" || key === "necktie" || key === "kravat" || key === "cravat") return "kravat";
   if (key.includes("askı") || key === "cami" || key === "cami top" || key.includes("spaghetti")) {
     return "askili-ust";
   }
@@ -2250,10 +2271,17 @@ function normalizePatterns(product: VisionProduct, hasLogo: boolean): VisionPatt
 }
 
 function visionProductToProfile(product: VisionProduct, ctx: RequestContext): ProductProfile {
-  const { category: family, subcategory } = splitCategoryFields(
+  let { category: family, subcategory } = splitCategoryFields(
     asText(product.category),
     asText(product.subcategory)
   );
+
+  // Label wins for accessories: "Kravat" must not fall through to work-default kemer.
+  const labelKind = detectAccessoryKind(product.label);
+  if (labelKind) {
+    subcategory = labelKind;
+    family = "accessory";
+  }
 
   const colorList = asStringList(product.colors);
   const secondaryList = asStringList(product.secondary_colors);
@@ -2880,7 +2908,8 @@ function scoreShoppingItems(
   const catToken = asLower(productProfile.category_tr).split(" ")[0];
   if (subToken.length >= 3 && subToken !== catToken) {
     const subMatched = validResults.filter((item) => lcTitle(item).includes(subToken));
-    if (subMatched.length >= 3) validResults = subMatched;
+    const subMin = isCropCasualSubcategory(productProfile) ? 1 : 3;
+    if (subMatched.length >= subMin) validResults = subMatched;
   }
   const patternTokens = queryPatternTokens(productProfile);
   if (patternTokens.length && !hasPrintMotif(productProfile)) {
@@ -2932,17 +2961,19 @@ function scoreShoppingItems(
   }
   // Soft style locks: when enough titles carry the same strap / neckline / texture
   // as the photo, prefer them — separates spaghetti crop from short-sleeve crop.
+  const isCropProfile = isCropCasualSubcategory(productProfile);
+  const styleLockMin = isCropProfile ? 1 : 2;
   {
     const strapMatched = validResults.filter((item) =>
       titleHasWantedStrap(lcTitle(item), productProfile)
     );
-    if (strapMatched.length >= 2) validResults = strapMatched;
+    if (strapMatched.length >= styleLockMin) validResults = strapMatched;
   }
   {
     const collarMatched = validResults.filter((item) =>
       titleHasWantedCollar(lcTitle(item), productProfile)
     );
-    if (collarMatched.length >= 2) validResults = collarMatched;
+    if (collarMatched.length >= styleLockMin) validResults = collarMatched;
   }
   {
     const cues = styleCueTokens(productProfile);
@@ -2951,14 +2982,17 @@ function scoreShoppingItems(
         const t = lcTitle(item);
         return cues.some((c) => t.includes(c));
       });
-      if (cueMatched.length >= 2) validResults = cueMatched;
+      if (cueMatched.length >= styleLockMin) validResults = cueMatched;
     }
   }
-  // Crop tops are light garments: a "crop sweatshirt/kazak" is a different piece.
-  if (isCropCasualSubcategory(productProfile)) {
+  // Crop tops are light garments: prefer crop-word titles, drop heavy knits early.
+  if (isCropProfile) {
+    const cropCue = /\b(crop(?:ped)?|crop\s*top|croptop)\b/;
+    const cropWorded = validResults.filter((item) => cropCue.test(lcTitle(item)));
+    if (cropWorded.length >= 1) validResults = cropWorded;
     const heavyKnit = /sweatshirt|sweat\b|hoodie|kapüşon|kapşon|kazak|hırka|cardigan|triko/;
     const lightOnly = validResults.filter((item) => !heavyKnit.test(lcTitle(item)));
-    if (lightOnly.length >= 3) validResults = lightOnly;
+    if (lightOnly.length >= 1) validResults = lightOnly;
   }
 
   // Hard-drop listings that clash with the chosen place (spor ≠ kumaş pantolon).
@@ -3066,6 +3100,17 @@ function scoreShoppingItems(
     if (strayPatternHit) matchScore = Math.max(0, matchScore - 35);
     if (materialHit) matchScore += 14;
     if (materialConflict) matchScore = Math.max(0, matchScore - 20);
+    if (isCropCasualSubcategory(productProfile)) {
+      const cropWord = /\b(crop(?:ped)?|crop\s*top|croptop)\b/.test(title);
+      const heavyCrop =
+        /sweatshirt|sweat\b|hoodie|kapüşon|kapşon|kazak|hırka|cardigan|triko/.test(title);
+      if (cropWord) matchScore += 22;
+      else matchScore = Math.min(matchScore, 52);
+      if (heavyCrop) matchScore = Math.max(0, matchScore - 28);
+      if (asText(productProfile.sleeve_or_strap_tr) && !strapHit && !strapConflict) {
+        matchScore = Math.max(0, matchScore - 8);
+      }
+    }
     if (layeredTokenHits >= 2) matchScore += 10;
     else if (layeredTokenHits === 1) matchScore += 5;
     if (poolBrandHit) matchScore += 28;
@@ -3152,6 +3197,14 @@ function scoreShoppingItems(
     if (collarHit) recommendationScore = Math.min(100, recommendationScore + 8);
     if (styleCueHit) recommendationScore = Math.min(100, recommendationScore + 10);
     if (poolBrandHit) recommendationScore = Math.min(100, recommendationScore + 12);
+    if (isCropCasualSubcategory(productProfile)) {
+      if (/\b(crop(?:ped)?|crop\s*top|croptop)\b/.test(title)) {
+        recommendationScore = Math.min(100, recommendationScore + 12);
+      }
+      if (/sweatshirt|sweat\b|hoodie|kapüşon|kazak|hırka|triko/.test(title)) {
+        recommendationScore = Math.min(recommendationScore, 42);
+      }
+    }
     if (hasPrintMotif(productProfile) && printCueHit && colorHit) {
       recommendationScore = Math.min(100, recommendationScore + 18);
     }

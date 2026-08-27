@@ -269,6 +269,9 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "bikini",
       "mayo",
       "plaj",
+      "kısa kollu",
+      "kısa kol",
+      "short sleeve",
     ],
     hardAvoidTerms: [
       "eşofman",
@@ -279,6 +282,9 @@ searchQuery MUST include at least one of: ev, rahat, lounge.`,
       "spor ayakkabı",
       "koşu ayakkabı",
       "yırtık",
+      "kısa kollu",
+      "kısa kol",
+      "short sleeve",
     ],
     visionNote: `User will shop alternatives for WORK / office / business casual / smart casual.
 Extract the visible garments faithfully — a hoodie stays a hoodie; do not relabel it as a gömlek.
@@ -286,11 +292,11 @@ Emphasize work-relevant attributes: collar structure, tailored vs regular, chino
 style_tags must include "iş" or "ofis" plus 1–2 of: smart-casual, business-casual, klasik, ofis.
 If the piece is casual, extract it as-is and note the most office-appropriate reading of THAT type (e.g. düz polo), never invent a different subcategory.`,
     combineNote: `OCCASION = İş (office / business casual / smart casual). Polished enough for work; not gym, not lounge, not davet-abiye.
-- top: gömlek, polo, bluz, ince triko, blazer — no hoodie, no grafik tişört, no spor atlet, no sweat
+- top: uzun kollu gömlek, uzun kollu bluz, ince triko, blazer — NEVER kısa kollu gömlek, NEVER short-sleeve, NEVER grafik tişört, NEVER hoodie, NEVER spor atlet
 - bottom: chino, kumaş pantolon, ofis eteği, koyu düz jean — NEVER jogger, NEVER eşofman, NEVER yırtık jean, NEVER tayt
 - shoes: loafer, oxford, sade deri bot — NEVER spor koşu sneaker, NEVER topuklu gece
-- accessory: deri kemer, klasik kol saati (deri/metal), sade çanta — no spor cap, no clutch, no bel çantası
-searchQuery MUST include at least one of: iş, ofis, smart casual, business casual, gömlek, chino, loafer.`,
+- accessory: deri kemer OR kravat when appropriate, klasik kol saati (deri/metal), sade çanta — no spor cap, no clutch, no bel çantası. Kravat ≠ kemer.
+searchQuery MUST include at least one of: iş, ofis, smart casual, business casual, uzun kollu gömlek, chino, loafer.`,
   },
   sahil: {
     labelTr: "Sahil",
@@ -425,7 +431,7 @@ const PIECE_SEARCH_PHRASE: Record<Occasion, Partial<Record<PieceFamily, string>>
   is: {
     bottom: "chino kumaş pantolon ofis smart casual",
     shoes: "loafer oxford klasik",
-    top: "gömlek polo blazer smart casual ofis",
+    top: "uzun kollu gömlek blazer smart casual ofis",
     dress: "ofis elbise smart casual",
   },
   sahil: {
