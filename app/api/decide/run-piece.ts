@@ -15,10 +15,11 @@ import {
   productDedupeKeys,
   LUXURY_SEARCH_STORES,
   keepLookFaithful,
+  lookRelaxLevel,
   type ProductProfile,
   type ScoringResult,
 } from "./pipeline";
-import { pickDecidePoolBrands, resolvePoolCategories } from "@/constants/brandPool";
+import { pickDecidePoolBrands } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 import { parseOccasion, type PriceMode } from "@/lib/preferences";
 import { asLower } from "@/lib/text";
@@ -58,7 +59,7 @@ function dedupeItems(items: SerpShoppingItem[]): SerpShoppingItem[] {
  * slowest query in a Promise.all — we instead settle as soon as the pool is
  * filled, so this timeout only matters when every query is slow/stuck.
  */
-const SERP_TIMEOUT_MS = 5_500;
+const SERP_TIMEOUT_MS = 4_200;
 
 async function serpShoppingSearch(
   query: string,
@@ -157,7 +158,10 @@ async function searchQueries(
 
   const collected: SerpShoppingItem[] = [];
   let pending = ordered.length;
-  const needColor = Boolean(productProfile.color_tr);
+  const shown = excludeTitles.size;
+  const relax = lookRelaxLevel(shown);
+  // First pass waits for on-color hits; later taps settle on any unique cards.
+  const needColor = Boolean(productProfile.color_tr) && relax === 0;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -165,7 +169,7 @@ async function searchQueries(
       if (settled) return;
       settled = true;
       const items = dedupeItems(collected);
-      const scoring = scoreProducts(items, productProfile);
+      const scoring = scoreProducts(items, productProfile, shown);
       console.log(
         "SerpAPI parallel:",
         ordered.join(" | "),
@@ -180,7 +184,7 @@ async function searchQueries(
           if (settled) return;
           collected.push(...batch);
           pending--;
-          const scoring = scoreProducts(dedupeItems(collected), productProfile);
+          const scoring = scoreProducts(dedupeItems(collected), productProfile, shown);
           const alive = poolFaithfulCount(scoring, excludeTitles, needColor);
           if (alive >= minPool) finish("early");
           else if (pending <= 0) finish("complete");
@@ -194,10 +198,6 @@ async function searchQueries(
   });
 }
 
-function compactExtraLimit(_searchMode: "full" | "compact"): number {
-  return 2;
-}
-
 async function searchWithFallback(
   productProfile: ProductProfile,
   apiKey: string,
@@ -208,8 +208,9 @@ async function searchWithFallback(
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
-  const serpNum = 8;
-  const minPool = excludeTitles.size ? Math.min(5, excludeTitles.size + 3) : 3;
+  const serpNum = excludeTitles.size ? 8 : 6;
+  // Early-exit at 2 unique cards — pad to 3 in processPiece if needed.
+  const minPool = 2;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "" };
@@ -232,8 +233,11 @@ async function searchWithFallback(
     );
     if (
       !result.scoring.error &&
-      poolFaithfulCount(result.scoring, excludeTitles, Boolean(productProfile.color_tr)) >=
-        Math.min(2, minPool)
+      poolFaithfulCount(
+        result.scoring,
+        excludeTitles,
+        Boolean(productProfile.color_tr) && lookRelaxLevel(excludeTitles.size) === 0
+      ) >= minPool
     ) {
       return { scoring: result.scoring, queryUsed: result.queryUsed };
     }
@@ -253,18 +257,16 @@ async function searchWithFallback(
     );
     const scoring = scoreProducts(
       dedupeItems([...result.items, ...extra.items]),
-      productProfile
+      productProfile,
+      excludeTitles.size
     );
     console.log("SerpAPI lüks fallback:", luksFallback.join(" | "), `(pool=${scoring.pool.length})`);
     return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  // Lean first pass: for crop/women apparel, 2 brand queries + primary in parallel
-  // (same wall-clock as early-exit; no brand-wait). Others stay 1 brand + primary.
-  const poolCats = resolvePoolCategories(productProfile);
-  const wantsBrandVariety =
-    !compact && poolCats.some((c) => c === "tops" || c === "crop" || c === "dress");
-  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 2 : compact ? 0 : 1);
+  // Lean first pass: 1 brand + primary in parallel (early-exit). Show-more may
+  // add a second brand query for variety without waiting on brand RTTs.
+  const brandQs = brandQueries.slice(0, compact ? 0 : excludeTitles.size ? 2 : 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
@@ -280,8 +282,11 @@ async function searchWithFallback(
     excludeTitles
   );
   if (
-    poolFaithfulCount(firstPass.scoring, excludeTitles, Boolean(productProfile.color_tr)) >=
-    Math.min(2, minPool)
+    poolFaithfulCount(
+      firstPass.scoring,
+      excludeTitles,
+      Boolean(productProfile.color_tr) && lookRelaxLevel(excludeTitles.size) === 0
+    ) >= minPool
   ) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
@@ -304,7 +309,8 @@ async function searchWithFallback(
   );
   const scoring = scoreProducts(
     dedupeItems([...firstPass.items, ...extra.items]),
-    productProfile
+    productProfile,
+    excludeTitles.size
   );
   console.log("SerpAPI fallback parallel:", fallbackQs.join(" | "), `(pool=${scoring.pool.length})`);
   return { scoring, queryUsed: firstPass.queryUsed || extra.queryUsed || "" };
@@ -361,7 +367,18 @@ function applyPoolFilters(
   if (excludeTitles.size) {
     pool = pool.filter((p) => !titleIsExcluded(p.title, excludeTitles));
   }
-  pool = keepLookFaithful(pool, productProfile, excludeTitles.size > 0);
+  const shown = excludeTitles.size;
+  let relax = lookRelaxLevel(shown);
+  pool = keepLookFaithful(pool, productProfile, relax);
+  // If filters left fewer than 2 cards, step relax up once so "3 daha" still works.
+  if (pool.length < 2 && relax < 2) {
+    relax = (relax + 1) as 0 | 1 | 2;
+    const base = excludeTitles.size
+      ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles))
+      : scoring.pool;
+    const widened = keepLookFaithful(base, productProfile, relax);
+    if (widened.length > pool.length) pool = widened;
+  }
   const used = new Set<string>();
   const unique: typeof pool = [];
   for (const p of pool) {
@@ -417,7 +434,7 @@ export async function processPiece(
     options.denyTitle
   );
 
-  // Pad to at least 3 unique cards when possible (one parallel broaden round).
+  // Pad to at least 3 unique cards when possible (up to 2 parallel broaden rounds).
   const needsFill =
     !scoring.recommended || (options.mustFind && scoring.pool.length < 3);
   if (needsFill && options.mustFind) {
@@ -427,7 +444,7 @@ export async function processPiece(
     const priceMode =
       (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
     const serpNum = 8;
-    const extraRounds = 1;
+    const extraRounds = scoring.pool.length === 0 ? 2 : 1;
     const typeBit =
       accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
     const colorTypeQuery = [
@@ -438,6 +455,7 @@ export async function processPiece(
     ]
       .filter(Boolean)
       .join(" ");
+    const typeOnlyQuery = [productProfile.gender_tr, typeBit].filter(Boolean).join(" ");
     const fallbackWithColor = [productProfile.fallback_query, productProfile.color_tr]
       .filter(Boolean)
       .join(" ");
@@ -446,6 +464,8 @@ export async function processPiece(
         productProfile.search_query,
         fallbackWithColor,
         colorTypeQuery,
+        // Second round / thin pools: type-only query finds more unique titles.
+        round > 0 || scoring.pool.length < 2 ? typeOnlyQuery : "",
       ]
         .map((q) => (q || "").trim().replace(/\s+/g, " "))
         .map((q) => (accessoryType ? sanitizeAccessoryQuery(q, accessoryType) : q))
@@ -475,20 +495,21 @@ export async function processPiece(
         );
         for (const brand of nextBrands) broaden.unshift(`${seedQuery} ${brand}`);
       }
-      const extraQs = [...new Set(broaden)].slice(
-        0,
-        excludeTitles.size ? 2 : compactExtraLimit(searchMode)
-      );
+      const extraQs = [...new Set(broaden)].slice(0, excludeTitles.size ? 3 : 2);
       if (!extraQs.length) continue;
       const extra = await searchQueries(
         extraQs,
         productProfile,
         serpKey,
         serpNum,
-        3,
+        2,
         excludeTitles
       );
-      const extraScoring = scoreProducts(dedupeItems(extra.items), productProfile);
+      const extraScoring = scoreProducts(
+        dedupeItems(extra.items),
+        productProfile,
+        excludeTitles.size
+      );
       const seen = new Set<string>();
       for (const p of scoring.pool) rememberProduct(p, seen);
       const mergedPool = [...scoring.pool];

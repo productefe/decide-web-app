@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     const pieceLabel: string | undefined = body?.piece_label;
     const excludeRaw = Array.isArray(body?.exclude_titles) ? body.exclude_titles : [];
     const excludeTitles = new Set<string>(
-      excludeRaw.filter((t: unknown): t is string => typeof t === "string" && t.length > 0).slice(0, 40)
+      excludeRaw.filter((t: unknown): t is string => typeof t === "string" && t.length > 0).slice(0, 60)
     );
 
     if (!photo_url || !storage_path) {

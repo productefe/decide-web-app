@@ -2886,19 +2886,26 @@ function preferLuxuryScored(scored: ScoredProduct[], priceMode: PriceMode): Scor
 }
 
 /**
- * Prefer same body color (and print on later rounds). Always drop clear wrong
- * colorways so first analysis stays faithful — show-more (`strict`) refuses to
- * fall back to off-color listings when nothing matches.
+ * Prefer same body color (and print on first pass). Never empty the pool just
+ * because titles omit the color word — that caused "alternatif bulunamadı".
+ * Higher `relax` (show-more taps) keeps type, loosens color/print preference.
  */
+export function lookRelaxLevel(shownCount: number): 0 | 1 | 2 {
+  if (shownCount <= 0) return 0;
+  if (shownCount < 9) return 1;
+  return 2;
+}
+
 export function keepLookFaithful(
   pool: ScoredProduct[],
   profile: ProductProfile,
-  strict: boolean
+  relax: 0 | 1 | 2 | boolean = 0
 ): ScoredProduct[] {
   if (!pool.length) return pool;
+  const level: 0 | 1 | 2 =
+    typeof relax === "boolean" ? (relax ? 1 : 0) : relax;
   let next = pool;
-  // Always drop clear wrong colorways — first analysis must not lead with
-  // "siyah şort" for a white short, then flip on show-more.
+  // Always drop clear wrong colorways when anything remains.
   {
     const noClash = next.filter((p) => {
       const t = asLower(p.title);
@@ -2908,10 +2915,12 @@ export function keepLookFaithful(
   }
   if (asText(profile.color_tr)) {
     const colored = next.filter((p) => p.signals.color);
-    if (colored.length) next = colored;
-    else if (strict) return [];
+    // First pass / early more: prefer on-color when we have enough.
+    const wantColored = level === 0 ? 1 : level === 1 ? 2 : 99;
+    if (colored.length >= wantColored) next = colored;
+    else if (colored.length && level < 2) next = colored;
   }
-  if (hasPrintMotif(profile) && strict) {
+  if (hasPrintMotif(profile) && level === 0) {
     const printed = next.filter((p) => {
       const t = asLower(p.title);
       return titleHasPrintCue(t) || titleHasPrintColor(t, profile);
@@ -2924,7 +2933,8 @@ export function keepLookFaithful(
 function scoreShoppingItems(
   shoppingResults: SerpShoppingItem[],
   productProfile: ProductProfile,
-  styleKeyword = ""
+  styleKeyword = "",
+  shownCount = 0
 ): ScoredProduct[] {
   const userProfile = productProfile.user_profile || {};
   const priceMode = (userProfile.price_mode as PriceMode | undefined) || "karma";
@@ -2933,6 +2943,7 @@ function scoreShoppingItems(
   const styleWords = asLower(occasionPhrase).split(/\s+/).filter(Boolean);
   const pieceBlob = pieceBlobForOccasion(productProfile);
   const fitWord = asLower(productProfile.fit_tr || fitToken(productProfile.fit));
+  const relax = lookRelaxLevel(shownCount);
 
   let validResults = (shoppingResults || [])
     .filter(isValidShoppingItem)
@@ -2949,6 +2960,7 @@ function scoreShoppingItems(
           priceValue: getPrice(item),
           priceMode,
           poolFamily: resolvePoolCategories(productProfile)[0],
+          relaxLevel: relax,
         })
     );
 
@@ -2970,6 +2982,7 @@ function scoreShoppingItems(
             priceValue: getPrice(item),
             priceMode,
             poolFamily: resolvePoolCategories(productProfile)[0],
+            relaxLevel: relax,
           })
       );
     if (relaxed.length > validResults.length) validResults = relaxed;
@@ -2978,7 +2991,9 @@ function scoreShoppingItems(
   const brandedOnly = validResults.filter((item) =>
     textHasPoolBrand(`${item.title || ""} ${item.source || ""}`)
   );
-  if (brandedOnly.length >= 3) {
+  // First analysis: lock to brands when plentiful. Show-more keeps brand preference
+  // without discarding the rest (otherwise excluded titles empty the pool).
+  if (relax === 0 && brandedOnly.length >= 3) {
     validResults = brandedOnly;
   } else if (brandedOnly.length > 0) {
     const rest = validResults.filter((item) => !brandedOnly.includes(item));
@@ -3047,9 +3062,11 @@ function scoreShoppingItems(
       const colorMatched = validResults.filter((item) =>
         titleHasWantedColor(lcTitle(item), productProfile)
       );
-      if (colorMatched.length >= 1) {
+      // Later taps: don't lock the whole pool to color-word titles.
+      const colorMin = relax === 0 ? 1 : relax === 1 ? 2 : 99;
+      if (colorMatched.length >= colorMin) {
         validResults = colorMatched;
-      } else {
+      } else if (relax < 2) {
         const noClash = validResults.filter(
           (item) => !titleColorConflicts(lcTitle(item), productProfile)
         );
@@ -3060,7 +3077,7 @@ function scoreShoppingItems(
   // Soft style locks: when enough titles carry the same strap / neckline / texture
   // as the photo, prefer them — separates spaghetti crop from short-sleeve crop.
   const isCropProfile = isCropCasualSubcategory(productProfile);
-  const styleLockMin = isCropProfile ? 1 : 2;
+  const styleLockMin = relax >= 2 ? 99 : isCropProfile ? 1 : relax === 1 ? 3 : 2;
   {
     const strapMatched = validResults.filter((item) =>
       titleHasWantedStrap(lcTitle(item), productProfile)
@@ -3287,6 +3304,13 @@ function scoreShoppingItems(
     let recommendationScore = Math.round(
       0.5 * matchScore + 0.15 * forYouScore + 0.35 * trustScore
     );
+    // Later "3 alternatif daha" taps: nudge away from only the closest clones
+    // so users keep discovering fresh (still on-type) products.
+    if (relax >= 1) {
+      recommendationScore = Math.round(
+        recommendationScore * (relax === 1 ? 0.92 : 0.82) + trustScore * (relax === 1 ? 0.05 : 0.1)
+      );
+    }
     if (priceMode === "luks" && luxury) recommendationScore += 25;
     if (priceMode === "luks" && !luxury) recommendationScore -= 20;
     if (wantsWomenTrendRank(productProfile, priceMode)) {
@@ -3296,7 +3320,7 @@ function scoreShoppingItems(
     recommendationScore = Math.max(0, Math.min(recommendationScore, 100));
     if (wrongColorHit) recommendationScore = Math.min(recommendationScore, 28);
     if (productProfile.color_tr && !colorHit) {
-      recommendationScore = Math.max(0, recommendationScore - 22);
+      recommendationScore = Math.max(0, recommendationScore - (relax >= 2 ? 8 : relax === 1 ? 14 : 22));
     }
     if (patternTokens.length && !patternHit) {
       recommendationScore = Math.max(0, recommendationScore - 18);
@@ -3349,7 +3373,8 @@ function scoreShoppingItems(
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
   const trendOrdered = preferTrendOverBudget(scored, productProfile, priceMode);
   const luxuryOrdered = preferLuxuryScored(mixKarmaScored(trendOrdered, priceMode), priceMode);
-  return preferPoolBrandsFirst(luxuryOrdered);
+  // First pass: brand-first. Later taps: keep score order so variety surfaces.
+  return relax === 0 ? preferPoolBrandsFirst(luxuryOrdered) : luxuryOrdered;
 }
 
 /**
@@ -3417,8 +3442,12 @@ function pickCheaperProduct(
   return candidates.find((p) => p.store !== recommended.store) || candidates[0] || null;
 }
 
-export function scoreProducts(shoppingResults: SerpShoppingItem[], productProfile: ProductProfile): ScoringResult {
-  const scoredProducts = scoreShoppingItems(shoppingResults, productProfile);
+export function scoreProducts(
+  shoppingResults: SerpShoppingItem[],
+  productProfile: ProductProfile,
+  shownCount = 0
+): ScoringResult {
+  const scoredProducts = scoreShoppingItems(shoppingResults, productProfile, "", shownCount);
 
   if (scoredProducts.length === 0) {
     return {

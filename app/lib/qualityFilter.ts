@@ -137,17 +137,24 @@ export type QualityFilterInput = {
   priceValue?: number;
   priceMode?: PriceMode;
   poolFamily?: string;
+  /**
+   * 0 = first analysis (catalog brands only).
+   * 1 = early show-more (allow clean non-catalog).
+   * 2 = later taps (hard bans only — more variety).
+   */
+  relaxLevel?: 0 | 1 | 2;
 };
 
 /**
  * True when the hit should be dropped.
  * Hard rules for everyone: price ≥ 200 TL, no replica, no supermarket.
- * Unnamed / non-pool sellers are dropped — only catalog pool brands (Bershka, Pull&Bear, …) pass.
+ * First pass also requires catalog pool brands; later show-more rounds relax.
  */
 export function failsQualityFilter(input: QualityFilterInput): boolean {
   const title = input.title || "";
   const source = input.source || "";
   const blob = hay(title, source);
+  const relax = input.relaxLevel ?? 0;
 
   // Hard-banned sellers bypass every other rule (a "mavi şapka" title would
   // otherwise count as a Mavi-brand catalog hit and let the seller through).
@@ -169,18 +176,26 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   }
 
   const familyFloor = priceFloorFor(input.poolFamily);
-  if (familyFloor > QUALITY_CONFIG.minPriceTry && typeof input.priceValue === "number" && input.priceValue > 0 && input.priceValue < familyFloor) {
+  if (
+    relax < 2 &&
+    familyFloor > QUALITY_CONFIG.minPriceTry &&
+    typeof input.priceValue === "number" &&
+    input.priceValue > 0 &&
+    input.priceValue < familyFloor
+  ) {
     return true;
   }
 
-  if (!catalog && !isLuxuryChannel(source, title)) return true;
+  if (catalog || isLuxuryChannel(source, title)) return false;
 
-  if (catalog) return false;
+  // First analysis: only catalog / luxury-channel sellers.
+  if (relax < 1) return true;
 
+  // Later taps: still drop junk sellers, then open the gate.
   if (looksRandomSeller(source)) return true;
   if (title.length > 24 && title === title.toUpperCase() && /[A-ZÇĞİÖŞÜ]/.test(title)) return true;
-  if (keywordPileCount(title) >= QUALITY_CONFIG.maxKeywordPile) return true;
-  if (categoryNameCount(title) >= 3) return true;
+  if (relax < 2 && keywordPileCount(title) >= QUALITY_CONFIG.maxKeywordPile) return true;
+  if (relax < 2 && categoryNameCount(title) >= 3) return true;
 
   return false;
 }
