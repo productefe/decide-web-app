@@ -2606,6 +2606,9 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
   ];
 
   const primary = (storedWithOccasion || occasionStrong || strong || core).trim();
+  const womenApparel = resolvePoolCategories(rebuilt).some(
+    (c) => c === "tops" || c === "crop" || c === "dress"
+  );
   const brandSuffixes = pickDecidePoolBrands(
     {
       category: rebuilt.category,
@@ -2615,7 +2618,7 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
       price_mode: priceMode,
       gender: `${rebuilt.gender} ${rebuilt.gender_tr} ${asText(rebuilt.user_profile?.gender)}`,
     },
-    5,
+    womenApparel ? 8 : 5,
     primary,
     rotation
   );

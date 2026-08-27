@@ -258,12 +258,12 @@ async function searchWithFallback(
     return { scoring, queryUsed: result.queryUsed || extra.queryUsed || "" };
   }
 
-  // Lean first pass: 1 brand + 1 primary (parallel). Brand ranking is in scoring.
-  // No luxury / brand-refill round on the hot path — those doubled wall-clock.
+  // Lean first pass: for crop/women apparel, 2 brand queries + primary in parallel
+  // (same wall-clock as early-exit; no brand-wait). Others stay 1 brand + primary.
   const poolCats = resolvePoolCategories(productProfile);
   const wantsBrandVariety =
     !compact && poolCats.some((c) => c === "tops" || c === "crop" || c === "dress");
-  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 1 : compact ? 0 : 1);
+  const brandQs = brandQueries.slice(0, wantsBrandVariety ? 2 : compact ? 0 : 1);
   const genericQs = queries.filter(
     (q) => !brandQueries.includes(q) && !luxuryQueries.includes(q)
   );
