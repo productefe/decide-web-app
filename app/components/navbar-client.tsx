@@ -17,6 +17,12 @@ type Props = {
   userEmail: string | null;
 };
 
+const MARKETING_LINKS = [
+  { href: "#urun", label: "Ürün" },
+  { href: "#hakkinda", label: "Hakkında" },
+  { href: "#iletisim", label: "İletişim" },
+] as const;
+
 export default function NavbarClient({ userEmail }: Props) {
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
@@ -35,7 +41,7 @@ export default function NavbarClient({ userEmail }: Props) {
   return (
     <nav className="border-b border-border pb-4 mb-2">
       <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-h-[44px]">
+        <div className="flex min-w-0 items-center gap-3 min-h-[44px]">
           <button
             onClick={() => router.push(userEmail ? "/workspace" : "/")}
             aria-label="Ana sayfaya git"
@@ -43,13 +49,25 @@ export default function NavbarClient({ userEmail }: Props) {
           >
             <DecideLogo className="h-7 w-auto" />
           </button>
-          {userEmail && (
+          {userEmail ? (
             <Link
               href="/workspace"
               className="text-sm font-medium min-h-[44px] inline-flex items-center px-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
             >
               Uygulama
             </Link>
+          ) : (
+            <div className="hidden items-center gap-1 md:flex">
+              {MARKETING_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium min-h-[44px] inline-flex items-center px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
           )}
         </div>
 

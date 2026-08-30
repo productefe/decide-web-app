@@ -1,22 +1,46 @@
 import Navbar from "./components/Navbar"
-import { LandingActions } from "./components/landing-actions"
+import { ContactForm } from "./components/contact-form"
 import { createClient } from "./utils/supabase/server"
 import { isPermanentUser } from "./lib/auth-user"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Upload, Search, CheckCircle2, Star, Tag, UserRound } from "lucide-react"
 import "./globals.css"
 
-const STEPS = [
-  { num: "1", title: "Yükle", desc: "Beğendiğin kıyafetin fotoğrafını yükle", icon: Upload },
-  { num: "2", title: "Karşılaştır", desc: "Alternatifleri tarayalım", icon: Search },
-  { num: "3", title: "Seç", desc: "Sana uygun 3 seçeneği gör", icon: CheckCircle2 },
+const HOW_STEPS = [
+  {
+    num: "01",
+    title: "Fotoğraf yükle",
+    desc: "Beğendiğin kıyafetin net bir fotoğrafını uygulamaya ekle.",
+  },
+  {
+    num: "02",
+    title: "Decide analiz etsin",
+    desc: "Yapay zeka tür, renk, kesim ve tarzı okur; giyim amacına göre arar.",
+  },
+  {
+    num: "03",
+    title: "Alternatifleri gör",
+    desc: "Türk mağazalarından benzer, satın alınabilir seçenekleri karşılaştır.",
+  },
 ];
 
-const RESULT_TYPES = [
-  { label: "Önerilen", desc: "Fotoğrafına en yakın eşleşme.", icon: Star },
-  { label: "Daha uygun", desc: "Benzer ürün, daha iyi fiyat.", icon: Tag },
-  { label: "Sana özel", desc: "Tarzına göre seçilmiş alternatif.", icon: UserRound },
+const PRODUCT_POINTS = [
+  {
+    title: "Görüntüden ürün bulma",
+    desc: "Tek bir fotoğraftan kıyafetin özelliklerini çıkarıp benzer ürünleri tarar.",
+  },
+  {
+    title: "Giyim amacına göre",
+    desc: "İş, gündelik, spor, akşam, ev veya sahil gibi bağlama uygun alternatifler sunar.",
+  },
+  {
+    title: "Bütçene uygun sıralama",
+    desc: "Tercih ettiğin fiyat yaklaşımına göre sonuçları düzenler.",
+  },
+  {
+    title: "iOS uygulaması",
+    desc: "Decide, App Store’da kullanılabilir; arama ve öneri bulut API üzerinden çalışır.",
+  },
 ];
 
 export default async function Home() {
@@ -30,128 +54,136 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] w-full flex-col overflow-x-hidden overscroll-y-none bg-background -mb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 pb-6 pt-4 md:px-10 md:pb-10 lg:px-14">
+    <div className="flex min-h-[100dvh] w-full flex-col overflow-x-hidden bg-background">
+      <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-10 lg:px-12">
         <Navbar />
-
-        <main className="grid flex-1 items-center gap-8 py-6 lg:grid-cols-12 lg:gap-14 lg:py-14">
-          <div className="relative lg:col-span-7">
-            <div
-              className="pointer-events-none absolute -top-8 -left-6 h-40 w-40 rounded-full bg-secondary/15 blur-3xl md:h-72 md:w-72"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute top-32 -right-4 hidden h-40 w-40 rounded-full bg-accent/10 blur-3xl md:block"
-              aria-hidden
-            />
-
-            <p className="relative hidden items-center gap-2 rounded-full border border-secondary/25 bg-gradient-to-r from-secondary/10 to-accent/10 px-4 py-1.5 text-sm font-semibold text-secondary shadow-sm md:inline-flex">
-              <span className="size-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
-              Doğru karar, doğru kıyafet
-            </p>
-
-            <h1 className="relative mt-2 text-center text-[2rem] font-semibold leading-[1.1] text-foreground sm:mt-4 sm:text-4xl md:mt-6 md:text-left md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
-              Beğendiğin{" "}
-              <span className="text-secondary underline decoration-secondary/30 decoration-[3px] underline-offset-[6px]">
-                kıyafeti
-              </span>
-              <br />
-              saniyeler içinde bul
-            </h1>
-
-            <p className="relative mx-auto mt-3 max-w-xl text-center text-base leading-relaxed text-muted-foreground md:mx-0 md:mt-5 md:hidden">
-              Yapay zeka, tek fotoğrafınla internetten binlerce arama yaparak Türk mağazalarından sana ve kıyafetine en uygun alternatifleri sunuyor.
-            </p>
-            <p className="relative mt-5 hidden max-w-xl text-lg leading-relaxed text-muted-foreground md:block md:text-xl">
-              Tek fotoğraf yeter — Türk mağazalarından sana en uygun üç alternatifi getiriyoruz.
-            </p>
-
-            <div className="relative mt-6 grid grid-cols-3 gap-2 sm:mt-10 sm:gap-3">
-              {STEPS.map((step, i) => {
-                const Icon = step.icon;
-                return (
-                  <div
-                    key={step.num}
-                    className={`rounded-xl border bg-card p-2.5 shadow-sm sm:rounded-2xl sm:p-4 ${
-                      i === 0
-                        ? "border-secondary/40 bg-gradient-to-br from-card to-secondary/[0.06] ring-1 ring-secondary/10"
-                        : "border-border"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-secondary-foreground shadow-sm sm:size-8 sm:text-sm">
-                        {step.num}
-                      </span>
-                      <span className="hidden size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary sm:flex">
-                        <Icon className="size-4" aria-hidden />
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-foreground sm:mt-3">{step.title}</p>
-                    <p className="mt-0.5 hidden text-sm leading-snug text-muted-foreground sm:block">
-                      {step.desc}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <LandingActions isLoggedIn={isPermanentUser(user)} />
-          </div>
-
-          <div className="relative hidden flex-col gap-3 lg:col-span-5 lg:flex lg:border-l lg:border-border lg:pl-12">
-            <div
-              className="pointer-events-none absolute -top-6 right-0 hidden h-32 w-32 rounded-full bg-secondary/10 blur-2xl lg:block"
-              aria-hidden
-            />
-            <p className="mb-1 text-sm font-semibold text-foreground">
-              Birazdan ne göreceksin?
-            </p>
-            {RESULT_TYPES.map((item, i) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.label}
-                  className={`flex gap-3 rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                    i === 0
-                      ? "border-secondary/35 bg-gradient-to-br from-card to-secondary/5 shadow-sm"
-                      : i === 2
-                        ? "border-accent/25 bg-gradient-to-br from-card to-accent/5"
-                        : "border-border bg-card shadow-sm"
-                  }`}
-                >
-                  <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
-                      i === 0
-                        ? "bg-secondary/15 text-secondary ring-4 ring-secondary/10"
-                        : i === 2
-                          ? "bg-accent/15 text-accent"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    <Icon className="size-4" aria-hidden />
-                  </span>
-                  <div>
-                    <p className="font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </main>
       </div>
 
-      <footer className="mt-auto w-full shrink-0 border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex max-w-6xl flex-row items-center justify-between gap-4 px-5 py-3 md:px-10 md:py-4 lg:px-14">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/app-icon.png" alt="DECIDE" className="size-9 shrink-0 rounded-xl object-contain sm:size-11 sm:rounded-2xl" />
-          <div className="flex min-w-0 flex-col items-end justify-center gap-0.5">
-            <p className="text-right text-xs font-semibold text-foreground sm:text-sm">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-5 pb-16 md:px-10 lg:px-12">
+        {/* Hero — brand first, no auth CTAs */}
+        <section className="relative border-b border-border py-14 md:py-20">
+          <div
+            className="pointer-events-none absolute -top-10 left-0 h-56 w-56 rounded-full bg-secondary/10 blur-3xl"
+            aria-hidden
+          />
+          <p className="relative text-sm font-semibold tracking-[0.2em] text-secondary">
+            DECIDE
+          </p>
+          <h1 className="relative mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight text-foreground sm:text-5xl md:text-[3.25rem]">
+            Beğendiğin kıyafeti
+            <br />
+            doğru alternatiflerle bul
+          </h1>
+          <p className="relative mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+            Decide, bir kıyafet fotoğrafından benzer ve satın alınabilir ürün
+            alternatifleri sunan bir moda keşif uygulamasıdır. Karar sürecini
+            sadeleştirir; doğru ürüne daha hızlı ulaşmanı sağlar.
+          </p>
+        </section>
+
+        {/* Product */}
+        <section id="urun" className="scroll-mt-24 border-b border-border py-14 md:py-16">
+          <h2 className="text-2xl font-semibold text-foreground md:text-3xl">Ürün</h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Decide; görüntü analizi, giyim bağlamı ve bütçe tercihiyle Türk
+            mağazalarındaki alternatifleri bir araya getirir. İhtiyacın olan şey
+            nettir: gördüğün parçaya yakın, alınabilir seçenekler.
+          </p>
+          <ul className="mt-10 grid gap-8 sm:grid-cols-2">
+            {PRODUCT_POINTS.map((item) => (
+              <li key={item.title} className="border-t border-border pt-5">
+                <h3 className="text-base font-semibold text-foreground">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {item.desc}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* How it works */}
+        <section id="nasil" className="scroll-mt-24 border-b border-border py-14 md:py-16">
+          <h2 className="text-2xl font-semibold text-foreground md:text-3xl">
+            Nasıl çalışır
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Üç adımda fotoğraftan sonuca.
+          </p>
+          <ol className="mt-10 space-y-8">
+            {HOW_STEPS.map((step) => (
+              <li key={step.num} className="flex gap-5 md:gap-8">
+                <span className="shrink-0 text-sm font-semibold tracking-wider text-secondary">
+                  {step.num}
+                </span>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    {step.desc}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* About */}
+        <section id="hakkinda" className="scroll-mt-24 border-b border-border py-14 md:py-16">
+          <h2 className="text-2xl font-semibold text-foreground md:text-3xl">Hakkında</h2>
+          <div className="mt-6 max-w-2xl space-y-4 text-base leading-relaxed text-muted-foreground">
+            <p>
+              Decide, kıyafet arama sürecindeki karar yorgunluğunu azaltmak için
+              geliştirilmiş bir üründür. Kullanıcı beğendiği bir parçanın
+              fotoğrafını yükler; sistem benzer ürünleri bulur ve karşılaştırılabilir
+              alternatifler sunar.
+            </p>
+            <p>
+              Ürün,{" "}
+              <span className="font-medium text-foreground">Efe Surucu</span>{" "}
+              tarafından geliştirilmektedir. Hedefimiz; moda keşfini daha hızlı,
+              daha net ve daha güvenilir hale getirmektir.
+            </p>
+          </div>
+        </section>
+
+        {/* Contact */}
+        <section id="iletisim" className="scroll-mt-24 py-14 md:py-16">
+          <h2 className="text-2xl font-semibold text-foreground md:text-3xl">İletişim</h2>
+          <p className="mt-3 max-w-xl text-base leading-relaxed text-muted-foreground">
+            Sorularınız, iş birliği veya geri bildirim için formu doldurun.
+            Mesajınız bize doğrudan iletilir.
+          </p>
+          <div className="mt-8 max-w-md">
+            <ContactForm />
+          </div>
+        </section>
+      </main>
+
+      <footer className="w-full border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-5 py-6 sm:flex-row sm:items-center sm:justify-between md:px-10 lg:px-12">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/app-icon.png"
+              alt="DECIDE"
+              className="size-9 shrink-0 rounded-xl object-contain"
+            />
+            <p className="text-sm font-semibold text-foreground">
               Doğru karar, doğru kıyafet
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            <a href="#urun" className="hover:text-secondary transition-colors">
+              Ürün
+            </a>
+            <a href="#hakkinda" className="hover:text-secondary transition-colors">
+              Hakkında
+            </a>
+            <a href="#iletisim" className="hover:text-secondary transition-colors">
+              İletişim
+            </a>
             <Link
-              href="https://decide.shopping/privacy"
-              className="text-right text-xs text-muted-foreground transition-colors hover:text-secondary"
+              href="/privacy"
+              className="hover:text-secondary transition-colors"
             >
               Gizlilik Politikası
             </Link>
