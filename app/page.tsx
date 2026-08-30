@@ -39,7 +39,7 @@ const PRODUCT_POINTS = [
   },
   {
     title: "iOS uygulaması",
-    desc: "Decide, App Store’da kullanılabilir; arama ve öneri bulut API üzerinden çalışır.",
+    desc: "Decide App Store’da; arama ve öneri bulut API üzerinden çalışır.",
   },
 ];
 
@@ -78,6 +78,16 @@ export default async function Home() {
             Decide, bir kıyafet fotoğrafından benzer ve satın alınabilir ürün
             alternatifleri sunan bir moda keşif uygulamasıdır. Karar sürecini
             sadeleştirir; doğru ürüne daha hızlı ulaşmanı sağlar.
+          </p>
+          <p className="relative mt-6">
+            <a
+              href="https://apps.apple.com/tr/app/decide/id6789308240"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm font-semibold text-secondary underline-offset-4 hover:underline"
+            >
+              App Store’da indir
+            </a>
           </p>
         </section>
 
@@ -138,8 +148,10 @@ export default async function Home() {
             </p>
             <p>
               Ürün,{" "}
-              <span className="font-medium text-foreground">Efe Surucu</span>{" "}
-              tarafından geliştirilmektedir. Hedefimiz; moda keşfini daha hızlı,
+              <span className="font-medium text-foreground">Efe Sürücü</span>
+              {" "}ve{" "}
+              <span className="font-medium text-foreground">Murat Efe Ergin</span>
+              {" "}tarafından geliştirilmiştir. Hedefimiz; moda keşfini daha hızlı,
               daha net ve daha güvenilir hale getirmektir.
             </p>
           </div>
@@ -180,6 +192,14 @@ export default async function Home() {
             </a>
             <a href="#iletisim" className="hover:text-secondary transition-colors">
               İletişim
+            </a>
+            <a
+              href="https://apps.apple.com/tr/app/decide/id6789308240"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-secondary transition-colors"
+            >
+              App Store
             </a>
             <Link
               href="/privacy"
