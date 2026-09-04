@@ -44,8 +44,8 @@ const PRODUCT_POINTS = [
 ];
 
 const TEAM_EMAILS = [
-  { name: "Efe Sürücü", email: "efesurucu@decideshops.com" },
-  { name: "Murat Efe Ergin", email: "mee@decideshops.com" },
+  { name: "Efe Sürücü", email: "efesurucu@decide-shopping.com" },
+  { name: "Murat Efe Ergin", email: "efeergin@decide-shopping.com" },
 ] as const;
 
 export default async function Home() {
