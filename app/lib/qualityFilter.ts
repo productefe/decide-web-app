@@ -171,14 +171,8 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
   if (isSupermarket(source, title)) return true;
 
   if (input.priceMode === "luks") {
-    // Storefront is not enough — Beymen can list Tudors. Brand must be luxury.
-    const titleLc = asLower(title);
-    const luxuryBrand =
-      textHasPoolBrand(title, LUXURY_POOL_BRANDS) ||
-      /\b(beymen club|vakko|vakkorama|les benjamins|network|twist|sandro|maje|hugo boss|ralph lauren|lacoste)\b/.test(
-        titleLc
-      );
-    if (!luxuryBrand) return true;
+    const luxuryBrand = textHasPoolBrand(blob, LUXURY_POOL_BRANDS);
+    if (!luxuryBrand && !isLuxuryChannel(source, title)) return true;
   }
 
   const familyFloor = priceFloorFor(input.poolFamily);

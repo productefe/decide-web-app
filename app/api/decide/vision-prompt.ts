@@ -5,43 +5,36 @@ import { getOccasionGuide } from "@/lib/occasion-guide";
  * Shared GPT-4o outfit extraction prompt (POST /api/decide and /api/decide/more).
  * Empty string / empty array = not sure. Never invent attributes.
  */
-export const VISION_OUTFIT_PROMPT = `Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH major visible piece separately (up to 6): top, bottom, outerwear, and ALWAYS shoes and accessories when visible. Shoes, watch, bag, sunglasses, hat, and belt are each their OWN item — never skip them and never merge them into a garment. If a watch or sneakers are visible even partially, include them.
+export const VISION_OUTFIT_PROMPT = `Analyze this fashion image for a FULL OUTFIT when a person is wearing multiple garments. Return EACH visible piece separately (up to 8): every clothing LAYER, shoes, and accessories.
 
-HARD RULE — never collapse a worn outfit:
-- If a person (or mannequin) is wearing clothes, "items" MUST list every distinct clothing layer you can see: top AND bottom AND shoes (plus outerwear/accessories when visible).
-- The MAIN / largest garment (sweatshirt, hoodie, coat, dress, …) MUST be the first clothing item — never skip it in favor of shoes or accessories.
-- Returning only shoes, only slippers/terlik, or only one garment for a full outfit is WRONG.
+HARD RULES:
+- If a person (or mannequin) is wearing clothes, list every distinct layer: inner t-shirt/shirt AND outer sweatshirt/hoodie/jacket/blazer when both are visible. Never keep only the outer layer.
+- A blazer, ceket, or gömlek showing under/over a sweatshirt is its OWN item (blazer = outerwear / blazer; gömlek = top / shirt; tişört = top / t-shirt; sweatshirt = top / sweatshirt).
+- ALWAYS include jewelry and accessories when visible even partially: necklace, earrings, watch, bracelet, ring, belt, bag, hat, glasses/sunglasses. Each is its own item — never drop them to save slots.
+- Shoes are their own item. Do NOT collapse a whole look into a single item.
 - Only return ONE item if the photo is clearly a product close-up of a single piece with no other garments in frame.
 
 Be precise about TYPE vs LENGTH vs STRAPS:
-- KNIT / FLEECE TOPS check FIRST for every upper garment (never default to t-shirt):
-  - hoodie: visible hood / kapüşon. subcategory MUST be hoodie. NEVER t-shirt, NEVER plain sweatshirt.
-  - sweatshirt: thick cotton fleece / şardonlu sweat, ribbed cuffs AND hem, NO hood. Almost always long-sleeve. subcategory MUST be sweatshirt. A heavy crewneck with a rib waistband is a SWEATSHIRT even if it has a chest print.
-  - sweater / kazak: visible knit stitch (triko), not flat fleece.
-  - t-shirt: THIN jersey only. Typically short-sleeve (a thin long-sleeve tee has no rib waistband and no fleece). NEVER label a sweatshirt, hoodie, or kazak as t-shirt.
-- crop top, t-shirt, blouse, spaghetti-strap top, and dress are DISTINCT subcategories. A crop top is NEVER a dress. A spaghetti-strap crop top is still a crop top (subcategory crop-top, length crop, sleeve_or_strap thin-strap).
-- length is HEM length of the garment (crop / normal / midi / maxi / uzun), NOT sleeve length.
+- hoodie: visible hood / kapüşon. NEVER t-shirt.
+- sweatshirt: thick fleece / şardonlu, rib cuffs+hem, NO hood. NEVER t-shirt.
+- t-shirt: thin jersey. A t-shirt UNDER a sweatshirt is still a t-shirt — list both.
+- shirt / gömlek: collar + placket. Distinct from t-shirt and from sweatshirt.
+- blazer: tailored jacket, not a sweatshirt, not a gömlek.
+- crop top, t-shirt, blouse, spaghetti-strap top, and dress are DISTINCT. A crop top is NEVER a dress.
+- length is HEM length (crop / normal / midi / maxi / uzun), NOT sleeve length.
 - sleeve_or_strap is separate: short-sleeve / long-sleeve / sleeveless / thin-strap / thick-strap / strapless.
-- POLO check comes FIRST for every top: if the tee has a soft fold-over collar (with or without a 2-3 button placket), subcategory MUST be polo and neckline MUST be polo — NEVER t-shirt, NEVER shirt. Only use t-shirt when the neckline is collarless (crew/v-neck).
-- STRAPLESS check: if the shoulders are completely bare with NO straps at all (tube top, bandeau, strapless dress), sleeve_or_strap MUST be strapless AND neckline MUST be strapless. "sleeveless" means it still has shoulder coverage or straps — never use it for a strapless piece.
-- GARMENT BODY vs PRINT: primary_color is the FABRIC / base color of the garment — never the print. A white t-shirt with a green chest graphic → primary_color "white", secondary_colors ["green"], patterns [{"type":"graphic","colors":["green"],"placement":"chest"}]. Do NOT set primary_color to the print color.
-- Style texture for tops/crop/dresses: put visible fabric or construction in distinctive_details when clear — e.g. "dantel", "ribana", "file", "cut-out", "balenli", "bağcıklı". These details are used for search.
-- Patterns and motifs are CRITICAL for search — never omit them. Capture EVERY visible pattern separately with placement (chest / shoulder / sleeve / all-over). Example: orange t-shirt with black chest motifs AND white shoulder stripes → two pattern objects plus secondary_colors ["black","white"].
-- placement PRECISION: use all-over ONLY when the pattern covers the whole garment. A stripe only on the shoulders or sleeves is placement shoulder/sleeve — the garment is NOT a "striped t-shirt". A mostly plain garment with one local accent stays visually plain; report the accent with its exact placement.
-- Shoes: sneaker, boot, sandal, loafer, heel, and slipper/terlik are DISTINCT. A sneaker is NEVER a heel / topuklu / stiletto / terlik. If the photo shows sneakers or trainers, subcategory MUST be sneaker.
-- Swimwear: bikini, mayo, and swim shorts are DISTINCT from t-shirt / trousers. If the photo shows a bikini or swimsuit, subcategory MUST be bikini or mayo — never t-shirt, never dress.
-- Watch: distinctive_details MUST include strap kind + color when visible (deri kayış, metal kordon, siyah silikon kayış).
-- Glasses vs sunglasses are DISTINCT and depend on LENS OPACITY:
-  - Sunglasses ONLY when lenses are dark / tinted / mirrored / polarized (wearer's eyes not clearly visible through them). subcategory MUST be sunglasses. distinctive_details MUST include "koyu cam".
-  - Clear / transparent / see-through lenses (saydam/şeffaf — eyes clearly visible through the lenses) are NEVER sunglasses. subcategory MUST be glasses. distinctive_details MUST include "saydam cam". Do NOT label clear fashion frames as sunglasses.
-  - Sunglasses are NEVER optical/reading glasses, and NEVER a glasses case / kutu / kılıf.
-  - For EVERY eyewear item, distinctive_details MUST include exactly one of: "koyu cam" or "saydam cam".
-- Accessories (watch, bag, glasses, hat, belt, tie, necklace, earring) are NEVER garments. Do not label a dress, blouse, or pants as accessory. If the photo is a dress, category is dress — not accessory.
-- belt and tie are DISTINCT: necktie/kravat → subcategory tie (label Kravat); belt/kemer → subcategory belt. Never swap them.
+- POLO: fold-over collar → subcategory polo, never t-shirt.
+- STRAPLESS: no straps at all → sleeve_or_strap strapless AND neckline strapless.
+- GARMENT BODY vs PRINT: primary_color is the FABRIC color, never the print.
+- Patterns and motifs are CRITICAL — never omit them. Local stripe on the shoulder is placement shoulder, NOT an all-over striped garment.
+- Shoes: sneaker, boot, sandal, loafer, heel, slipper are DISTINCT.
+- Watch: distinctive_details MUST include strap kind + color when visible.
+- Glasses vs sunglasses depend on LENS OPACITY (koyu cam vs saydam cam).
+- Accessories are NEVER garments. belt ≠ tie.
 - If you are not sure about a field, leave it "" or []. Never guess.
 
-category (family, English): top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
-subcategory (specific type, English kebab or common name): t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | bikini | mayo | sneaker | boot | sandal | loafer | heel | slipper | bag | hat | glasses | sunglasses | watch | belt | tie | scarf | necklace | earring | bracelet | ring
+category: top | bottom | dress | outerwear | shoes | bag | hat | eyewear | accessory
+subcategory: t-shirt | crop-top | blouse | askili-ust | tank-top | polo | shirt | hoodie | sweatshirt | sweater | cardigan | jacket | coat | blazer | jeans | trousers | shorts | skirt | dress | jumpsuit | bikini | mayo | sneaker | boot | sandal | loafer | heel | slipper | bag | hat | glasses | sunglasses | watch | belt | tie | scarf | necklace | earring | bracelet | ring
 silhouette_fit: oversize | regular | slim | bodycon | loose | ""
 length: crop | normal | uzun | midi | maxi | mini | ""
 neckline: crew-neck | v-neck | polo | turtleneck | halter | square | scoop | off-shoulder | strapless | ""
@@ -49,14 +42,14 @@ sleeve_or_strap: short-sleeve | long-sleeve | sleeveless | thin-strap | thick-st
 pattern.type: plain | striped | floral | graphic | logo | checkered | batik | ""
 pattern.placement: chest | shoulder | sleeve | all-over | hem | ""
 gender_presentation: men | women | unisex | ""
-material_impression: visual guess only (cotton | knit | denim | satin | leather-look | linen | "") — not a claim.
+material_impression: cotton | knit | denim | satin | leather-look | linen | ""
 
-label must be ONLY the Turkish item name (Sweatshirt, Tişört, Crop Top, Askılı Üst, Bluz, Elbise, Pantolon, Kravat, Kemer, …) — no English, no explanations.
+label must be ONLY the Turkish item name (Tişört, Sweatshirt, Gömlek, Blazer, Kolye, Küpe, Saat, …).
 
-Return ONLY valid JSON, no markdown. Example of a WORN OUTFIT (always multiple items):
-{"items":[{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"orange","secondary_colors":["black","white"],"patterns":[{"type":"graphic","colors":["black"],"placement":"chest"},{"type":"striped","colors":["white"],"placement":"shoulder"}],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":["önde siyah motif","omuzlarda beyaz şerit"],"style_tags":["casual"],"has_logo":false},{"label":"Şort","category":"bottom","subcategory":"shorts","silhouette_fit":"regular","length":"mini","primary_color":"blue","secondary_colors":[],"patterns":[],"material_impression":"denim","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false},{"label":"Spor Ayakkabı","category":"shoes","subcategory":"sneaker","silhouette_fit":"regular","primary_color":"white","secondary_colors":[],"patterns":[],"material_impression":"","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false}]}
+Return ONLY valid JSON, no markdown:
+{"items":[{"label":"Sweatshirt","category":"top","subcategory":"sweatshirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"long-sleeve","primary_color":"grey","secondary_colors":[],"patterns":[],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false},{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"white","secondary_colors":[],"patterns":[],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false},{"label":"Blazer","category":"outerwear","subcategory":"blazer","silhouette_fit":"regular","length":"normal","primary_color":"black","secondary_colors":[],"patterns":[],"material_impression":"","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false},{"label":"Kolye","category":"accessory","subcategory":"necklace","primary_color":"gold","secondary_colors":[],"patterns":[],"distinctive_details":[],"style_tags":["casual"],"has_logo":false}]}
 
-Order items top → bottom → shoes → outerwear → accessories (watch/bag/sunglasses) when possible.`;
+Order: inner tops → outer tops/blazer → bottom → shoes → accessories.`;
 
 export function visionPromptForOccasion(occasion: Occasion | null): string {
   const guide = getOccasionGuide(occasion);

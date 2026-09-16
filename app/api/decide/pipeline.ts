@@ -2291,13 +2291,10 @@ function correctKnitTopSubcategory(
     return "sweater";
   }
   const labeledSweat = /sweatshirt|sweat\s*shirt/.test(blob);
-  const fleeceCue = /şardon|fleece|polar|kalın kumaş|ribana|rib hem|manşet|3\s*iplik/.test(blob);
-  const longSleeve = /long-sleeve|uzun kol/.test(asLower(hints.sleeve || blob));
-  const thinTee = canon === "t-shirt" || canon === "crop-top" || canon === "tank-top";
+  const fleeceCue = /şardon|fleece|polar|kalın kumaş|3\s*iplik/.test(blob);
   if (labeledSweat || canon === "sweatshirt") return "sweatshirt";
-  // Long-sleeve crew "tees" in street photos are almost always sweatshirts.
-  if (thinTee && longSleeve && canon !== "crop-top") return "sweatshirt";
-  if (thinTee && (fleeceCue || asLower(hints.material) === "knit")) return "sweatshirt";
+  // Only relabel a "t-shirt" when the model itself described fleece — never
+  // because it has long sleeves (that wiped inner tees and shirts).
   if (canon === "t-shirt" && fleeceCue) return "sweatshirt";
   return canon || subcategory;
 }
@@ -2550,18 +2547,17 @@ export interface VisionPiece {
   profile: ProductProfile;
 }
 
-const MAX_OUTFIT_PIECES = 6;
+const MAX_OUTFIT_PIECES = 8;
 
 /**
- * Drop only true duplicates (same type + color). Jeans and shorts must both
- * survive — they used to collapse into a single "bottom" family.
+ * Drop only true duplicates (same subtype + color). Sweatshirt and the
+ * t-shirt/gömlek/blazer under it must both survive.
  */
 function pieceIdentityKey(profile: ProductProfile, label = ""): string {
-  const sub = asLower(asText(profile.subcategory_tr) || asText(profile.subcategory));
-  const cat = asLower(asText(profile.category_tr) || asText(profile.category));
+  const sub = asLower(asText(profile.subcategory) || asText(profile.subcategory_tr));
+  const cat = asLower(asText(profile.category) || asText(profile.category_tr));
   const color = asLower(asText(profile.color_tr));
-  const type = sub || cat;
-  if (!type) return asLower(label) || "other";
+  const type = sub || cat || asLower(label) || "other";
   return `${type}|${color}`;
 }
 
@@ -2585,36 +2581,20 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
 
   const pieces = items.map((item) => {
     const profile = visionProductToProfile(item, ctx);
-    const rawLabel = item.label?.trim() || "";
-    const typeLabel =
-      profile.subcategory_tr || profile.category_tr || item.category || "Parça";
-    const labelClash =
-      rawLabel &&
-      /tişört|tisort|t-shirt/i.test(rawLabel) &&
-      /\b(sweatshirt|hoodie|kazak|kapüşonlu)\b/.test(asLower(profile.subcategory_tr));
-    const label = labelClash ? typeLabel : rawLabel || typeLabel;
+    const label =
+      item.label?.trim() ||
+      profile.subcategory_tr ||
+      profile.category_tr ||
+      item.category ||
+      "Parça";
     return { label, profile };
   });
 
-  // Drop clear-lens eyewear (not sunglasses — no alternatives) before slot budget.
   const shoppable = pieces.filter((p) => !p.profile.low_confidence);
-
-  const keepRank = (p: VisionPiece): number => {
-    const cat = asLower(p.profile.category);
-    if (cat === "top" || cat === "dress") return 0;
-    if (cat === "bottom") return 1;
-    if (cat === "outerwear") return 2;
-    if (cat === "shoes") return 3;
-    return 4;
-  };
-  const ranked = shoppable
-    .map((piece, index) => ({ piece, index }))
-    .sort((a, b) => keepRank(a.piece) - keepRank(b.piece) || a.index - b.index)
-    .map((row) => row.piece);
 
   const seen = new Set<string>();
   const deduped: VisionPiece[] = [];
-  for (const piece of ranked) {
+  for (const piece of shoppable) {
     const key = pieceIdentityKey(piece.profile, piece.label);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -2999,15 +2979,9 @@ export function keepLookFaithful(
   }
   if (asText(profile.color_tr)) {
     const colored = next.filter((p) => p.signals.color);
-    if (level === 0) {
-      // First analysis: never show a gömlek/tee whose title names no color
-      // or the wrong color — empty is better than a white shirt for a blue one.
-      next = colored;
-    } else if (colored.length >= (level === 1 ? 2 : 99)) {
-      next = colored;
-    } else if (colored.length && level < 2) {
-      next = colored;
-    }
+    const wantColored = level === 0 ? 1 : level === 1 ? 2 : 99;
+    if (colored.length >= wantColored) next = colored;
+    else if (colored.length && level < 2) next = colored;
   }
   if (hasPrintMotif(profile) && level === 0) {
     const printed = next.filter((p) => {

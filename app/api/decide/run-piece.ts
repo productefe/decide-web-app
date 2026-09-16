@@ -433,12 +433,12 @@ function applyPoolFilters(
   const shown = excludeTitles.size;
   let relax = relaxOverride ?? lookRelaxLevel(shown);
   pool = keepLookFaithful(pool, productProfile, relax);
-  // Show-more only: widen look once so "3 daha" still fills. First analysis
-  // must not relax color just to put 3 cards on screen.
-  if (pool.length < 2 && relax < 2 && excludeTitles.size > 0) {
+  if (pool.length < 2 && relax < 2) {
     relax = (relax + 1) as 0 | 1 | 2;
     const familyMatch = false;
-    const base = scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }));
+    const base = excludeTitles.size
+      ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }))
+      : scoring.pool;
     const widened = keepLookFaithful(base, productProfile, relax);
     if (widened.length > pool.length) pool = widened;
   }
@@ -509,7 +509,6 @@ function guaranteeCardsFromPool(
     firstPass ? 0 : 1
   );
   if (next.pool.length >= 1 && (firstPass || next.pool.length >= 2)) return next;
-  if (firstPass) return next;
 
   const at2 = rescoreAtRelax(items, productProfile, Math.max(excludeTitles.size, 9));
   next = applyPoolFilters(at2, excludeTitles, productProfile, denyTitlePattern, denyTitle, 2);
