@@ -542,6 +542,15 @@ const LUKS_BLOCKED_STORES = [
   "sinsay",
   "reserved",
   "cropp",
+  "tudors",
+  "kiğılı",
+  "kigili",
+  "altınyıldız",
+  "altinyildiz",
+  "damat tween",
+  "damat",
+  "lc waikiki",
+  "lcw",
 ];
 
 /** Mid-fashion (not luxury) — boosted in uygunluk, blocked in lüks. */
@@ -578,12 +587,6 @@ const LUXURY_STORES = [
   "hotic",
   "desa",
   "machka",
-  "perspective",
-  "yargıcı",
-  "yargici",
-  "barcin",
-  "barçın",
-  "boyner",
   "beymen.com.tr",
   // International premium commonly sold in TR
   "massimo dutti",
@@ -1135,8 +1138,9 @@ export function contradictsCategoryFit(
       return true;
     }
   } else if (/sweatshirt/.test(blob)) {
-    if (requireType && !/\b(sweatshirt|sweat\b|kapüşonlu|hoodie)\b/.test(t)) return true;
-    if (/\b(tişört|t-?shirt|gömlek|elbise|pantolon|etek|gözlük|ayakkabı)\b/.test(t) && !/\b(sweatshirt|sweat\b|hoodie)\b/.test(t)) {
+    const sweatCue = /\b(sweatshirt|\bsweat\b|şardon|fleece|3\s*iplik|kapüşonlu|hoodie)\b/;
+    if (requireType && !sweatCue.test(t) && /\b(tişört|t-?shirt|gömlek|polo)\b/.test(t)) return true;
+    if (/\b(tişört|t-?shirt|gömlek|elbise|pantolon|etek|gözlük|ayakkabı)\b/.test(t) && !sweatCue.test(t)) {
       return true;
     }
   }
@@ -2162,6 +2166,15 @@ function tokensForColorLabel(label: string): string[] {
   for (const [en, tr] of Object.entries(colorTR)) {
     if (asLower(tr) === want && en.length >= 3) tokens.add(en);
   }
+  if (/mavi|blue|lacivert|navy/.test(want)) {
+    for (const t of ["mavi", "blue", "lacivert", "navy", "indigo", "petrol"]) tokens.add(t);
+  }
+  if (/beyaz|white|ekru|krem|ivory/.test(want)) {
+    for (const t of ["beyaz", "white", "ekru", "krem", "ivory", "off white"]) tokens.add(t);
+  }
+  if (/siyah|black|antrasit/.test(want)) {
+    for (const t of ["siyah", "black", "antrasit"]) tokens.add(t);
+  }
   return [...tokens];
 }
 
@@ -2278,13 +2291,13 @@ function correctKnitTopSubcategory(
     return "sweater";
   }
   const labeledSweat = /sweatshirt|sweat\s*shirt/.test(blob);
-  const fleeceCue = /şardon|fleece|polar|kalın kumaş|ribana|rib hem|manşet/.test(blob);
+  const fleeceCue = /şardon|fleece|polar|kalın kumaş|ribana|rib hem|manşet|3\s*iplik/.test(blob);
   const longSleeve = /long-sleeve|uzun kol/.test(asLower(hints.sleeve || blob));
   const thinTee = canon === "t-shirt" || canon === "crop-top" || canon === "tank-top";
   if (labeledSweat || canon === "sweatshirt") return "sweatshirt";
-  if (thinTee && longSleeve && (fleeceCue || asLower(hints.material) === "knit")) {
-    return "sweatshirt";
-  }
+  // Long-sleeve crew "tees" in street photos are almost always sweatshirts.
+  if (thinTee && longSleeve && canon !== "crop-top") return "sweatshirt";
+  if (thinTee && (fleeceCue || asLower(hints.material) === "knit")) return "sweatshirt";
   if (canon === "t-shirt" && fleeceCue) return "sweatshirt";
   return canon || subcategory;
 }
@@ -2986,10 +2999,15 @@ export function keepLookFaithful(
   }
   if (asText(profile.color_tr)) {
     const colored = next.filter((p) => p.signals.color);
-    // First pass / early more: prefer on-color when we have enough.
-    const wantColored = level === 0 ? 1 : level === 1 ? 2 : 99;
-    if (colored.length >= wantColored) next = colored;
-    else if (colored.length && level < 2) next = colored;
+    if (level === 0) {
+      // First analysis: never show a gömlek/tee whose title names no color
+      // or the wrong color — empty is better than a white shirt for a blue one.
+      next = colored;
+    } else if (colored.length >= (level === 1 ? 2 : 99)) {
+      next = colored;
+    } else if (colored.length && level < 2) {
+      next = colored;
+    }
   }
   if (hasPrintMotif(profile) && level === 0) {
     const printed = next.filter((p) => {

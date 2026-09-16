@@ -282,6 +282,9 @@ async function gatherCandidates(
       );
       if (simple && brands[0]) push(`${simple} ${brands[0]}`);
       else push(brandQueries[0] || fallbackWithColor);
+      if (priceMode === "luks" && simple) {
+        push(`${simple} beymen`);
+      }
     } else {
       push(lookQuery || primary);
       push(colorTypeQuery || fallbackWithColor);
@@ -430,13 +433,12 @@ function applyPoolFilters(
   const shown = excludeTitles.size;
   let relax = relaxOverride ?? lookRelaxLevel(shown);
   pool = keepLookFaithful(pool, productProfile, relax);
-  // If filters left fewer than 2 cards, step relax up once so "3 daha" still works.
-  if (pool.length < 2 && relax < 2) {
+  // Show-more only: widen look once so "3 daha" still fills. First analysis
+  // must not relax color just to put 3 cards on screen.
+  if (pool.length < 2 && relax < 2 && excludeTitles.size > 0) {
     relax = (relax + 1) as 0 | 1 | 2;
     const familyMatch = false;
-    const base = excludeTitles.size
-      ? scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }))
-      : scoring.pool;
+    const base = scoring.pool.filter((p) => !titleIsExcluded(p.title, excludeTitles, { familyMatch }));
     const widened = keepLookFaithful(base, productProfile, relax);
     if (widened.length > pool.length) pool = widened;
   }
@@ -507,6 +509,7 @@ function guaranteeCardsFromPool(
     firstPass ? 0 : 1
   );
   if (next.pool.length >= 1 && (firstPass || next.pool.length >= 2)) return next;
+  if (firstPass) return next;
 
   const at2 = rescoreAtRelax(items, productProfile, Math.max(excludeTitles.size, 9));
   next = applyPoolFilters(at2, excludeTitles, productProfile, denyTitlePattern, denyTitle, 2);
@@ -546,22 +549,43 @@ export async function processPiece(
   );
 
   // mustFind: if still empty after in-pool relax, one final type-only rescue.
-  if (!scoring.recommended && options.mustFind && (gathered.items.length === 0 || companion)) {
+  if (!scoring.recommended && options.mustFind) {
     const typeBit = typeBitFor(productProfile);
+    const colorType = sanitizeQuery(
+      [productProfile.gender_tr, productProfile.color_tr, typeBit].filter(Boolean).join(" "),
+      productProfile
+    );
     const typeOnly = sanitizeQuery(
       [productProfile.gender_tr, typeBit].filter(Boolean).join(" "),
       productProfile
     );
-    const seed =
-      typeOnly ||
-      sanitizeQuery(productProfile.fallback_query || productProfile.search_query || "", productProfile);
-    if (seed) {
+    const priceMode =
+      (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
+    const rescueBrand = pickDecidePoolBrands(
+      {
+        category: productProfile.category,
+        category_tr: productProfile.category_tr,
+        subcategory: productProfile.subcategory,
+        subcategory_tr: productProfile.subcategory_tr,
+        price_mode: priceMode,
+        gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
+      },
+      1,
+      colorType || typeOnly,
+      rotation + 11
+    )[0];
+    const branded = sanitizeQuery(
+      [colorType || typeOnly, rescueBrand].filter(Boolean).join(" "),
+      productProfile
+    );
+    const lastQs = [...new Set([branded, colorType, typeOnly].filter(Boolean))].slice(0, 2);
+    if (lastQs.length) {
       const last = await fanOutQueries(
-        [seed],
+        lastQs,
         productProfile,
         serpKey,
-        8,
-        Math.max(excludeTitles.size, 9)
+        10,
+        companion ? Math.max(excludeTitles.size, 9) : excludeTitles.size
       );
       scoring = guaranteeCardsFromPool(
         last.items,

@@ -222,11 +222,21 @@ export async function POST(req: NextRequest) {
     }
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
+    const needle = (pieceLabel || "").trim().toLocaleLowerCase("tr-TR");
     let target = visionPieces[0];
-    if (pieceLabel) {
-      const match = visionPieces.find(
-        (p) => p.label === pieceLabel || p.profile.category_tr === pieceLabel
-      );
+    if (needle) {
+      const match =
+        visionPieces.find((p) => p.label.toLocaleLowerCase("tr-TR") === needle) ||
+        visionPieces.find(
+          (p) =>
+            (p.profile.subcategory_tr || "").toLocaleLowerCase("tr-TR") === needle ||
+            (p.profile.category_tr || "").toLocaleLowerCase("tr-TR") === needle
+        ) ||
+        visionPieces.find(
+          (p) =>
+            p.label.toLocaleLowerCase("tr-TR").includes(needle) ||
+            needle.includes(p.label.toLocaleLowerCase("tr-TR"))
+        );
       if (match) target = match;
     }
 

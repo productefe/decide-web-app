@@ -339,14 +339,15 @@ async function generateSlotSuggestions(
   if (parsed) return parsed;
 
   // Skip a second LLM round-trip — heuristic queries keep combine fast.
-  return heuristicSlotSuggestions(slots, attributes, context, genderWord);
+  return heuristicSlotSuggestions(slots, attributes, context, genderWord, "karma");
 }
 
 function heuristicSlotSuggestions(
   slots: readonly CombineOutfitSlot[],
   attributes: CombinePieceAttributes,
   context: AnalysisContext,
-  genderWord = ""
+  genderWord = "",
+  priceMode: PriceMode = "karma"
 ): CombineSlotSuggestion[] {
   const occasion = CONTEXT_TO_OCCASION[context];
   const guide = getOccasionGuide(occasion);
@@ -381,7 +382,7 @@ function heuristicSlotSuggestions(
         {
           category: slot === "shoes" ? "shoes" : slot,
           category_tr: type,
-          price_mode: "karma",
+          price_mode: priceMode,
           gender,
         },
         1,
@@ -676,7 +677,13 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
     };
   }
 
-  const heuristic = heuristicSlotSuggestions(slots, input.attributes, input.context, genderWord);
+  const heuristic = heuristicSlotSuggestions(
+    slots,
+    input.attributes,
+    input.context,
+    genderWord,
+    (input.userProfile.price_mode as PriceMode | undefined) || "karma"
+  );
 
   let llmMs = 0;
   let serpMs = 0;
