@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
       );
       if (!found) {
         return NextResponse.json(
-          { error: "Yeni alternatif bulunamadı. Tekrar dene." },
+          { error: "Şu an yeni bir alternatif çıkmadı. Biraz sonra tekrar dene." },
           { status: 404 }
         );
       }
@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
       snap
     );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Bir hata oluştu";
+    const message = err instanceof Error ? err.message : "Analiz tamamlanamadı. Lütfen tekrar dene.";
     console.error("/api/combine:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

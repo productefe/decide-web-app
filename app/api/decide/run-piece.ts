@@ -291,9 +291,13 @@ async function searchWithFallback(
   ) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
-  // Compact (combine first pass) stops here. Show-more with an empty unique
-  // pool must keep looking — otherwise the same 2 queries recycle shown titles.
-  if (compact && excludeTitles.size === 0) {
+  // Compact (combine) stops after a hit. Empty first pass must still fallback
+  // so combine slots do not 404 on a single miss.
+  if (
+    compact &&
+    excludeTitles.size === 0 &&
+    poolFaithfulCount(firstPass.scoring, excludeTitles, false) > 0
+  ) {
     return { scoring: firstPass.scoring, queryUsed: firstPass.queryUsed };
   }
 
@@ -517,6 +521,54 @@ export async function processPiece(
       for (const p of scoring.pool) rememberProduct(p, seen);
       const mergedPool = [...scoring.pool];
       for (const p of extraScoring.pool) {
+        if (hasProductOverlap(p, seen)) continue;
+        rememberProduct(p, seen);
+        mergedPool.push(p);
+      }
+      scoring = applyPoolFilters(
+        { ...scoring, pool: mergedPool, error: undefined },
+        excludeTitles,
+        productProfile,
+        options.denyTitlePattern,
+        options.denyTitle
+      );
+    }
+  }
+
+  // Last ditch: type-only search scored at max relax so a piece still returns
+  // one on-type card instead of vanishing the whole outfit slot.
+  if (!scoring.recommended && options.mustFind) {
+    const accessoryType = isAccessoryProfile(productProfile)
+      ? typeTokenTr(productProfile)
+      : "";
+    const typeBit =
+      accessoryType || productProfile.subcategory_tr || productProfile.category_tr;
+    const typeOnlyQuery = [productProfile.gender_tr, typeBit]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const seed = typeOnlyQuery || productProfile.fallback_query || productProfile.search_query;
+    if (seed) {
+      const lastQs = accessoryType
+        ? [sanitizeAccessoryQuery(seed, accessoryType)].filter(Boolean)
+        : [seed];
+      const last = await searchQueries(
+        lastQs,
+        productProfile,
+        serpKey,
+        8,
+        1,
+        excludeTitles
+      );
+      const lastScoring = scoreProducts(
+        dedupeItems(last.items),
+        productProfile,
+        Math.max(excludeTitles.size, 9)
+      );
+      const seen = new Set<string>();
+      for (const p of scoring.pool) rememberProduct(p, seen);
+      const mergedPool = [...scoring.pool];
+      for (const p of lastScoring.pool) {
         if (hasProductOverlap(p, seen)) continue;
         rememberProduct(p, seen);
         mergedPool.push(p);

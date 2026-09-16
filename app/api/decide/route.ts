@@ -60,7 +60,36 @@ function toUserFacingError(message: string): string {
   if (/JSON|Unexpected token|SyntaxError|parse/i.test(message)) {
     return "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene.";
   }
+  if (
+    !message ||
+    /Bir hata oluştu|Internal Server|FUNCTION_INVOCATION|timed out|timeout|ECONNRESET/i.test(
+      message
+    )
+  ) {
+    return "Analiz tamamlanamadı. Lütfen tekrar dene.";
+  }
   return message;
+}
+
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, limit), items.length) },
+    async () => {
+      while (next < items.length) {
+        const index = next++;
+        out[index] = await fn(items[index], index);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return out;
 }
 
 function collectTitles(results: Results): string[] {
@@ -170,7 +199,7 @@ export async function POST(req: NextRequest) {
             ],
           },
         ],
-        max_tokens: 2000,
+        max_tokens: 4000,
       })
     );
 
@@ -185,23 +214,21 @@ export async function POST(req: NextRequest) {
     });
 
     const rawPieces = await timer.span("search", () =>
-      Promise.all(
-        profiles.map(({ label, profile }) => {
-          if (profile.low_confidence) return Promise.resolve(null);
-          return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
-            mustFind: true,
-            immersiveMode: "recommended",
-          }).then((piece) =>
-            piece
-              ? ({
-                  ...piece,
-                  label,
-                  ...pieceAttrsFromProfile(profile),
-                } satisfies PieceResult)
-              : null
-          );
-        })
-      )
+      mapLimit(profiles, 2, async ({ label, profile }) => {
+        if (profile.low_confidence) return null;
+        return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
+          mustFind: true,
+          immersiveMode: "recommended",
+        }).then((piece) =>
+          piece
+            ? ({
+                ...piece,
+                label,
+                ...pieceAttrsFromProfile(profile),
+              } satisfies PieceResult)
+            : null
+        );
+      })
     );
     const pieceResults: PieceResult[] = [];
     for (const p of rawPieces) {

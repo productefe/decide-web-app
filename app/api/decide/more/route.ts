@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
               ],
             },
           ],
-          max_tokens: 2000,
+          max_tokens: 4000,
         })
       );
     }
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
 
     if (!piece) {
       return NextResponse.json(
-        { error: "Yeni alternatif bulunamadı. Farklı bir fotoğraf dene." },
+        { error: "Şu an yeni bir alternatif çıkmadı. Biraz sonra tekrar dene." },
         { status: 404 }
       );
     }
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       snap
     );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Bir hata oluştu";
+    const message = err instanceof Error ? err.message : "Analiz tamamlanamadı. Lütfen tekrar dene.";
     console.error("/api/decide/more:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

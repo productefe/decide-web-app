@@ -2466,24 +2466,17 @@ export interface VisionPiece {
 
 const MAX_OUTFIT_PIECES = 5;
 
-function pieceFamilyKey(category: unknown, categoryTr: unknown, subcategory = ""): string {
-  const blob = asLower(`${asText(category)} ${asText(categoryTr)} ${asText(subcategory)}`);
-  if (/gözlük|glasses|sunglasses|eyewear/.test(blob)) return "eyewear";
-  if (/crop/.test(blob)) return "crop";
-  if (/tişört|t-shirt|tshirt|tee|polo/.test(blob)) return "tee";
-  if (/gömlek|shirt/.test(blob) && !/t-shirt|sweatshirt/.test(blob)) return "shirt";
-  if (/hoodie|sweatshirt|kapüşonlu|kazak|sweater|cardigan|hırka/.test(blob)) return "knit";
-  if (/ceket|jacket|blazer|kaban|coat|trenç/.test(blob)) return "outer";
-  if (/etek|skirt/.test(blob)) return "skirt";
-  if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
-  if (/pantolon|jeans|chino|jogger|eşofman|şort|shorts|tayt|leggings/.test(blob)) return "bottom";
-  if (/ayakkabı|sneaker|bot|sandal|loafer|heel/.test(blob)) return "shoes";
-  if (/çanta|bag|backpack/.test(blob)) return "bag";
-  if (/şapka|hat|bere|beanie|cap/.test(blob)) return "hat";
-  if (/saat|watch/.test(blob)) return "watch";
-  if (/kolye|küpe|bileklik|yüzük|necklace|earring|bracelet/.test(blob)) return "jewelry";
-  if (/kemer|belt|atkı|scarf|aksesuar|accessory/.test(blob)) return "accessory";
-  return blob.trim() || "other";
+/**
+ * Drop only true duplicates (same type + color). Jeans and shorts must both
+ * survive — they used to collapse into a single "bottom" family.
+ */
+function pieceIdentityKey(profile: ProductProfile, label = ""): string {
+  const sub = asLower(asText(profile.subcategory_tr) || asText(profile.subcategory));
+  const cat = asLower(asText(profile.category_tr) || asText(profile.category));
+  const color = asLower(asText(profile.color_tr));
+  const type = sub || cat;
+  if (!type) return asLower(label) || "other";
+  return `${type}|${color}`;
 }
 
 export function parseVisionOutfit(visionContent: string, ctx: RequestContext): VisionPiece[] {
@@ -2521,11 +2514,7 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
   const seen = new Set<string>();
   const deduped: VisionPiece[] = [];
   for (const piece of shoppable) {
-    const key = pieceFamilyKey(
-      piece.profile.category,
-      piece.profile.category_tr,
-      piece.profile.subcategory
-    );
+    const key = pieceIdentityKey(piece.profile, piece.label);
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(piece);
