@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
     });
 
     const rawPieces = await timer.span("search", () =>
-      mapLimit(profiles, 2, async ({ label, profile }) => {
+      mapLimit(profiles, 3, async ({ label, profile }) => {
         if (profile.low_confidence) return null;
         return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
           mustFind: true,

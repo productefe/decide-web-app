@@ -3369,8 +3369,43 @@ function scoreShoppingItems(
   scored.sort((a, b) => b.recommendationScore - a.recommendationScore);
   const trendOrdered = preferTrendOverBudget(scored, productProfile, priceMode);
   const luxuryOrdered = preferLuxuryScored(mixKarmaScored(trendOrdered, priceMode), priceMode);
-  // First pass: brand-first. Later taps: keep score order so variety surfaces.
-  return relax === 0 ? preferPoolBrandsFirst(luxuryOrdered) : luxuryOrdered;
+  // First pass: brand-first, then interleave so top-N isn't one brand.
+  const branded = relax === 0 ? preferPoolBrandsFirst(luxuryOrdered) : luxuryOrdered;
+  return interleaveByBrand(branded);
+}
+
+/**
+ * Round-robin by brand while preserving relative score order within each brand.
+ * Breaks same-brand piles from preferPoolBrandsFirst / a single Serp query.
+ */
+export function interleaveByBrand(pool: ScoredProduct[]): ScoredProduct[] {
+  if (pool.length <= 2) return pool;
+  const byBrand = new Map<string, ScoredProduct[]>();
+  const brandOrder: string[] = [];
+  for (const p of pool) {
+    const brand = productBrandKey(p);
+    let list = byBrand.get(brand);
+    if (!list) {
+      list = [];
+      byBrand.set(brand, list);
+      brandOrder.push(brand);
+    }
+    list.push(p);
+  }
+  if (brandOrder.length <= 1) return pool;
+
+  const out: ScoredProduct[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const brand of brandOrder) {
+      const list = byBrand.get(brand);
+      if (!list?.length) continue;
+      out.push(list.shift()!);
+      progressed = true;
+    }
+  }
+  return out;
 }
 
 /**
@@ -3434,8 +3469,14 @@ function pickCheaperProduct(
     )
     .sort((a, b) => a.priceValue - b.priceValue);
 
-  // Prefer a different store than the recommended pick to spread sellers.
-  return candidates.find((p) => p.store !== recommended.store) || candidates[0] || null;
+  const recBrand = productBrandKey(recommended);
+  // Prefer a different brand (then store) so cheaper isn't the same label.
+  return (
+    candidates.find((p) => productBrandKey(p) !== recBrand) ||
+    candidates.find((p) => p.store !== recommended.store) ||
+    candidates[0] ||
+    null
+  );
 }
 
 export function scoreProducts(
@@ -3501,12 +3542,22 @@ export function pickStyleProduct(
 
 export function pickTrustedFallback(
   pool: ScoredProduct[],
-  excludeTitles: Set<string>
+  excludeTitles: Set<string>,
+  avoidProducts: ScoredProduct[] = []
 ): ScoredProduct | null {
   const blocked = new Set([...excludeTitles].map((t) => normalizeProductTitle(t)));
+  const avoidBrands = new Set(avoidProducts.map((p) => productBrandKey(p)));
   const isFree = (p: ScoredProduct) =>
     !titleIsExcluded(p.title, excludeTitles) && !blocked.has(normalizeProductTitle(p.title));
-  return pool.find((p) => p.trustScore >= 90 && isFree(p)) || pool.find(isFree) || null;
+  const differentBrand = (p: ScoredProduct) =>
+    avoidBrands.size === 0 || !avoidBrands.has(productBrandKey(p));
+  return (
+    pool.find((p) => p.trustScore >= 90 && isFree(p) && differentBrand(p)) ||
+    pool.find((p) => isFree(p) && differentBrand(p)) ||
+    pool.find((p) => p.trustScore >= 90 && isFree(p)) ||
+    pool.find(isFree) ||
+    null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -3616,7 +3667,8 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
     take(
       pickTrustedFallback(
         scoring.pool,
-        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[])
+        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[]),
+        [rec, cheaper].filter((p): p is ScoredProduct => Boolean(p))
       )
     );
 
@@ -3626,7 +3678,8 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
     cheaper = take(
       pickTrustedFallback(
         scoring.pool,
-        new Set([rec?.title, style?.title].filter(Boolean) as string[])
+        new Set([rec?.title, style?.title].filter(Boolean) as string[]),
+        [rec, style].filter((p): p is ScoredProduct => Boolean(p))
       )
     );
   }
@@ -3634,7 +3687,8 @@ export function getSlots(scoring: ScoringResult): { slot: Slot; product: ScoredP
     style = take(
       pickTrustedFallback(
         scoring.pool,
-        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[])
+        new Set([rec?.title, cheaper?.title].filter(Boolean) as string[]),
+        [rec, cheaper].filter((p): p is ScoredProduct => Boolean(p))
       )
     );
   }
