@@ -198,13 +198,14 @@ async function gatherCandidates(
   apiKey: string,
   rotation = 0,
   searchMode: "full" | "compact" = "full",
-  excludeTitles: Set<string> = new Set()
+  excludeTitles: Set<string> = new Set(),
+  companion = false
 ): Promise<{ scoring: ScoringResult; queryUsed: string; items: SerpShoppingItem[] }> {
   const { queries, brandQueries, luxuryQueries } = buildSearchPlan(productProfile, rotation);
   const priceMode = (productProfile.user_profile?.price_mode as PriceMode | undefined) || "karma";
   const compact = searchMode === "compact";
   const serpNum = excludeTitles.size ? 8 : 6;
-  const shown = excludeTitles.size;
+  const shown = companion ? Math.max(excludeTitles.size, 9) : excludeTitles.size;
 
   if (queries.length === 0) {
     return { scoring: emptyScoring(productProfile), queryUsed: "", items: [] };
@@ -256,12 +257,39 @@ async function gatherCandidates(
   };
 
   if (compact) {
-    push(lookQuery || primary);
-    push(colorTypeQuery || fallbackWithColor);
-    if (priceMode === "luks") {
-      push(luxuryQueries[0] || (colorTypeQuery ? `${colorTypeQuery} ${LUXURY_SEARCH_STORES[0]}` : ""));
+    if (companion) {
+      const gender = productProfile.gender_tr;
+      const simple = sanitizeQuery([gender, typeBit].filter(Boolean).join(" "), productProfile);
+      push(simple);
+      push(
+        sanitizeQuery(
+          [gender, productProfile.color_tr, typeBit].filter(Boolean).join(" "),
+          productProfile
+        )
+      );
+      const brands = pickDecidePoolBrands(
+        {
+          category: productProfile.category,
+          category_tr: productProfile.category_tr,
+          subcategory: productProfile.subcategory,
+          subcategory_tr: productProfile.subcategory_tr,
+          price_mode: priceMode,
+          gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
+        },
+        1,
+        simple,
+        rotation
+      );
+      if (simple && brands[0]) push(`${simple} ${brands[0]}`);
+      else push(brandQueries[0] || fallbackWithColor);
     } else {
-      push(brandQueries[0] || luxuryQueries[0]);
+      push(lookQuery || primary);
+      push(colorTypeQuery || fallbackWithColor);
+      if (priceMode === "luks") {
+        push(luxuryQueries[0] || (colorTypeQuery ? `${colorTypeQuery} ${LUXURY_SEARCH_STORES[0]}` : ""));
+      } else {
+        push(brandQueries[0] || luxuryQueries[0]);
+      }
     }
   } else if (priceMode === "luks") {
     for (const q of luxuryQueries.slice(0, 2)) push(q);
@@ -367,6 +395,11 @@ export type ProcessPieceOptions = {
    * compact: 3 shopping queries (combine).
    */
   searchMode?: "full" | "compact";
+  /**
+   * Combine companions: skip look-faithful color/print and start at quality
+   * relax 2 so known-brand pieces still fill even when titles omit color.
+   */
+  companionSearch?: boolean;
   /** Drop shopping titles matching this pattern before scoring slots. */
   denyTitlePattern?: RegExp;
   /** Extra title denylist (e.g. garments in an accessory slot). */
@@ -446,19 +479,22 @@ function guaranteeCardsFromPool(
   excludeTitles: Set<string>,
   productProfile: ProductProfile,
   denyTitlePattern?: RegExp,
-  denyTitle?: (title: string) => boolean
+  denyTitle?: (title: string) => boolean,
+  companion = false
 ): ScoringResult {
-  const firstPass = excludeTitles.size === 0;
+  const firstPass = excludeTitles.size === 0 && !companion;
+  const startRelax: 0 | 1 | 2 | undefined = companion ? 2 : firstPass ? 0 : undefined;
   let next = applyPoolFilters(
     scoring,
     excludeTitles,
     productProfile,
     denyTitlePattern,
     denyTitle,
-    firstPass ? 0 : undefined
+    startRelax
   );
   if (next.pool.length >= 2 || items.length === 0) return next;
   if (firstPass && next.pool.length >= 1) return next;
+  if (companion && next.pool.length >= 1) return next;
 
   // Quality-filter relax, still look-faithful on first analysis.
   const at1 = rescoreAtRelax(items, productProfile, Math.max(excludeTitles.size, 1));
@@ -488,6 +524,7 @@ export async function processPiece(
   if (productProfile.low_confidence) return null;
   const immersiveMode = options.immersiveMode ?? "all";
   const searchMode = options.searchMode ?? "full";
+  const companion = options.companionSearch === true;
   // Rotate brand/luxury slots on every "3 alternatif daha" tap.
   const rotation = excludeTitles.size;
   const gathered = await gatherCandidates(
@@ -495,7 +532,8 @@ export async function processPiece(
     serpKey,
     rotation,
     searchMode,
-    excludeTitles
+    excludeTitles,
+    companion
   );
   let scoring = guaranteeCardsFromPool(
     gathered.items,
@@ -503,11 +541,12 @@ export async function processPiece(
     excludeTitles,
     productProfile,
     options.denyTitlePattern,
-    options.denyTitle
+    options.denyTitle,
+    companion
   );
 
   // mustFind: if still empty after in-pool relax, one final type-only rescue.
-  if (!scoring.recommended && options.mustFind && gathered.items.length === 0) {
+  if (!scoring.recommended && options.mustFind && (gathered.items.length === 0 || companion)) {
     const typeBit = typeBitFor(productProfile);
     const typeOnly = sanitizeQuery(
       [productProfile.gender_tr, typeBit].filter(Boolean).join(" "),
@@ -530,7 +569,8 @@ export async function processPiece(
         excludeTitles,
         productProfile,
         options.denyTitlePattern,
-        options.denyTitle
+        options.denyTitle,
+        companion
       );
     }
   }

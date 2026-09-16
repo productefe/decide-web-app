@@ -14,7 +14,6 @@ import type { PriceMode } from "@/lib/preferences";
 import {
   getOccasionGuide,
   getOccasionKeyword,
-  withOccasionSearchPhrase,
 } from "@/lib/occasion-guide";
 import {
   detectAccessoryKind,
@@ -26,6 +25,7 @@ import {
   type UserProfile,
 } from "@/api/decide/pipeline";
 import { processPiece } from "@/api/decide/run-piece";
+import { pickDecidePoolBrands } from "@/constants/brandPool";
 import type { PieceResult } from "@/components/analyze/types";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
@@ -182,7 +182,7 @@ ${
       : `- Gender unknown: prefer unisex types (sneaker, loafer, tişört). Never default to topuklu.`
 }
 
-CONTEXT (occasion) is the PRIMARY constraint — not optional flavor:
+CONTEXT (occasion) guides the vibe — keep it simple:
 ${occasionBrief}
 
 Fill ONLY these outfit slots: [${slotList}]
@@ -198,31 +198,19 @@ Return ONLY valid JSON (no markdown) with exactly these keys under "slots":
 
 Rules:
 - Only fill the given slots — never add other slots.
-- Never invent product names, brands, or store names.
-- searchQuery must be Turkish shopping keywords, 4–10 words, MUST fit ${contextTr}, and MUST encode layered product attributes when relevant:
-  - tops: yaka (bisiklet/v yaka/polo), kesim (slim/oversize/regular), tip (tişört/atlet/askılı/baskılı)
-  - For iş/work tops: MUST include "uzun kollu gömlek" (or uzun kollu bluz). NEVER "kısa kollu", NEVER short-sleeve tişört as the office top.
-  - bottoms: tür (chino/kot/jogger/eşofman/şort), paça (skinny/regular/wide)
-- shoes: tip + renk — NEVER write generic "ayakkabı" alone. For erkek: sneaker/bot/loafer/oxford/sandalet only. For kadın: sneaker/bot/loafer/topuklu/sandalet as occasion allows.
-- accessory: concrete type only (kemer/kravat/çanta/saat/gözlük/şapka/kolye/küpe…)
-  - NEVER write generic "aksesuar"
-  - NEVER write garment words (elbise, tişört, pantolon, gömlek, yelek, ayakkabı, abiye)
-  - kravat and kemer are DISTINCT — never substitute one for the other.
-  - saat: include kayış (deri/metal/silikon) + renk
-  - gözlük: include çerçeve şekli (yuvarlak/kare/aviator) + renk
-- Color may complement the source piece, but garment TYPE must follow the occasion rules above.
-- Prefer safe, widely-wearable combinations over adventurous color theory.
-- styleDescriptor: short Turkish phrase describing THE SAME item as searchQuery (include the same cut/collar/type words).
-- For non-accessory slots: never suggest jewelry, bags, belts, watches, hats — only that garment/shoe type.
+- Never invent product names or store names.
+- searchQuery: short Turkish shopping keywords (3–6 words): gender + color + garment type. Example: "kadın siyah kot pantolon". Do NOT add oversize/crop/yaka/paça constraints.
+- Prefer common, widely available pieces from high-street brands (Zara, Mango, Koton, LC Waikiki, Nike, Adidas, Bershka) — not rare cuts.
+- For iş/work tops: "uzun kollu gömlek" or "uzun kollu bluz". Never short-sleeve office top.
+- shoes: include a type (sneaker/bot/loafer/oxford/sandalet/topuklu as occasion allows). Never generic "ayakkabı" alone. For erkek: never topuklu.
+- accessory: one concrete type (kemer/kravat/çanta/saat/gözlük/şapka/kolye/küpe). Never generic "aksesuar", never garments.
+- styleDescriptor: short Turkish phrase for the same item as searchQuery.
+- For non-accessory slots: only that garment/shoe type, never jewelry.
 - For accessory slot (if present):
   - Pick ONE type from: ${accessoryKinds}
   - accessoryType, styleDescriptor, and searchQuery MUST all refer to that SAME type.
-  - Never suggest clothing (yelek, ceket, tişört, pantolon, elbise, ayakkabı) as accessory.
-  - For saat: only wristwatches / kol saati / akıllı saat — NEVER kol düğmesi, cufflink, or "saat desenli" buttons. Always mention strap (deri kayış / metal kordon / silikon kayış).
-  - For güneş gözlüğü: ONLY wearable sunglasses with dark/tinted lenses. NEVER clear/saydam/şeffaf fashion frames, NEVER gözlük kutusu, kılıf, okuma gözlüğü, optik, numaralı, or generic "gözlük".
-  - For gözlük: prescription / optical frames only — NEVER güneş gözlüğü and NEVER a case.
-  - Always mention frame shape (yuvarlak/kare/aviator) and frame color for eyewear.
-  - Match metal/color to the source piece when suggesting jewelry.${accessoryField}`;
+  - For saat: wristwatch only, mention kayış.
+  - For güneş gözlüğü: dark lenses only. For gözlük: optical frames only.${accessoryField}`;
 }
 
 function normalizeAccessorySuggestion(
@@ -388,15 +376,19 @@ function heuristicSlotSuggestions(
         : context === "work" && slot === "top"
           ? "uzun kollu gömlek"
           : COMBINE_SLOT_CATEGORY_TR[slot];
-    const searchQuery = withOccasionSearchPhrase(
-      [gender, color, type].filter(Boolean).join(" "),
-      occasion,
-      {
-        forAccessory: false,
-        category: slot === "shoes" ? "shoes" : slot,
-        category_tr: type,
-      }
-    );
+    const brand =
+      pickDecidePoolBrands(
+        {
+          category: slot === "shoes" ? "shoes" : slot,
+          category_tr: type,
+          price_mode: "karma",
+          gender,
+        },
+        1,
+        `${gender} ${type}`,
+        0
+      )[0] || "";
+    const searchQuery = [gender, color, type, brand].filter(Boolean).join(" ");
     return sanitizeSlotForGender(
       {
         slot,
@@ -541,22 +533,11 @@ function buildSlotProductProfile(
     ? accessoryType
     : shoe.subcategory_tr || COMBINE_SLOT_CATEGORY_TR[suggestion.slot];
   const color = suggestion.color || input.attributes.color_tr || "";
-  // Keep fit_tr short — full styleDescriptor polluted accessory searches (kolye → yelek).
-  const fitTr = isAccessory ? "" : truncateForPrompt(suggestion.styleDescriptor, 40);
 
   const search_query = ensureGenderInQuery(
-    withOccasionSearchPhrase(
-      isAccessory
-        ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
-        : suggestion.searchQuery,
-      CONTEXT_TO_OCCASION[input.context],
-      {
-        forAccessory: isAccessory,
-        category: isAccessory ? "accessory" : suggestion.slot === "shoes" ? "shoes" : suggestion.slot,
-        category_tr: categoryTr,
-        subcategory: isAccessory ? accessoryType : shoe.subcategory,
-      }
-    ),
+    isAccessory
+      ? sanitizeAccessoryQuery(suggestion.searchQuery, accessoryType)
+      : suggestion.searchQuery,
     gTr
   );
   const fallback_query = isAccessory
@@ -574,8 +555,8 @@ function buildSlotProductProfile(
     category_tr: categoryTr,
     color_tr: color,
     colors: color ? [color] : [],
-    fit: fitTr,
-    fit_tr: fitTr,
+    fit: "",
+    fit_tr: "",
     collar: "",
     collar_tr: "",
     pattern: "",
@@ -648,6 +629,7 @@ export async function combineOutfit(input: CombineOutfitInput): Promise<CombineO
       {
         immersiveMode: "recommended",
         searchMode: "compact",
+        companionSearch: true,
         mustFind: true,
         denyTitle: isWatchSlot
           ? (title) => titleLooksLikeGarment(title) || WATCH_DENY_TITLE_RE.test(title)

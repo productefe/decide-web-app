@@ -939,6 +939,19 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     if (/\b(crop|mini)\b/.test(t) && !/\bmaxi\b/.test(t)) return true;
   }
 
+  const isSweatshirt = /\bsweatshirt\b/.test(blob) && !/\bhoodie\b/.test(blob);
+  const isTeeOnly =
+    /\b(tişört|t-shirt|tshirt|tee)\b/.test(blob) &&
+    !/\b(sweatshirt|hoodie|polo|kazak)\b/.test(blob);
+  if (isSweatshirt) {
+    if (/\b(tişört|t-?shirt|tee)\b/.test(t) && !/\b(sweatshirt|sweat\b|hoodie|kapüşon)\b/.test(t)) {
+      return true;
+    }
+  }
+  if (isTeeOnly) {
+    if (/\b(sweatshirt|hoodie|kapüşonlu)\b/.test(t) && !/\b(tişört|t-?shirt)\b/.test(t)) return true;
+  }
+
   // Shoe subtypes are never relaxed — a sneaker search must not surface heels or terlik.
   const isSneaker = /\b(sneaker|spor ayakkabı|koşu ayakkabı)\b/.test(blob);
   const isHeel = /\b(topuk|stiletto|heel|pump|kitten)\b/.test(blob);
@@ -1116,9 +1129,16 @@ export function contradictsCategoryFit(
     }
   }
 
-  if (/hoodie|kapüşonlu|sweatshirt/.test(blob)) {
-    if (requireType && !/\b(hoodie|sweatshirt|kapüşonlu|sweat)\b/.test(t)) return true;
-    if (/\b(gözlük|pantolon|etek|ayakkabı|elbise)\b/.test(t)) return true;
+  if (/hoodie|kapüşonlu/.test(blob) && !/sweatshirt/.test(blob)) {
+    if (requireType && !/\b(hoodie|kapüşonlu|kapüşon)\b/.test(t)) return true;
+    if (/\b(gözlük|pantolon|etek|ayakkabı|elbise|tişört|t-?shirt)\b/.test(t) && !/\b(hoodie|kapüşon)\b/.test(t)) {
+      return true;
+    }
+  } else if (/sweatshirt/.test(blob)) {
+    if (requireType && !/\b(sweatshirt|sweat\b|kapüşonlu|hoodie)\b/.test(t)) return true;
+    if (/\b(tişört|t-?shirt|gömlek|elbise|pantolon|etek|gözlük|ayakkabı)\b/.test(t) && !/\b(sweatshirt|sweat\b|hoodie)\b/.test(t)) {
+      return true;
+    }
   }
 
   if ((cat.includes("skirt") || catTr.includes("etek")) && /\b(pantolon|jeans|eşofman|tişört|gözlük)\b/.test(t)) {
@@ -2235,6 +2255,40 @@ function translatePlacement(raw: string | undefined): string {
   return lookupTr(placementTR, raw);
 }
 
+function correctKnitTopSubcategory(
+  subcategory: string,
+  hints: {
+    label?: string;
+    sleeve?: string;
+    material?: string;
+    details?: string[];
+    neckline?: string;
+  }
+): string {
+  const canon = canonicalSubcategory(subcategory);
+  const blob = asLower(
+    [hints.label, subcategory, hints.sleeve, hints.material, hints.neckline, ...(hints.details || [])].join(
+      " "
+    )
+  );
+  if (/kapüşon|kapuson|hoodie|\bhood\b/.test(blob)) return "hoodie";
+  if (canon === "hoodie") return "hoodie";
+  if (canon === "sweater" || canon === "cardigan") return canon;
+  if (/kazak|triko|knitwear|\bsweater\b/.test(blob) && !/sweatshirt|fleece|şardon/.test(blob)) {
+    return "sweater";
+  }
+  const labeledSweat = /sweatshirt|sweat\s*shirt/.test(blob);
+  const fleeceCue = /şardon|fleece|polar|kalın kumaş|ribana|rib hem|manşet/.test(blob);
+  const longSleeve = /long-sleeve|uzun kol/.test(asLower(hints.sleeve || blob));
+  const thinTee = canon === "t-shirt" || canon === "crop-top" || canon === "tank-top";
+  if (labeledSweat || canon === "sweatshirt") return "sweatshirt";
+  if (thinTee && longSleeve && (fleeceCue || asLower(hints.material) === "knit")) {
+    return "sweatshirt";
+  }
+  if (canon === "t-shirt" && fleeceCue) return "sweatshirt";
+  return canon || subcategory;
+}
+
 function canonicalSubcategory(raw: string): string {
   const key = canonKey(raw);
   if (!key) return "";
@@ -2376,8 +2430,15 @@ function visionProductToProfile(product: VisionProduct, ctx: RequestContext): Pr
   // Vision may report strapless on either field; mirror it so the core query carries "straplez".
   if (collarWord === "straplez" && !sleeve_or_strap_tr) sleeve_or_strap_tr = "straplez";
 
+  // Knit/fleece tops are often mislabeled as t-shirt. Correct before search.
+  let subcategoryFixed = correctKnitTopSubcategory(subcategory, {
+    label: product.label,
+    sleeve: product.sleeve_or_strap,
+    material: product.material_impression,
+    details: asStringList(product.distinctive_details),
+    neckline,
+  });
   // A polo collar means the piece IS a polo — vision often still labels it "t-shirt".
-  let subcategoryFixed = subcategory;
   if (
     collarWord === "polo yaka" &&
     (!subcategoryFixed || canonicalSubcategory(subcategoryFixed) === "t-shirt")
@@ -2511,21 +2572,36 @@ export function parseVisionOutfit(visionContent: string, ctx: RequestContext): V
 
   const pieces = items.map((item) => {
     const profile = visionProductToProfile(item, ctx);
-    const label =
-      item.label?.trim() ||
-      profile.subcategory_tr ||
-      profile.category_tr ||
-      item.category ||
-      "Parça";
+    const rawLabel = item.label?.trim() || "";
+    const typeLabel =
+      profile.subcategory_tr || profile.category_tr || item.category || "Parça";
+    const labelClash =
+      rawLabel &&
+      /tişört|tisort|t-shirt/i.test(rawLabel) &&
+      /\b(sweatshirt|hoodie|kazak|kapüşonlu)\b/.test(asLower(profile.subcategory_tr));
+    const label = labelClash ? typeLabel : rawLabel || typeLabel;
     return { label, profile };
   });
 
   // Drop clear-lens eyewear (not sunglasses — no alternatives) before slot budget.
   const shoppable = pieces.filter((p) => !p.profile.low_confidence);
 
+  const keepRank = (p: VisionPiece): number => {
+    const cat = asLower(p.profile.category);
+    if (cat === "top" || cat === "dress") return 0;
+    if (cat === "bottom") return 1;
+    if (cat === "outerwear") return 2;
+    if (cat === "shoes") return 3;
+    return 4;
+  };
+  const ranked = shoppable
+    .map((piece, index) => ({ piece, index }))
+    .sort((a, b) => keepRank(a.piece) - keepRank(b.piece) || a.index - b.index)
+    .map((row) => row.piece);
+
   const seen = new Set<string>();
   const deduped: VisionPiece[] = [];
-  for (const piece of shoppable) {
+  for (const piece of ranked) {
     const key = pieceIdentityKey(piece.profile, piece.label);
     if (seen.has(key)) continue;
     seen.add(key);

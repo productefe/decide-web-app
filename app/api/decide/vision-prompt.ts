@@ -9,10 +9,16 @@ export const VISION_OUTFIT_PROMPT = `Analyze this fashion image for a FULL OUTFI
 
 HARD RULE — never collapse a worn outfit:
 - If a person (or mannequin) is wearing clothes, "items" MUST list every distinct clothing layer you can see: top AND bottom AND shoes (plus outerwear/accessories when visible).
+- The MAIN / largest garment (sweatshirt, hoodie, coat, dress, …) MUST be the first clothing item — never skip it in favor of shoes or accessories.
 - Returning only shoes, only slippers/terlik, or only one garment for a full outfit is WRONG.
 - Only return ONE item if the photo is clearly a product close-up of a single piece with no other garments in frame.
 
 Be precise about TYPE vs LENGTH vs STRAPS:
+- KNIT / FLEECE TOPS check FIRST for every upper garment (never default to t-shirt):
+  - hoodie: visible hood / kapüşon. subcategory MUST be hoodie. NEVER t-shirt, NEVER plain sweatshirt.
+  - sweatshirt: thick cotton fleece / şardonlu sweat, ribbed cuffs AND hem, NO hood. Almost always long-sleeve. subcategory MUST be sweatshirt. A heavy crewneck with a rib waistband is a SWEATSHIRT even if it has a chest print.
+  - sweater / kazak: visible knit stitch (triko), not flat fleece.
+  - t-shirt: THIN jersey only. Typically short-sleeve (a thin long-sleeve tee has no rib waistband and no fleece). NEVER label a sweatshirt, hoodie, or kazak as t-shirt.
 - crop top, t-shirt, blouse, spaghetti-strap top, and dress are DISTINCT subcategories. A crop top is NEVER a dress. A spaghetti-strap crop top is still a crop top (subcategory crop-top, length crop, sleeve_or_strap thin-strap).
 - length is HEM length of the garment (crop / normal / midi / maxi / uzun), NOT sleeve length.
 - sleeve_or_strap is separate: short-sleeve / long-sleeve / sleeveless / thin-strap / thick-strap / strapless.
@@ -45,7 +51,7 @@ pattern.placement: chest | shoulder | sleeve | all-over | hem | ""
 gender_presentation: men | women | unisex | ""
 material_impression: visual guess only (cotton | knit | denim | satin | leather-look | linen | "") — not a claim.
 
-label must be ONLY the Turkish item name (Tişört, Crop Top, Askılı Üst, Bluz, Elbise, Pantolon, Kravat, Kemer, …) — no English, no explanations.
+label must be ONLY the Turkish item name (Sweatshirt, Tişört, Crop Top, Askılı Üst, Bluz, Elbise, Pantolon, Kravat, Kemer, …) — no English, no explanations.
 
 Return ONLY valid JSON, no markdown. Example of a WORN OUTFIT (always multiple items):
 {"items":[{"label":"Tişört","category":"top","subcategory":"t-shirt","silhouette_fit":"regular","length":"normal","neckline":"crew-neck","sleeve_or_strap":"short-sleeve","primary_color":"orange","secondary_colors":["black","white"],"patterns":[{"type":"graphic","colors":["black"],"placement":"chest"},{"type":"striped","colors":["white"],"placement":"shoulder"}],"material_impression":"cotton","gender_presentation":"unisex","distinctive_details":["önde siyah motif","omuzlarda beyaz şerit"],"style_tags":["casual"],"has_logo":false},{"label":"Şort","category":"bottom","subcategory":"shorts","silhouette_fit":"regular","length":"mini","primary_color":"blue","secondary_colors":[],"patterns":[],"material_impression":"denim","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false},{"label":"Spor Ayakkabı","category":"shoes","subcategory":"sneaker","silhouette_fit":"regular","primary_color":"white","secondary_colors":[],"patterns":[],"material_impression":"","gender_presentation":"unisex","distinctive_details":[],"style_tags":["casual"],"has_logo":false}]}
