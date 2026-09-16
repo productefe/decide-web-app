@@ -201,6 +201,7 @@ export async function POST(req: NextRequest) {
             },
           ],
           max_tokens: 4000,
+          response_format: { type: "json_object" },
         })
       );
     }

@@ -939,12 +939,14 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
     if (/\b(crop|mini)\b/.test(t) && !/\bmaxi\b/.test(t)) return true;
   }
 
-  // Shoe subtypes are never relaxed — a sneaker search must not surface heels.
+  // Shoe subtypes are never relaxed — a sneaker search must not surface heels or terlik.
   const isSneaker = /\b(sneaker|spor ayakkabı|koşu ayakkabı)\b/.test(blob);
   const isHeel = /\b(topuk|stiletto|heel|pump|kitten)\b/.test(blob);
   const isBoot = /\b(bot|boot|chelsea|combat)\b/.test(blob) && !isSneaker;
-  const isSandal = /\b(sandal|sandalet)\b/.test(blob);
+  const isSandal = /\b(sandal|sandalet)\b/.test(blob) && !/\bterlik\b/.test(blob);
   const isLoafer = /\b(loafer|mokasen|oxford)\b/.test(blob);
+  const isSlipper = /\b(terlik|slipper|ev ayakkabısı)\b/.test(blob);
+  const titleIsSlipper = /\b(terlik|slippers?|ev ayakkabısı|flip[- ]?flop)\b/.test(t);
   if (isSneaker) {
     if (
       /\b(topuklu|topuk|stiletto|pump|kitten|high[- ]?heel|klasik ayakkabı|deri ayakkabı|mokasen|loafer|oxford)\b/.test(
@@ -955,6 +957,10 @@ export function contradictsAbsoluteType(title: string, profile: ProductProfile):
       return true;
     }
     if (/\b(bot|boot|sandalet|sandal)\b/.test(t) && !/\b(sneaker|spor ayakkabı)\b/.test(t)) return true;
+    if (titleIsSlipper && !/\b(sneaker|spor ayakkabı)\b/.test(t)) return true;
+  }
+  if (!isSlipper && (isHeel || isBoot || isSandal || isLoafer || family === "shoes" || familyTr === "ayakkabı")) {
+    if (titleIsSlipper && !isSandal) return true;
   }
   if (isHeel) {
     if (/\b(sneaker|spor ayakkabı|koşu|bot|sandalet)\b/.test(t) && !/\b(topuk|stiletto|heel)\b/.test(t)) {
@@ -1806,7 +1812,7 @@ const categoryTR: Record<string, string> = {
   bikini: "bikini", mayo: "mayo", swimsuit: "mayo", "swim shorts": "deniz şortu",
   pareo: "pareo", "beach bag": "plaj çantası",
   sneaker: "spor ayakkabı", sneakers: "spor ayakkabı", "running shoe": "koşu ayakkabısı",
-  boot: "bot", sandal: "sandalet", loafer: "loafer",
+  boot: "bot", sandal: "sandalet", loafer: "loafer", slipper: "terlik", terlik: "terlik",
   "high heel": "topuklu ayakkabı", oxford: "oxford ayakkabı",
   bag: "çanta", handbag: "el çantası", backpack: "sırt çantası",
   hat: "şapka", cap: "şapka", beanie: "bere",
@@ -1870,6 +1876,9 @@ const subcategoryTR: Record<string, string> = {
   heel: "topuklu ayakkabı",
   "high-heel": "topuklu ayakkabı",
   oxford: "oxford ayakkabı",
+  slipper: "terlik",
+  slippers: "terlik",
+  terlik: "terlik",
   bag: "çanta",
   hat: "şapka",
   glasses: "gözlük",
@@ -1929,6 +1938,9 @@ const SUBCATEGORY_TO_FAMILY: Record<string, string> = {
   heel: "shoes",
   "high-heel": "shoes",
   oxford: "shoes",
+  slipper: "shoes",
+  slippers: "shoes",
+  terlik: "shoes",
   bag: "bag",
   hat: "hat",
   glasses: "eyewear",
@@ -2255,7 +2267,7 @@ function inferFamily(sub: string, cat: string): string {
   if (/elbise|dress|jumpsuit|tulum/.test(blob)) return "dress";
   if (/crop|tişört|t-shirt|bluz|askı|gömlek|hoodie|sweat|polo|tank|bikini|mayo/.test(blob)) return "top";
   if (/pantolon|jean|etek|şort|short|tayt/.test(blob)) return "bottom";
-  if (/ayakkabı|sneaker|bot|sandal/.test(blob)) return "shoes";
+  if (/ayakkabı|sneaker|bot|sandal|terlik|slipper/.test(blob)) return "shoes";
   if (/çanta|bag/.test(blob)) return "bag";
   if (/gözlük|glasses/.test(blob)) return "eyewear";
   if (/şapka|hat|bere/.test(blob)) return "hat";
@@ -2464,7 +2476,7 @@ export interface VisionPiece {
   profile: ProductProfile;
 }
 
-const MAX_OUTFIT_PIECES = 5;
+const MAX_OUTFIT_PIECES = 6;
 
 /**
  * Drop only true duplicates (same type + color). Jeans and shorts must both
@@ -2636,24 +2648,16 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
 
   const occasion = parseOccasion(rebuilt.user_profile?.occasion);
   const accessorySearch = isAccessoryProfile(rebuilt);
-  const occasionCore = withOccasionSearchPhrase(core, occasion, {
+  const occasionOpts = {
     forAccessory: accessorySearch,
     category: rebuilt.category,
     subcategory: rebuilt.subcategory,
+    subcategory_tr: rebuilt.subcategory_tr,
     category_tr: rebuilt.category_tr,
-  });
-  const occasionStrong = withOccasionSearchPhrase(strong, occasion, {
-    forAccessory: accessorySearch,
-    category: rebuilt.category,
-    subcategory: rebuilt.subcategory,
-    category_tr: rebuilt.category_tr,
-  });
-  const occasionFull = withOccasionSearchPhrase(full, occasion, {
-    forAccessory: accessorySearch,
-    category: rebuilt.category,
-    subcategory: rebuilt.subcategory,
-    category_tr: rebuilt.category_tr,
-  });
+  };
+  const occasionCore = withOccasionSearchPhrase(core, occasion, occasionOpts);
+  const occasionStrong = withOccasionSearchPhrase(strong, occasion, occasionOpts);
+  const occasionFull = withOccasionSearchPhrase(full, occasion, occasionOpts);
 
   const sizeQuery = firstSize
     ? uniqueJoin([occasionFull || occasionStrong || full || strong, firstSize])
@@ -2662,12 +2666,7 @@ export function buildSearchPlan(productProfile: ProductProfile, rotation = 0): S
   // Combine (and similar) stores a stylist query in search_query — it must be
   // searched, not only the reconstructed core ("kadın siyah ayakkabı").
   const storedQuery = asText(rebuilt.search_query).trim().replace(/\s+/g, " ");
-  const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion, {
-    forAccessory: accessorySearch,
-    category: rebuilt.category,
-    subcategory: rebuilt.subcategory,
-    category_tr: rebuilt.category_tr,
-  });
+  const storedWithOccasion = withOccasionSearchPhrase(storedQuery, occasion, occasionOpts);
 
   const base = [
     storedWithOccasion,

@@ -57,6 +57,23 @@ function dedupeItems(items: SerpShoppingItem[]): SerpShoppingItem[] {
 
 /** Cap hung Serp calls. Fan-out wall-clock ≈ one timeout (~4.2s). */
 const SERP_TIMEOUT_MS = 4_200;
+/** Global cap so 5 pieces × 4 queries do not stampede SerpAPI rate limits. */
+const SERP_CONCURRENCY = 5;
+let serpActive = 0;
+const serpWaiters: Array<() => void> = [];
+
+async function withSerpSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (serpActive >= SERP_CONCURRENCY) {
+    await new Promise<void>((resolve) => serpWaiters.push(resolve));
+  }
+  serpActive++;
+  try {
+    return await fn();
+  } finally {
+    serpActive--;
+    serpWaiters.shift()?.();
+  }
+}
 
 async function serpShoppingSearch(
   query: string,
@@ -74,23 +91,25 @@ async function serpShoppingSearch(
     gl: "tr",
     hl: "tr",
   });
-  try {
-    const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`, {
-      signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
-    });
-    const serpData = await serpRes.json();
+  return withSerpSlot(async () => {
+    try {
+      const serpRes = await fetch(`${SERPAPI_URL}?${serpParams.toString()}`, {
+        signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
+      });
+      const serpData = await serpRes.json();
 
-    if (serpData?.error) {
-      console.warn("SerpAPI:", trimmed, "→", serpData.error);
+      if (serpData?.error) {
+        console.warn("SerpAPI:", trimmed, "→", serpData.error);
+        return [];
+      }
+
+      return serpData?.shopping_results || [];
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === "TimeoutError";
+      console.warn("SerpAPI:", trimmed, "→", aborted ? `timeout ${SERP_TIMEOUT_MS}ms` : String(err));
       return [];
     }
-
-    return serpData?.shopping_results || [];
-  } catch (err) {
-    const aborted = err instanceof Error && err.name === "TimeoutError";
-    console.warn("SerpAPI:", trimmed, "→", aborted ? `timeout ${SERP_TIMEOUT_MS}ms` : String(err));
-    return [];
-  }
+  });
 }
 
 function emptyScoring(productProfile: ProductProfile): ScoringResult {
@@ -192,10 +211,33 @@ async function gatherCandidates(
   }
 
   const typeBit = typeBitFor(productProfile);
-  const colorTypeQuery = sanitizeQuery(
-    [productProfile.gender_tr, productProfile.color_tr, productProfile.pattern_tr, typeBit]
+  const motifBit = [
+    productProfile.pattern_tr,
+    ...(productProfile.distinctive_details || []).slice(0, 1),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const shapeBit = [
+    productProfile.fit_tr,
+    productProfile.sleeve_or_strap_tr,
+    productProfile.length_tr,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const lookQuery = sanitizeQuery(
+    [
+      productProfile.gender_tr,
+      productProfile.color_tr,
+      motifBit,
+      shapeBit,
+      typeBit,
+    ]
       .filter(Boolean)
       .join(" "),
+    productProfile
+  );
+  const colorTypeQuery = sanitizeQuery(
+    [productProfile.gender_tr, productProfile.color_tr, typeBit].filter(Boolean).join(" "),
     productProfile
   );
   const fallbackWithColor = sanitizeQuery(
@@ -203,7 +245,7 @@ async function gatherCandidates(
     productProfile
   );
   const primary =
-    sanitizeQuery(productProfile.search_query || queries[0] || "", productProfile) ||
+    sanitizeQuery(lookQuery || productProfile.search_query || queries[0] || "", productProfile) ||
     queries[0];
 
   const fanOut: string[] = [];
@@ -214,24 +256,23 @@ async function gatherCandidates(
   };
 
   if (compact) {
-    push(primary);
+    push(lookQuery || primary);
     push(colorTypeQuery || fallbackWithColor);
     if (priceMode === "luks") {
-      push(luxuryQueries[0] || (primary ? `${primary} ${LUXURY_SEARCH_STORES[0]}` : ""));
+      push(luxuryQueries[0] || (colorTypeQuery ? `${colorTypeQuery} ${LUXURY_SEARCH_STORES[0]}` : ""));
     } else {
       push(brandQueries[0] || luxuryQueries[0]);
     }
   } else if (priceMode === "luks") {
-    for (const q of luxuryQueries.slice(0, 3)) push(q);
-    push(primary);
+    for (const q of luxuryQueries.slice(0, 2)) push(q);
+    push(lookQuery || primary);
     push(colorTypeQuery);
-    push(fallbackWithColor);
   } else {
-    push(primary);
+    push(lookQuery || primary);
     push(colorTypeQuery);
     push(fallbackWithColor);
 
-    const seed = primary || colorTypeQuery || fallbackWithColor;
+    const seed = colorTypeQuery || lookQuery || fallbackWithColor;
     const brands = pickDecidePoolBrands(
       {
         category: productProfile.category,
@@ -241,27 +282,25 @@ async function gatherCandidates(
         price_mode: priceMode,
         gender: `${productProfile.gender} ${productProfile.gender_tr} ${productProfile.user_profile?.gender || ""}`,
       },
-      2,
+      1,
       seed,
       rotation
     );
     for (const brand of brands) {
       if (seed) push(`${seed} ${brand}`);
     }
-    // From buildSearchPlan brand list when pool picker returned nothing useful.
-    for (const q of brandQueries.slice(0, 2)) {
-      if (fanOut.length >= 5) break;
-      push(q);
+    if (fanOut.length < 4) {
+      for (const q of brandQueries.slice(0, 1)) push(q);
     }
 
-    // Karma: always include one luxury-channel query for quality brands.
-    if (priceMode === "karma") {
-      push(luxuryQueries[0] || (primary ? `${primary} beymen` : ""));
+    // Karma: one luxury-channel query for quality brands.
+    if (priceMode === "karma" && fanOut.length < 4) {
+      push(luxuryQueries[0] || (seed ? `${seed} beymen` : ""));
     }
   }
 
-  // Cap full fan-out at 6; compact already ≤ 3.
-  const querySet = fanOut.slice(0, compact ? 3 : 6);
+  // 4 queries/piece keeps Serp under the global concurrency cap.
+  const querySet = fanOut.slice(0, compact ? 3 : 4);
   let result = await fanOutQueries(querySet, productProfile, apiKey, serpNum, shown);
 
   // Serp outage / total miss: one type-only rescue, then stop.
@@ -302,15 +341,17 @@ function rescoreAtRelax(
 
 async function fetchImmersive(url: string | null | undefined, serpKey: string) {
   if (!url) return null;
-  try {
-    const res = await fetch(`${url}&api_key=${serpKey}`, {
-      signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
+  return withSerpSlot(async () => {
+    try {
+      const res = await fetch(`${url}&api_key=${serpKey}`, {
+        signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  });
 }
 
 export type ProcessPieceOptions = {
@@ -395,8 +436,9 @@ function applyPoolFilters(
 }
 
 /**
- * Guarantee ≥2 cards from the gathered pool by relaxing quality/look filters
- * in-memory (no extra Serp RTT). Steps: current → relax1 → relax2.
+ * Fill cards from the gathered pool without another Serp RTT.
+ * First analysis keeps motif/color (look 0) and only relaxes quality.
+ * Show-more may step look-relax so "3 daha" still returns cards.
  */
 function guaranteeCardsFromPool(
   items: SerpShoppingItem[],
@@ -406,21 +448,30 @@ function guaranteeCardsFromPool(
   denyTitlePattern?: RegExp,
   denyTitle?: (title: string) => boolean
 ): ScoringResult {
+  const firstPass = excludeTitles.size === 0;
   let next = applyPoolFilters(
     scoring,
     excludeTitles,
     productProfile,
     denyTitlePattern,
-    denyTitle
+    denyTitle,
+    firstPass ? 0 : undefined
   );
   if (next.pool.length >= 2 || items.length === 0) return next;
+  if (firstPass && next.pool.length >= 1) return next;
 
-  // Force quality-filter relax 1 (shownCount 1..8 → lookRelaxLevel 1).
+  // Quality-filter relax, still look-faithful on first analysis.
   const at1 = rescoreAtRelax(items, productProfile, Math.max(excludeTitles.size, 1));
-  next = applyPoolFilters(at1, excludeTitles, productProfile, denyTitlePattern, denyTitle, 1);
-  if (next.pool.length >= 2) return next;
+  next = applyPoolFilters(
+    at1,
+    excludeTitles,
+    productProfile,
+    denyTitlePattern,
+    denyTitle,
+    firstPass ? 0 : 1
+  );
+  if (next.pool.length >= 1 && (firstPass || next.pool.length >= 2)) return next;
 
-  // Force relax 2 (shownCount ≥ 9).
   const at2 = rescoreAtRelax(items, productProfile, Math.max(excludeTitles.size, 9));
   next = applyPoolFilters(at2, excludeTitles, productProfile, denyTitlePattern, denyTitle, 2);
   return next;

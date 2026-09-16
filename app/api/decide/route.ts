@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
           },
         ],
         max_tokens: 4000,
+        response_format: { type: "json_object" },
       })
     );
 
@@ -212,6 +213,23 @@ export async function POST(req: NextRequest) {
       const p = applyUserGender(profile, userGender);
       return { label, profile: p };
     });
+    console.log(
+      "/api/decide vision",
+      profiles.map((p) => `${p.label}:${p.profile.subcategory_tr || p.profile.category_tr}`).join(" | ")
+    );
+
+    const toPiece = (
+      label: string,
+      profile: (typeof profiles)[number]["profile"],
+      piece: PieceResult | null
+    ): PieceResult | null =>
+      piece
+        ? ({
+            ...piece,
+            label,
+            ...pieceAttrsFromProfile(profile),
+          } satisfies PieceResult)
+        : null;
 
     const rawPieces = await timer.span("search", () =>
       mapLimit(profiles, 3, async ({ label, profile }) => {
@@ -219,21 +237,35 @@ export async function POST(req: NextRequest) {
         return processPiece(profile, occasionKeyword, SERPAPI_KEY, AFFILIATE_TAG, new Set(), {
           mustFind: true,
           immersiveMode: "recommended",
-        }).then((piece) =>
-          piece
-            ? ({
-                ...piece,
-                label,
-                ...pieceAttrsFromProfile(profile),
-              } satisfies PieceResult)
-            : null
-        );
+        }).then((piece) => toPiece(label, profile, piece));
       })
     );
+
     const pieceResults: PieceResult[] = [];
-    for (const p of rawPieces) {
-      if (p) pieceResults.push(p);
+    for (let i = 0; i < profiles.length; i++) {
+      let piece = rawPieces[i];
+      if (!piece && !profiles[i].profile.low_confidence) {
+        console.warn("/api/decide retry", profiles[i].label);
+        piece = toPiece(
+          profiles[i].label,
+          profiles[i].profile,
+          await processPiece(
+            profiles[i].profile,
+            occasionKeyword,
+            SERPAPI_KEY,
+            AFFILIATE_TAG,
+            new Set(),
+            { mustFind: true, searchMode: "compact", immersiveMode: "recommended" }
+          )
+        );
+      }
+      if (piece) pieceResults.push(piece);
     }
+    console.log(
+      "/api/decide pieces",
+      `${pieceResults.length}/${profiles.length}`,
+      pieceResults.map((p) => p.label).join(" | ")
+    );
 
     if (pieceResults.length === 0) {
       const snap = timer.snapshot({

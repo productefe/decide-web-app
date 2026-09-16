@@ -404,7 +404,7 @@ function pieceFamily(category: string, subcategory: string, categoryTr = ""): Pi
   if (/bottom|pantolon|jean|chino|jogger|eşofman|esofman|şort|short|tayt|legging|etek|skirt/.test(blob)) {
     return "bottom";
   }
-  if (/shoe|ayakkabı|ayakkabi|sneaker|loafer|oxford|bot|sandal|heel|topuk/.test(blob)) {
+  if (/shoe|ayakkabı|ayakkabi|sneaker|loafer|oxford|bot|sandal|heel|topuk|terlik|slipper/.test(blob)) {
     return "shoes";
   }
   if (/dress|elbise|jumpsuit|tulum/.test(blob)) return "dress";
@@ -433,9 +433,9 @@ const PIECE_SEARCH_PHRASE: Record<Occasion, Partial<Record<PieceFamily, string>>
     dress: "abiye davet elbise",
   },
   ev: {
-    bottom: "eşofman lounge jogger rahat",
-    shoes: "terlik ev ayakkabısı",
-    top: "lounge sweatshirt polar rahat",
+    bottom: "rahat lounge",
+    shoes: "rahat",
+    top: "rahat lounge",
   },
   is: {
     bottom: "chino kumaş pantolon ofis smart casual",
@@ -445,7 +445,7 @@ const PIECE_SEARCH_PHRASE: Record<Occasion, Partial<Record<PieceFamily, string>>
   },
   sahil: {
     bottom: "şort plaj deniz şortu",
-    shoes: "sandalet plaj terliği",
+    shoes: "plaj sandalet",
     top: "plaj keten atlet",
     dress: "pareo plaj elbisesi",
     swim: "bikini mayo plaj",
@@ -459,13 +459,19 @@ export function getAccessoryOccasionPhrase(occasion: Occasion | null | undefined
 
 export function getOccasionKeywordForPiece(
   occasion: Occasion | null | undefined,
-  opts: { forAccessory?: boolean; category?: string; subcategory?: string; category_tr?: string } = {}
+  opts: {
+    forAccessory?: boolean;
+    category?: string;
+    subcategory?: string;
+    subcategory_tr?: string;
+    category_tr?: string;
+  } = {}
 ): string {
   if (!occasion) return "";
   if (opts.forAccessory) return getAccessoryOccasionPhrase(occasion);
   const family = pieceFamily(
     asText(opts.category),
-    asText(opts.subcategory),
+    `${asText(opts.subcategory)} ${asText(opts.subcategory_tr)}`,
     asText(opts.category_tr)
   );
   return PIECE_SEARCH_PHRASE[occasion][family] || getOccasionKeyword(occasion);
@@ -569,6 +575,41 @@ export function occasionTitleFit(
 }
 
 /** Append occasion shopping words that are not already in the query. */
+/** Garment types that must not be injected onto a different piece (sneaker + terlik). */
+const OCCASION_TYPE_TOKENS = new Set([
+  "terlik",
+  "sweatshirt",
+  "polar",
+  "jogger",
+  "eşofman",
+  "esofman",
+  "gömlek",
+  "gomlek",
+  "blazer",
+  "tişört",
+  "tisort",
+  "jean",
+  "pantolon",
+  "etek",
+  "topuklu",
+  "sneaker",
+  "sandalet",
+  "loafer",
+  "oxford",
+  "hoodie",
+  "pijama",
+  "bikini",
+  "mayo",
+  "şort",
+  "sort",
+  "kaban",
+  "ceket",
+  "atlet",
+  "polo",
+  "ayakkabısı",
+  "ayakkabi",
+]);
+
 export function withOccasionSearchPhrase(
   query: string,
   occasion: Occasion | null | undefined,
@@ -576,6 +617,7 @@ export function withOccasionSearchPhrase(
     forAccessory?: boolean;
     category?: string;
     subcategory?: string;
+    subcategory_tr?: string;
     category_tr?: string;
   } = {}
 ): string {
@@ -584,8 +626,14 @@ export function withOccasionSearchPhrase(
   if (!raw.trim()) return phrase;
   if (!phrase) return raw.trim().replace(/\s+/g, " ");
   const q = asLower(raw);
-  const extra = phrase
-    .split(/\s+/)
-    .filter((w) => w && !q.includes(asLower(w)));
+  const pieceBlob = asLower(
+    [opts.category, opts.subcategory, opts.subcategory_tr, opts.category_tr, raw].join(" ")
+  );
+  const extra = phrase.split(/\s+/).filter((w) => {
+    if (!w || q.includes(asLower(w))) return false;
+    const token = asLower(w);
+    if (OCCASION_TYPE_TOKENS.has(token) && !pieceBlob.includes(token)) return false;
+    return true;
+  });
   return [raw.trim(), ...extra].join(" ").replace(/\s+/g, " ").trim();
 }
