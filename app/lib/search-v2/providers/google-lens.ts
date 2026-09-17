@@ -3,7 +3,7 @@ import type { ProductCandidate } from "../schema";
 import { getQueryCache, setQueryCache } from "../cache";
 import { fetchWithTimeout, withRateLimit } from "./http";
 
-const SERP_TIMEOUT_MS = Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 3500);
+const SERP_TIMEOUT_MS = Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 6500);
 
 function candidateId(title: string, link: string, productId: string | null): string {
   return createHash("sha1")

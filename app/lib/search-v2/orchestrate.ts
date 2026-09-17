@@ -1,7 +1,12 @@
 import type { PriceMode, UserGender } from "@/lib/preferences";
 import type { Product, Results, PieceResult } from "@/components/analyze/types";
 import { createHash } from "crypto";
-import type { OutfitIntent, ProductIntent, VerifiedCandidate } from "./schema";
+import type {
+  OutfitIntent,
+  ProductCandidate,
+  ProductIntent,
+  VerifiedCandidate,
+} from "./schema";
 import { buildQueryPlan } from "./query-plan";
 import { searchGoogleShopping } from "./providers/google-shopping";
 import { searchGoogleLens } from "./providers/google-lens";
@@ -21,6 +26,8 @@ export interface OrchestratePieceInput {
   sessionId?: string | null;
   page?: number;
   affiliateTag?: string;
+  /** One Lens request is shared by every piece in the same photo. */
+  sharedLensPromise?: Promise<ProductCandidate[]>;
 }
 
 export interface OrchestratePieceResult {
@@ -119,7 +126,8 @@ export async function orchestratePiece(
   const t0 = Date.now();
   const lensPromise =
     plan.lens && page === 0
-      ? searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
+      ? input.sharedLensPromise ||
+        searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
       : Promise.resolve([]);
   const textPromises = plan.text_queries.map((q) =>
     searchGoogleShopping({ apiKey: input.serpApiKey, query: q.q })
@@ -192,6 +200,10 @@ export async function orchestrateOutfit(opts: {
   version: string;
 }> {
   const searchable = opts.intent.pieces.filter((p) => !p.low_confidence);
+  const sharedLensPromise = searchGoogleLens({
+    apiKey: opts.serpApiKey,
+    imageUrl: opts.photoUrl,
+  });
   const results = await Promise.all(
     searchable.map((piece) =>
       orchestratePiece({
@@ -203,6 +215,7 @@ export async function orchestrateOutfit(opts: {
         gender: opts.gender,
         sizes: opts.sizes,
         affiliateTag: opts.affiliateTag,
+        sharedLensPromise,
       }).catch((err) => {
         console.warn("[search-v2] piece fail", piece.label_tr, err);
         return null;

@@ -149,9 +149,25 @@ export function buildQueryPlan(
         }))
       : variants;
 
-  // First page: first 2 text queries; later pages rotate
-  const start = Math.min(page * 2, Math.max(0, filtered.length - 2));
-  const text_queries = filtered.slice(start, start + 2);
+  const byId = new Map(filtered.map((variant) => [variant.id, variant]));
+  let text_queries: QueryVariant[];
+  if (page === 0) {
+    // The first page must never depend on a brand existing for the detected
+    // family. A broad type+color query is the primary retrieval channel.
+    text_queries = [byId.get("type"), byId.get("brand0")]
+      .filter((variant): variant is QueryVariant => Boolean(variant));
+  } else if (page === 1) {
+    text_queries = [byId.get("motif") || byId.get("brand1"), byId.get("broad")]
+      .filter((variant): variant is QueryVariant => Boolean(variant));
+  } else {
+    // Deterministically rotate remaining brand variants on later pages.
+    const brands = filtered.filter((variant) => variant.kind === "brand");
+    const start = Math.max(0, (page - 2) * 2);
+    text_queries = brands.slice(start, start + 2);
+    if (text_queries.length === 0 && byId.get("broad")) {
+      text_queries = [byId.get("broad")!];
+    }
+  }
 
   return {
     intent_id: intent.id,
