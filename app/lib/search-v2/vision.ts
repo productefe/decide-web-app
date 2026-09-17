@@ -7,6 +7,11 @@ import { getPersistentVision, setPersistentVision } from "./cache";
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VISION_MODEL = process.env.SEARCH_V2_VISION_MODEL || "gpt-4o";
 const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 4500);
+const FALLBACK_VISION_MODEL =
+  process.env.SEARCH_V2_VISION_FALLBACK_MODEL || "gpt-4o-mini";
+const FALLBACK_VISION_TIMEOUT_MS = Number(
+  process.env.SEARCH_V2_VISION_FALLBACK_TIMEOUT_MS || 8000
+);
 
 const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
 Görseldeki HER görünür giysi ve takı parçasını ayrı listele.
@@ -124,7 +129,7 @@ async function callChatFallback(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: VISION_MODEL,
+        model: FALLBACK_VISION_MODEL,
         messages: [
           {
             role: "user",
@@ -138,20 +143,34 @@ async function callChatFallback(
           },
         ],
         max_tokens: 4000,
-        response_format: { type: "json_object" },
+        response_format: {
+          type: "json_schema",
+          json_schema: PRODUCT_INTENT_JSON_SCHEMA,
+        },
       }),
     },
-    VISION_TIMEOUT_MS
+    FALLBACK_VISION_TIMEOUT_MS
   );
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: {
+      finish_reason?: string;
+      message?: { content?: string; refusal?: string };
+    }[];
     error?: { message?: string };
   };
   if (!res.ok || data.error) {
     throw new Error(data.error?.message || "Vision V2 başarısız");
   }
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Vision V2 boş yanıt");
+  if (!content) {
+    const refusal = data.choices?.[0]?.message?.refusal;
+    const finish = data.choices?.[0]?.finish_reason;
+    throw new Error(
+      refusal
+        ? `Vision V2 reddedildi: ${refusal}`
+        : `Vision V2 boş yanıt${finish ? ` (${finish})` : ""}`
+    );
+  }
   return content;
 }
 

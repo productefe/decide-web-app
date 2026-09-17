@@ -61,6 +61,25 @@ function collectTitles(results: Results): string[] {
   );
 }
 
+function isV2VisionContent(content: string): boolean {
+  try {
+    const parsed = JSON.parse(content) as {
+      extractor_version?: unknown;
+      pieces?: { family?: unknown; layer?: unknown }[];
+    };
+    return (
+      parsed.extractor_version === "search-v2-vision-1" &&
+      Array.isArray(parsed.pieces) &&
+      parsed.pieces.some(
+        (piece) =>
+          typeof piece?.family === "string" && typeof piece?.layer === "string"
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Re-run search for one piece (or first piece), excluding previously shown titles.
  */
@@ -224,7 +243,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Search V2 show-more: session cursor + unique products (never 404 on exhausted)
-    if (isSearchV2Enabled(user.id)) {
+    if (isSearchV2Enabled(user.id) && isV2VisionContent(visionContent)) {
       const sessionId =
         typeof body?.session_id === "string"
           ? body.session_id
