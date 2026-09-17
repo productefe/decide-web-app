@@ -5,6 +5,9 @@ export interface SearchV2RequestMetrics {
   search_version: string;
   vision_ms?: number;
   vision_cached?: boolean;
+  serp_ms?: number;
+  lens_ms?: number;
+  rerank_ms?: number;
   pieces: {
     label: string;
     candidates: number;
@@ -12,6 +15,8 @@ export interface SearchV2RequestMetrics {
     rejects: Record<string, number>;
     provider_ms: number;
     rerank_ms: number;
+    serp_ms?: number;
+    lens_ms?: number;
     selected_score?: number;
     size_status?: string;
   }[];
@@ -29,6 +34,9 @@ export function logSearchV2Metrics(route: string, m: SearchV2RequestMetrics): vo
       search_version: m.search_version,
       vision_ms: m.vision_ms,
       vision_cached: m.vision_cached,
+      serp_ms: m.serp_ms,
+      lens_ms: m.lens_ms,
+      rerank_ms: m.rerank_ms,
       piece_count: m.pieces.length,
       empty_piece_rate: m.empty_piece_rate,
       shadow: m.shadow,
@@ -38,6 +46,8 @@ export function logSearchV2Metrics(route: string, m: SearchV2RequestMetrics): vo
         kept: p.kept,
         rejects: p.rejects,
         provider_ms: p.provider_ms,
+        serp_ms: p.serp_ms,
+        lens_ms: p.lens_ms,
         rerank_ms: p.rerank_ms,
         selected_score: p.selected_score,
         size_status: p.size_status,

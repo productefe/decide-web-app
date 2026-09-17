@@ -10,6 +10,7 @@ import type {
 import { buildQueryPlan } from "./query-plan";
 import { searchGoogleShopping } from "./providers/google-shopping";
 import { searchGoogleLens } from "./providers/google-lens";
+import { raceTimeout } from "./providers/http";
 import { hardVerify } from "./verify";
 import { rerankCandidates } from "./rank";
 import { ensureSession, pickPage, seedSessionExcludes } from "./paginate";
@@ -48,6 +49,8 @@ export interface OrchestratePieceResult {
     rejects: Record<string, number>;
     provider_ms: number;
     rerank_ms: number;
+    serp_ms: number;
+    lens_ms: number;
   };
   attrs: ReturnType<typeof intentToAttrs>;
 }
@@ -138,11 +141,21 @@ export async function orchestratePiece(
   }
 
   const t0 = Date.now();
-  const lensPromise =
+  const lensCapMs = Number(process.env.SEARCH_V2_LENS_TIMEOUT_MS || 4000) || 4000;
+  let lensReady: ProductCandidate[] | undefined;
+  const lensPromise = (
     plan.lens && page === 0
       ? input.sharedLensPromise ||
-        searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
-      : Promise.resolve([]);
+        searchGoogleLens({
+          apiKey: input.serpApiKey,
+          imageUrl: input.photoUrl,
+          timeoutMs: lensCapMs,
+        })
+      : Promise.resolve([] as ProductCandidate[])
+  ).then((rows) => {
+    lensReady = rows;
+    return rows;
+  });
 
   const maxAttempts = (input.page || 0) === 0 && (input.outfitPieceCount || 1) >= 4 ? 1 : 2;
   const startIdx = plan.all_variants.findIndex((v) => v.q === plan.text_queries[0]?.q);
@@ -163,6 +176,9 @@ export async function orchestratePiece(
   let kept: VerifiedCandidate[] = [];
   let stats = { total: 0, kept: 0, rejects: {} as Record<string, number> };
   let ranked: VerifiedCandidate[] = [];
+  let rerank_ms = 0;
+  let serp_ms = 0;
+  let lens_ms = 0;
   let piecePage = {
     products: [] as VerifiedCandidate[],
     exhausted: true,
@@ -170,23 +186,8 @@ export async function orchestratePiece(
     session_id: session.id,
   };
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const variant = ordered[attempt];
-    if (!variant || tried.some((t) => t.q === variant.q)) {
-      if (!variant) break;
-      continue;
-    }
-
-    const fetchLens = attempt === 0 ? lensPromise : Promise.resolve([] as ProductCandidate[]);
-    const [lensBatch, textBatch] = await Promise.all([
-      fetchLens,
-      searchGoogleShopping({ apiKey: input.serpApiKey, query: variant.q, num: 40 }),
-    ]);
-    if (attempt === 0) lens = lensBatch;
-    tried.push({ id: variant.id, q: variant.q, count: textBatch.length });
-    merged = [...lens, ...merged.filter((c) => c.provider !== "lens"), ...textBatch];
-
-    const verifiedKnown = hardVerify(merged, input.intent, {
+  const verifyMerged = (candidates: ProductCandidate[]) => {
+    const verifiedKnown = hardVerify(candidates, input.intent, {
       priceMode: input.priceMode,
       gender: input.gender,
       sizes: input.sizes,
@@ -195,8 +196,8 @@ export async function orchestratePiece(
       brandGate: "known",
     });
     let verified = verifiedKnown;
-    if (verified.kept.length === 0 && merged.length > 0) {
-      verified = hardVerify(merged, input.intent, {
+    if (verified.kept.length === 0 && candidates.length > 0) {
+      verified = hardVerify(candidates, input.intent, {
         priceMode: input.priceMode,
         gender: input.gender,
         sizes: input.sizes,
@@ -208,17 +209,15 @@ export async function orchestratePiece(
       dbg("H11", "orchestrate.ts:brand-fallback", "known-brand gate emptied piece; relaxed", {
         label: input.intent.label_tr,
         family: input.intent.family,
-        merged: merged.length,
+        merged: candidates.length,
         knownKept: verifiedKnown.stats.kept,
         unknownSeller: verifiedKnown.stats.rejects.unknown_seller || 0,
         relaxedKept: verified.stats.kept,
       });
       // #endregion
     }
-    kept = verified.kept;
-    stats = verified.stats;
-    if (kept.length === 0 && input.priceMode === "luks" && merged.length > 0) {
-      const luxuryFallback = hardVerify(merged, input.intent, {
+    if (verified.kept.length === 0 && input.priceMode === "luks" && candidates.length > 0) {
+      const luxuryFallback = hardVerify(candidates, input.intent, {
         priceMode: input.priceMode,
         gender: input.gender,
         sizes: input.sizes,
@@ -231,14 +230,63 @@ export async function orchestratePiece(
       dbg("H-luks", "orchestrate.ts:luxury-fallback", "luxury gate emptied piece; price/karma fallback", {
         label: input.intent.label_tr,
         family: input.intent.family,
-        merged: merged.length,
+        merged: candidates.length,
         luxuryLeak: verified.stats.rejects.luxury_leak || 0,
         quality: verified.stats.rejects.quality || 0,
         fallbackKept: luxuryFallback.stats.kept,
       });
       // #endregion
-      if (luxuryFallback.kept.length > 0) {
-        verified = luxuryFallback;
+      if (luxuryFallback.kept.length > 0) verified = luxuryFallback;
+    }
+    return verified;
+  };
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const variant = ordered[attempt];
+    if (!variant || tried.some((t) => t.q === variant.q)) {
+      if (!variant) break;
+      continue;
+    }
+
+    const tShop = Date.now();
+    const textBatch = await searchGoogleShopping({
+      apiKey: input.serpApiKey,
+      query: variant.q,
+      num: 40,
+    });
+    serp_ms += Date.now() - tShop;
+    tried.push({ id: variant.id, q: variant.q, count: textBatch.length });
+    merged = [...merged.filter((c) => c.provider !== "lens"), ...textBatch];
+
+    const applyLens = async (waitMs: number) => {
+      if (attempt !== 0) return false;
+      const before = lens.length;
+      const tLens = Date.now();
+      if (lensReady) {
+        lens = lensReady;
+      } else if (waitMs > 0) {
+        lens = await raceTimeout(lensPromise, waitMs, [] as ProductCandidate[]);
+      }
+      lens_ms += Date.now() - tLens;
+      if (lens.length) {
+        merged = [...lens, ...merged.filter((c) => c.provider !== "lens")];
+      }
+      return lens.length > before;
+    };
+
+    if (attempt === 0 && lensReady) {
+      await applyLens(0);
+    }
+
+    let verified = verifyMerged(merged);
+    kept = verified.kept;
+    stats = verified.stats;
+
+    if (attempt === 0 && !lens.length) {
+      const remaining = kept.length < 3 ? Math.max(0, lensCapMs - (Date.now() - t0)) : 0;
+      const added = await applyLens(remaining);
+      if (added) {
+        verified = verifyMerged(merged);
         kept = verified.kept;
         stats = verified.stats;
       }
@@ -246,6 +294,7 @@ export async function orchestratePiece(
 
     if (kept.length === 0) continue;
 
+    const tRank = Date.now();
     ranked = await rerankCandidates({
       apiKey: page === 0 && attempt === 0 && (input.outfitPieceCount || 1) < 4 ? input.openAiKey : undefined,
       intent: input.intent,
@@ -254,6 +303,7 @@ export async function orchestratePiece(
       limit: 24,
       timeoutMs: page === 0 && attempt === 0 && (input.outfitPieceCount || 1) < 4 ? 2000 : 0,
     });
+    rerank_ms += Date.now() - tRank;
     piecePage = pickPage(ranked, session, 3);
     if (piecePage.products.length > 0) break;
     if (page === 0) break;
@@ -271,6 +321,9 @@ export async function orchestratePiece(
     kept: stats.kept,
     rejects: stats.rejects,
     providerMs: provider_ms,
+    serpMs: serp_ms,
+    lensMs: lens_ms,
+    rerankMs: rerank_ms,
     timeoutEnv: process.env.SEARCH_V2_SERP_TIMEOUT_MS || "unset",
   });
   // #endregion
@@ -323,8 +376,6 @@ export async function orchestratePiece(
   });
   // #endregion
 
-  const rerank_ms = 0;
-
   return {
     label: input.intent.label_tr,
     category_tr: input.intent.category_tr,
@@ -338,6 +389,8 @@ export async function orchestratePiece(
       rejects: stats.rejects,
       provider_ms,
       rerank_ms,
+      serp_ms,
+      lens_ms,
     },
     attrs: intentToAttrs(input.intent),
   };
@@ -383,6 +436,7 @@ export async function orchestrateOutfit(opts: {
   const sharedLensPromise = searchGoogleLens({
     apiKey: opts.serpApiKey,
     imageUrl: opts.photoUrl,
+    timeoutMs: Number(process.env.SEARCH_V2_LENS_TIMEOUT_MS || 4000) || 4000,
   });
   const results = await Promise.all(
     toSearch.map((piece) =>

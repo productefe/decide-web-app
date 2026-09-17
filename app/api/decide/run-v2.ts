@@ -82,11 +82,18 @@ export async function runSearchV2(input: RunSearchV2Input) {
       ? 1
       : Math.max(0, gendered.pieces.length - pieces.length) / gendered.pieces.length;
 
+  const serp_ms = metrics.reduce((max, m) => Math.max(max, m.serp_ms || 0), 0);
+  const lens_ms = metrics.reduce((max, m) => Math.max(max, m.lens_ms || 0), 0);
+  const rerank_ms = metrics.reduce((max, m) => Math.max(max, m.rerank_ms || 0), 0);
+
   const metricsPayload: SearchV2RequestMetrics = {
     extractor_version: EXTRACTOR_VERSION,
     search_version: version || SEARCH_V2_VERSION,
     vision_ms,
     vision_cached: cached,
+    serp_ms,
+    lens_ms,
+    rerank_ms,
     empty_piece_rate,
     pieces: pieces.map((p, i) => ({
       label: p.label,
@@ -95,6 +102,8 @@ export async function runSearchV2(input: RunSearchV2Input) {
       rejects: metrics[i]?.rejects || {},
       provider_ms: metrics[i]?.provider_ms || 0,
       rerank_ms: metrics[i]?.rerank_ms || 0,
+      serp_ms: metrics[i]?.serp_ms || 0,
+      lens_ms: metrics[i]?.lens_ms || 0,
       selected_score: undefined,
       size_status: "unknown",
     })),
@@ -117,6 +126,9 @@ export async function runSearchV2(input: RunSearchV2Input) {
       data: {
         visionMs: vision_ms,
         visionCached: cached,
+        serpMs: serp_ms,
+        lensMs: lens_ms,
+        rerankMs: rerank_ms,
         priceMode: input.priceMode,
         intentPieces: gendered.pieces.length,
         resultPieces: pieces.length,
@@ -128,6 +140,9 @@ export async function runSearchV2(input: RunSearchV2Input) {
           kept: m.kept,
           rejects: m.rejects,
           providerMs: m.provider_ms,
+          serpMs: m.serp_ms,
+          lensMs: m.lens_ms,
+          rerankMs: m.rerank_ms,
         })),
       },
       timestamp: Date.now(),
@@ -140,6 +155,9 @@ export async function runSearchV2(input: RunSearchV2Input) {
     "run-v2.ts:outcome",
     JSON.stringify({
       visionMs: vision_ms,
+      serpMs: serp_ms,
+      lensMs: lens_ms,
+      rerankMs: rerank_ms,
       intentPieces: gendered.pieces.length,
       resultPieces: pieces.length,
       emptyPieceRate: empty_piece_rate,

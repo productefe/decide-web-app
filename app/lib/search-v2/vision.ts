@@ -7,12 +7,10 @@ import { dbg } from "./debug-log";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VISION_MODEL = process.env.SEARCH_V2_VISION_MODEL || "gpt-4o";
-const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 15000);
+const VISION_BUDGET_MS = Number(process.env.SEARCH_V2_VISION_BUDGET_MS || 10000);
+const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 7000);
 const FALLBACK_VISION_MODEL =
   process.env.SEARCH_V2_VISION_FALLBACK_MODEL || "gpt-4o-mini";
-const FALLBACK_VISION_TIMEOUT_MS = Number(
-  process.env.SEARCH_V2_VISION_FALLBACK_TIMEOUT_MS || 15000
-);
 
 const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
 Görseldeki HER görünür giysi ve takı parçasını ayrı listele.
@@ -48,6 +46,7 @@ function imageDetail(imageDataUrl: string): "low" | "high" {
 async function callResponsesApi(
   apiKey: string,
   imageDataUrl: string,
+  timeoutMs: number,
   repairHint?: string
 ): Promise<string> {
   const userText = repairHint
@@ -75,27 +74,18 @@ async function callResponsesApi(
     },
   };
 
-  let res: Response;
-  try {
-    res = await fetchWithTimeout(
-      RESPONSES_URL,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
+  const res = await fetchWithTimeout(
+    RESPONSES_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-      VISION_TIMEOUT_MS
-    );
-  } catch (error) {
-    console.warn(
-      "[search-v2] Responses vision unavailable; using chat fallback",
-      error instanceof Error ? error.message : String(error)
-    );
-    return callChatFallback(apiKey, imageDataUrl, repairHint);
-  }
+      body: JSON.stringify(body),
+    },
+    timeoutMs
+  );
 
   const data = (await res.json()) as {
     output_text?: string;
@@ -104,8 +94,7 @@ async function callResponsesApi(
   };
 
   if (!res.ok || data.error) {
-    // Fallback: chat completions json_object (older key / model path)
-    return callChatFallback(apiKey, imageDataUrl, repairHint);
+    throw new Error(data.error?.message || `Vision Responses ${res.status}`);
   }
 
   if (data.output_text) return data.output_text;
@@ -116,12 +105,13 @@ async function callResponsesApi(
     }
   }
   if (texts.length) return texts.join("\n");
-  return callChatFallback(apiKey, imageDataUrl, repairHint);
+  throw new Error("Vision Responses boş yanıt");
 }
 
 async function callChatFallback(
   apiKey: string,
   imageDataUrl: string,
+  timeoutMs: number,
   repairHint?: string
 ): Promise<string> {
   const res = await fetchWithTimeout(
@@ -150,7 +140,7 @@ async function callChatFallback(
         response_format: { type: "json_object" },
       }),
     },
-    FALLBACK_VISION_TIMEOUT_MS
+    timeoutMs
   );
   const data = (await res.json()) as {
     choices?: {
@@ -204,28 +194,44 @@ export async function extractOutfitIntent(opts: {
   }
 
   const t0 = Date.now();
+  const remaining = () => Math.max(0, VISION_BUDGET_MS - (Date.now() - t0));
   const payloadLen = (opts.imageDataUrl.split(",")[1] || opts.imageDataUrl).length;
   const large = payloadLen > 800_000;
   try {
-  let raw: string;
+  let raw: string | null = null;
+  let intent: OutfitIntent | null = null;
+
   try {
-    raw = await callResponsesApi(opts.apiKey, opts.imageDataUrl);
-  } catch {
-    raw = await callChatFallback(opts.apiKey, opts.imageDataUrl);
-  }
-  let intent: OutfitIntent;
-  try {
+    raw = await callResponsesApi(
+      opts.apiKey,
+      opts.imageDataUrl,
+      Math.min(VISION_TIMEOUT_MS, remaining() || VISION_TIMEOUT_MS)
+    );
     intent = parseOutfitIntentJson(raw);
-  } catch {
-    raw = await callChatFallback(opts.apiKey, opts.imageDataUrl);
+  } catch (error) {
+    console.warn(
+      "[search-v2] Responses vision unavailable; using chat fallback",
+      error instanceof Error ? error.message : String(error)
+    );
+    raw = null;
+    intent = null;
+  }
+
+  if (!intent && remaining() >= 1500) {
+    raw = await callChatFallback(opts.apiKey, opts.imageDataUrl, remaining());
     intent = parseOutfitIntentJson(raw);
   }
 
-  if (needsRepair(intent) && Date.now() - t0 < 20_000) {
+  if (!intent) {
+    throw new Error("Vision V2 boş yanıt");
+  }
+
+  if (needsRepair(intent) && remaining() >= 2000) {
     try {
       raw = await callChatFallback(
         opts.apiKey,
         opts.imageDataUrl,
+        remaining(),
         "Tam boy kombinse üst, alt, ayakkabı, dış giyim ve görünür takıyı ayrı parçalar olarak ekle. Hedef en az 3 parça. Okul üniforması ekleme."
       );
       intent = parseOutfitIntentJson(raw);

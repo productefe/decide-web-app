@@ -5,8 +5,8 @@ import { fetchWithTimeout, withSerpSlot } from "./http";
 import { dbg } from "../debug-log";
 
 const SERP_TIMEOUT_MS = Math.max(
-  10000,
-  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 12000) || 12000
+  1000,
+  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 7000) || 7000
 );
 
 function candidateId(title: string, link: string, productId: string | null): string {

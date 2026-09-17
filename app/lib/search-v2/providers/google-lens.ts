@@ -4,9 +4,9 @@ import { getQueryCache, setQueryCache } from "../cache";
 import { fetchWithTimeout, withSerpSlot } from "./http";
 import { dbg } from "../debug-log";
 
-const SERP_TIMEOUT_MS = Math.max(
-  10000,
-  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 12000) || 12000
+const LENS_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.SEARCH_V2_LENS_TIMEOUT_MS || 4000) || 4000
 );
 
 function lensUrlUsable(url: string): boolean {
@@ -83,7 +83,9 @@ export async function searchGoogleLens(opts: {
   apiKey: string;
   imageUrl: string;
   num?: number;
+  timeoutMs?: number;
 }): Promise<ProductCandidate[]> {
+  const timeoutMs = opts.timeoutMs ?? LENS_TIMEOUT_MS;
   if (!lensUrlUsable(opts.imageUrl)) {
     // #region agent log
     dbg("E", "google-lens.ts:skip", "lens skipped unusable url", {
@@ -110,7 +112,7 @@ export async function searchGoogleLens(opts: {
       const res = await fetchWithTimeout(
         `https://serpapi.com/search.json?${params}`,
         {},
-        SERP_TIMEOUT_MS
+        timeoutMs
       );
       const data = (await res.json()) as {
         visual_matches?: Record<string, unknown>[];
@@ -122,7 +124,7 @@ export async function searchGoogleLens(opts: {
         // #region agent log
         dbg("E", "google-lens.ts:error", "lens provider error", {
           status: res.status,
-          timeoutMs: SERP_TIMEOUT_MS,
+          timeoutMs,
           elapsedMs: Date.now() - t0,
           error: data.error || null,
           host: (() => {
@@ -153,7 +155,7 @@ export async function searchGoogleLens(opts: {
       }
       // #region agent log
       dbg("E", "google-lens.ts:ok", "lens response", {
-        timeoutMs: SERP_TIMEOUT_MS,
+        timeoutMs,
         elapsedMs: Date.now() - t0,
         resultCount: out.length,
         rawCount: raw.length,
@@ -164,7 +166,7 @@ export async function searchGoogleLens(opts: {
     } catch (err) {
       // #region agent log
       dbg("E", "google-lens.ts:fail", "lens exception", {
-        timeoutMs: SERP_TIMEOUT_MS,
+        timeoutMs,
         elapsedMs: Date.now() - t0,
         error: err instanceof Error ? err.message.slice(0, 120) : String(err),
       });

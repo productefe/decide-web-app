@@ -28,8 +28,35 @@ export async function fetchWithTimeout(
   }
 }
 
+/** Resolve with fallback if `promise` does not settle in `ms`. Does not cancel the promise. */
+export function raceTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  if (ms <= 0) return Promise.resolve(fallback);
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      resolve(fallback);
+    }, ms);
+    promise.then(
+      (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
+
 /** Hard cap on in-flight SerpAPI calls so a 4-piece outfit cannot stampede. */
-const SERP_CONCURRENCY = 3;
+const SERP_CONCURRENCY = 5;
 let serpActive = 0;
 const serpWaiters: Array<() => void> = [];
 
