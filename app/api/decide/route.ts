@@ -193,68 +193,68 @@ export async function POST(req: NextRequest) {
     const shadow = isSearchV2Shadow();
 
     if (useV2 && !shadow) {
-      const v2 = await timer.span("search_v2", () =>
-        runSearchV2({
-          openAiKey: OPENAI_API_KEY,
-          serpApiKey: SERPAPI_KEY,
-          affiliateTag: AFFILIATE_TAG,
-          userId: user.id,
-          photoUrl: photo_url,
-          visionImageUrl,
-          sizes,
-          priceMode: price_mode,
-          gender: userGender,
-          requestedOccasion,
-          anonymous: anonymous,
-          persistHistory: async (row) => {
-            const { error: insertError } = await supabase.from("search_history").insert(row);
-            if (insertError) console.error("search_history insert:", insertError.message);
-          },
-        })
-      );
+      try {
+        const v2 = await timer.span("search_v2", () =>
+          runSearchV2({
+            openAiKey: OPENAI_API_KEY,
+            serpApiKey: SERPAPI_KEY,
+            affiliateTag: AFFILIATE_TAG,
+            userId: user.id,
+            photoUrl: photo_url,
+            visionImageUrl,
+            sizes,
+            priceMode: price_mode,
+            gender: userGender,
+            requestedOccasion,
+            anonymous,
+            persistHistory: async (row) => {
+              const { error: insertError } = await supabase.from("search_history").insert(row);
+              if (insertError) console.error("search_history insert:", insertError.message);
+            },
+          })
+        );
 
-      if (!v2.ok) {
-        const snap = timer.snapshot({ route: "/api/decide", pieces: 0, search_version: "v2" });
-        timer.log("/api/decide", snap);
-        return NextResponse.json({
+        if (v2.ok) {
+          if (storage_path && v2.intent_raw) {
+            setCachedVision(visionCacheKey(user.id, storage_path, v2.occasion), v2.intent_raw);
+          }
+
+          const snap = timer.snapshot({
+            route: "/api/decide",
+            pieces: v2.pieces.length,
+            occasion: v2.occasion,
+            price_mode,
+            search_version: "v2",
+          });
+          return timer.json(
+            {
+              user_id: v2.user_id,
+              photo_url: v2.photo_url,
+              pieces: v2.pieces,
+              results: v2.results,
+              exclude_titles: v2.exclude_titles,
+              occasion: v2.occasion,
+              context: v2.context,
+              history_id: v2.history_id,
+              price_mode: v2.price_mode,
+              search_version: v2.search_version,
+              extractor_version: v2.extractor_version,
+              piece_sessions: v2.piece_sessions,
+            },
+            snap
+          );
+        }
+
+        console.warn("[search-v2] empty result; falling back to V1", {
           user_id: user.id,
-          photo_url,
-          pieces: [],
-          results: null,
-          error: v2.error,
-          _timing: snap,
-          search_version: "search-v2.1",
+          image_hash: v2.image_hash,
+        });
+      } catch (v2Error) {
+        console.error("[search-v2] failed; falling back to V1", {
+          user_id: user.id,
+          error: v2Error instanceof Error ? v2Error.message : String(v2Error),
         });
       }
-
-      if (storage_path && v2.intent_raw) {
-        setCachedVision(visionCacheKey(user.id, storage_path, v2.occasion), v2.intent_raw);
-      }
-
-      const snap = timer.snapshot({
-        route: "/api/decide",
-        pieces: v2.pieces.length,
-        occasion: v2.occasion,
-        price_mode,
-        search_version: "v2",
-      });
-      return timer.json(
-        {
-          user_id: v2.user_id,
-          photo_url: v2.photo_url,
-          pieces: v2.pieces,
-          results: v2.results,
-          exclude_titles: v2.exclude_titles,
-          occasion: v2.occasion,
-          context: v2.context,
-          history_id: v2.history_id,
-          price_mode: v2.price_mode,
-          search_version: v2.search_version,
-          extractor_version: v2.extractor_version,
-          piece_sessions: v2.piece_sessions,
-        },
-        snap
-      );
     }
 
     const visionContent = await timer.span("vision", () =>
