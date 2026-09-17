@@ -95,49 +95,48 @@ export function buildQueryPlan(
   const g = genderToken(opts.gender, intent.gender);
   const type = typeToken(intent);
   const color = intent.body_color && intent.body_color !== "bilinmeyen" ? intent.body_color : "";
-  const size = opts.sizes[0] || "";
   const motif = motifToken(intent);
   const brands = brandPoolFor(intent, opts.priceMode, opts.gender);
+  const luxury = opts.priceMode === "luks" ? "lüks" : "";
 
   const variants: QueryVariant[] = [];
 
-  // Brand-first
+  // Never append clothing size letters. Google Shopping TR treats "M"/"L"
+  // as a failed query ("hasn't returned any results"). Gender-first matches
+  // the working V1 queries ("erkek mavi jean").
   if (brands[0]) {
     variants.push({
       id: "brand0",
       kind: "brand",
-      q: [brands[0], color, type, g, size].filter(Boolean).join(" "),
+      q: [g, brands[0], color, type].filter(Boolean).join(" "),
     });
   }
   if (brands[1]) {
     variants.push({
       id: "brand1",
       kind: "brand",
-      q: [brands[1], color, type, g].filter(Boolean).join(" "),
+      q: [g, brands[1], color, type].filter(Boolean).join(" "),
     });
   }
 
-  // Motif synonym
   if (motif) {
     variants.push({
       id: "motif",
       kind: "motif",
-      q: [color, type, motif, g, size].filter(Boolean).join(" "),
+      q: [g, color, type, motif].filter(Boolean).join(" "),
     });
   }
 
-  // Type + color (always)
   variants.push({
     id: "type",
     kind: "type",
-    q: [color, type, g, size, opts.priceMode === "luks" ? "lüks" : ""].filter(Boolean).join(" "),
+    q: [g, color, type, luxury].filter(Boolean).join(" "),
   });
 
-  // Color-safe broaden (drop motif/brand)
   variants.push({
     id: "broad",
     kind: "broad",
-    q: [type, g, size].filter(Boolean).join(" "),
+    q: [g, type].filter(Boolean).join(" "),
   });
 
   // Jersey never uses generic tee wording

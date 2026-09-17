@@ -96,7 +96,6 @@ export function buildCombineQueries(ci: CombineIntent, page = 0): string[] {
             : "çanta";
   const style = ci.style_pref || CONTEXT_STYLE[ci.context] || "";
   const color = ci.color_pref && ci.color_pref !== "bilinmeyen" ? ci.color_pref : "";
-  const size = ci.sizes[0] || "";
   const brands = pickDecidePoolBrands(
     {
       category:
@@ -119,10 +118,10 @@ export function buildCombineQueries(ci: CombineIntent, page = 0): string[] {
 
   const ladder: string[] = [];
   for (const b of brands) {
-    ladder.push([b, color, type, style, g, size].filter(Boolean).join(" "));
-    ladder.push([b, type, g, size].filter(Boolean).join(" "));
+    ladder.push([g, b, color, type, style].filter(Boolean).join(" "));
+    ladder.push([g, b, type].filter(Boolean).join(" "));
   }
-  ladder.push([type, style, g, size].filter(Boolean).join(" "));
+  ladder.push([g, type, style].filter(Boolean).join(" "));
 
   const start = Math.min(page * 2, Math.max(0, ladder.length - 2));
   return ladder.slice(start, start + 2);
