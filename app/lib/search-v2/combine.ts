@@ -269,7 +269,7 @@ export async function searchCombineSlot(opts: {
       num: 40,
     });
     merged = [...merged, ...batch];
-    const { kept, stats } = hardVerify(merged, pieceIntent, {
+    const known = hardVerify(merged, pieceIntent, {
       priceMode: opts.intent.price_mode,
       gender: opts.intent.gender,
       sizes: opts.intent.sizes,
@@ -277,6 +277,18 @@ export async function searchCombineSlot(opts: {
       relaxLevel: 1,
       brandGate: "known",
     });
+    const verified =
+      known.kept.length > 0 || merged.length === 0
+        ? known
+        : hardVerify(merged, pieceIntent, {
+            priceMode: opts.intent.price_mode,
+            gender: opts.intent.gender,
+            sizes: opts.intent.sizes,
+            occasion,
+            relaxLevel: 1,
+            brandGate: "off",
+          });
+    const { kept, stats } = verified;
     const ranked = await rerankCandidates({
       intent: pieceIntent,
       candidates: kept,

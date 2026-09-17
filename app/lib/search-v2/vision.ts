@@ -206,14 +206,23 @@ export async function extractOutfitIntent(opts: {
   const payloadLen = (opts.imageDataUrl.split(",")[1] || opts.imageDataUrl).length;
   const large = payloadLen > 800_000;
   try {
-  let raw = large
-    ? await callChatFallback(opts.apiKey, opts.imageDataUrl)
-    : await callResponsesApi(opts.apiKey, opts.imageDataUrl);
-  let intent = parseOutfitIntentJson(raw);
+  let raw: string;
+  try {
+    raw = await callResponsesApi(opts.apiKey, opts.imageDataUrl);
+  } catch {
+    raw = await callChatFallback(opts.apiKey, opts.imageDataUrl);
+  }
+  let intent: OutfitIntent;
+  try {
+    intent = parseOutfitIntentJson(raw);
+  } catch {
+    raw = await callChatFallback(opts.apiKey, opts.imageDataUrl);
+    intent = parseOutfitIntentJson(raw);
+  }
 
-  if (needsRepair(intent) && !large) {
+  if (needsRepair(intent) && Date.now() - t0 < 12_000) {
     try {
-      raw = await callResponsesApi(
+      raw = await callChatFallback(
         opts.apiKey,
         opts.imageDataUrl,
         "Eksik üst katman veya takıları ekle; mevcut doğru parçaları koru."

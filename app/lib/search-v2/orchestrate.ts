@@ -185,7 +185,7 @@ export async function orchestratePiece(
     tried.push({ id: variant.id, q: variant.q, count: textBatch.length });
     merged = [...lens, ...merged.filter((c) => c.provider !== "lens"), ...textBatch];
 
-    const verified = hardVerify(merged, input.intent, {
+    const verifiedKnown = hardVerify(merged, input.intent, {
       priceMode: input.priceMode,
       gender: input.gender,
       sizes: input.sizes,
@@ -193,6 +193,27 @@ export async function orchestratePiece(
       relaxLevel: 1,
       brandGate: "known",
     });
+    let verified = verifiedKnown;
+    if (verified.kept.length === 0 && merged.length > 0) {
+      verified = hardVerify(merged, input.intent, {
+        priceMode: input.priceMode,
+        gender: input.gender,
+        sizes: input.sizes,
+        occasion: input.occasion,
+        relaxLevel: 1,
+        brandGate: "off",
+      });
+      // #region agent log
+      dbg("H11", "orchestrate.ts:brand-fallback", "known-brand gate emptied piece; relaxed", {
+        label: input.intent.label_tr,
+        family: input.intent.family,
+        merged: merged.length,
+        knownKept: verifiedKnown.stats.kept,
+        unknownSeller: verifiedKnown.stats.rejects.unknown_seller || 0,
+        relaxedKept: verified.stats.kept,
+      });
+      // #endregion
+    }
     kept = verified.kept;
     stats = verified.stats;
 
