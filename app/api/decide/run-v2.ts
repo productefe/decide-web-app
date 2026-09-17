@@ -110,13 +110,14 @@ export async function runSearchV2(input: RunSearchV2Input) {
     },
     body: JSON.stringify({
       sessionId: "ea0199",
-      runId: "pre-fix",
+      runId: "post-fix",
       hypothesisId: "D",
       location: "run-v2.ts:outcome",
       message: "search v2 outfit outcome",
       data: {
         visionMs: vision_ms,
         visionCached: cached,
+        priceMode: input.priceMode,
         intentPieces: gendered.pieces.length,
         resultPieces: pieces.length,
         emptyPieceRate: empty_piece_rate,

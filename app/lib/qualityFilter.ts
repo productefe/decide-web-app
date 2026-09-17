@@ -55,7 +55,7 @@ export const QUALITY_CONFIG = {
     sneakers: 399,
     shoes_classic: 299,
     bag: 200,
-    watch: 299,
+    watch: 3000,
     sunglasses: 200,
     activewear: 200,
     accessory: 200,
@@ -172,7 +172,17 @@ export function failsQualityFilter(input: QualityFilterInput): boolean {
 
   if (input.priceMode === "luks") {
     const luxuryBrand = textHasPoolBrand(blob, LUXURY_POOL_BRANDS);
-    if (!luxuryBrand && !isLuxuryChannel(source, title)) return true;
+    if (!luxuryBrand && !isLuxuryChannel(source, title)) {
+      const luxuryFloor =
+        input.poolFamily === "watch"
+          ? 8000
+          : input.poolFamily === "outerwear" ||
+              input.poolFamily === "sneakers" ||
+              input.poolFamily === "shoes_classic"
+            ? 2500
+            : 1500;
+      if (!(typeof input.priceValue === "number" && input.priceValue >= luxuryFloor)) return true;
+    }
   }
 
   const familyFloor = priceFloorFor(input.poolFamily);

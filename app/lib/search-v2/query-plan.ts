@@ -125,7 +125,6 @@ export function buildAllQueryVariants(
   const type = typeToken(intent);
   const color = intent.body_color && intent.body_color !== "bilinmeyen" ? intent.body_color : "";
   const motif = motifToken(intent);
-  const luxury = opts.priceMode === "luks" ? "lüks" : "";
   const weak = new Set(WEAK_SHOPPING_BRANDS.map((b) => b.toLocaleLowerCase("tr-TR")));
   const stores = trustedStoresFor(intent, opts.priceMode);
   const brands = brandPoolFor(intent, opts.priceMode, opts.gender).filter(
@@ -143,7 +142,7 @@ export function buildAllQueryVariants(
   variants.push({
     id: "type",
     kind: "type",
-    q: [g, color, type, luxury].filter(Boolean).join(" "),
+    q: [g, color, type].filter(Boolean).join(" "),
   });
   for (const store of stores) {
     variants.push({

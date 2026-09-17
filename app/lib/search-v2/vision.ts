@@ -17,7 +17,8 @@ const FALLBACK_VISION_TIMEOUT_MS = Number(
 const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
 Görseldeki HER görünür giysi ve takı parçasını ayrı listele.
 Kurallar:
-- Forma / futbol forması / basketbol forması → family=jersey (asla tee değil)
+- Kombin / tam boy fotoğrafta asla tek parça dönme. Üst, alt, ayakkabı, dış giyim ve görünür takı ayrı items olsun (hedef ≥3).
+- Forma / futbol forması / basketbol forması → family=jersey (asla tee değil). Okul üniforması jersey değil.
 - Sweatshirt ≠ tişört ≠ gömlek ≠ blazer; her biri kendi family
 - Üst katman (blazer/ceket/mont) ile altındaki tişört/gömlek ayrı parçalar
 - Kolye, küpe, bileklik, yüzük, saat görünürse jewelry layer ile ekle
@@ -25,7 +26,7 @@ Kurallar:
 - Görünür özelleştirme distinctive_details'e yaz: fermuar, kapüşon, taş cinsi (inci/altın/gümüş), yaka
 - body_color ana gövde rengi; motifler ayrı
 - bounding_box 0-1 normalize; emin değilsen null
-- low_confidence yalnız gerçekten belirsiz parçalar için true
+- low_confidence YALNIZ tamamen bulanık veya kadraj dışı kesik parçalar. Kombin içindeki net giysi asla low_confidence=true olmasın.
 - Türkçe label_tr / category_tr kullan
 JSON şemasına birebir uy.`;
 
@@ -35,7 +36,7 @@ export function imageHashFromDataUrl(dataUrl: string): string {
 }
 
 function needsRepair(intent: OutfitIntent): boolean {
-  return intent.pieces.length === 0;
+  return intent.pieces.length < 2;
 }
 
 function imageDetail(imageDataUrl: string): "low" | "high" {
@@ -220,12 +221,12 @@ export async function extractOutfitIntent(opts: {
     intent = parseOutfitIntentJson(raw);
   }
 
-  if (needsRepair(intent) && Date.now() - t0 < 12_000) {
+  if (needsRepair(intent) && Date.now() - t0 < 20_000) {
     try {
       raw = await callChatFallback(
         opts.apiKey,
         opts.imageDataUrl,
-        "Eksik üst katman veya takıları ekle; mevcut doğru parçaları koru."
+        "Tam boy kombinse üst, alt, ayakkabı, dış giyim ve görünür takıyı ayrı parçalar olarak ekle. Hedef en az 3 parça. Okul üniforması ekleme."
       );
       intent = parseOutfitIntentJson(raw);
     } catch {

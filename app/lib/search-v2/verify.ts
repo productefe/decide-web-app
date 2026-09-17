@@ -103,6 +103,10 @@ function genderConflict(
   return false;
 }
 
+function isJunkListing(title: string, source: string): boolean {
+  return JUNK_TITLE.test(lower(`${title} ${source}`));
+}
+
 function isKnownOrBoutique(title: string, source: string, store: string): boolean {
   const hay = `${title} ${source} ${store}`;
   if (textHasPoolBrand(hay)) return true;
@@ -112,8 +116,12 @@ function isKnownOrBoutique(title: string, source: string, store: string): boolea
   return textHasTrustedStore(hay);
 }
 
-function isJunkListing(title: string, source: string): boolean {
-  return JUNK_TITLE.test(lower(`${title} ${source}`));
+function isSchoolUniform(title: string): boolean {
+  const t = lower(title);
+  if (/okul\s*(üniforma|uniforma|kıyafet|kiyafet|forması|formasi|önlüğü|onlugu)|öğrenci kıyafet|ogrenci kiyafet|school uniform/.test(t)) {
+    return true;
+  }
+  return /üniforma|uniforma/.test(t);
 }
 
 function isReplica(title: string): boolean {
@@ -121,13 +129,29 @@ function isReplica(title: string): boolean {
   return QUALITY_CONFIG.replicaTokens.some((tok) => t.includes(tok));
 }
 
-function luxuryOk(title: string, source: string, priceMode: PriceMode): boolean {
+function luxuryFloor(family: PieceFamily, layer: string): number {
+  if (family === "watch") return 8000;
+  if (layer === "footwear" || family === "sneakers" || family === "boots") return 2500;
+  if (["blazer", "jacket", "coat"].includes(family)) return 2500;
+  return 1500;
+}
+
+function luxuryOk(
+  title: string,
+  source: string,
+  priceMode: PriceMode,
+  intent: ProductIntent,
+  priceValue: number | null
+): boolean {
   if (priceMode !== "luks") return true;
   const hay = `${title} ${source}`;
   if (textHasPoolBrand(hay, LUXURY_POOL_BRANDS)) return true;
   const t = lower(hay);
   if (QUALITY_CONFIG.luxuryChannels.some((c) => t.includes(c))) return true;
-  return LUXURY_POOL_BRANDS.some((b) => t.includes(lower(b)));
+  if (LUXURY_POOL_BRANDS.some((b) => t.includes(lower(b)))) return true;
+  // Price-tier luxury: don't 503 a piece just because Google omitted the brand name.
+  if (priceValue && priceValue >= luxuryFloor(intent.family, intent.layer)) return true;
+  return false;
 }
 
 function inferSizeStatus(title: string, sizes: string[]): SizeStatus {
@@ -155,6 +179,7 @@ export function hardVerify(
     occasion?: Occasion | null;
     relaxLevel?: 0 | 1 | 2;
     brandGate?: "known" | "off";
+    skipLuxury?: boolean;
   }
 ): { kept: VerifiedCandidate[]; rejected: VerifiedCandidate[]; stats: VerifyStats } {
   const rejects: Record<string, number> = {};
@@ -168,15 +193,17 @@ export function hardVerify(
   const extras = extraFamilyTokens(intent);
   const spec = typeSpec(intent);
   const poolFamily =
-    intent.layer === "footwear"
-      ? intent.family === "sneakers"
-        ? "sneakers"
-        : "shoes_classic"
-      : intent.layer === "jewelry" || intent.layer === "accessory"
-        ? "accessory"
-        : ["blazer", "jacket", "coat"].includes(intent.family)
-          ? "outerwear"
-          : "tops";
+    intent.family === "watch"
+      ? "watch"
+      : intent.layer === "footwear"
+        ? intent.family === "sneakers"
+          ? "sneakers"
+          : "shoes_classic"
+        : intent.layer === "jewelry" || intent.layer === "accessory"
+          ? "accessory"
+          : ["blazer", "jacket", "coat"].includes(intent.family)
+            ? "outerwear"
+            : "tops";
 
   for (const c of candidates) {
     const canonUrl = (c.link || "").split("?")[0];
@@ -208,6 +235,7 @@ export function hardVerify(
     else if (genderConflict(c.title, opts.gender, intent.gender)) reason = "gender_conflict";
     else if (occasionConflict(c.title, opts.occasion, intent.family)) reason = "occasion_conflict";
     else if (subtypeConflict(c.title, spec)) reason = "subtype_conflict";
+    else if (isSchoolUniform(c.title)) reason = "school_uniform";
     else if (isJunkListing(c.title, c.source)) reason = "junk";
     else if (
       (opts.brandGate ?? "known") === "known" &&
@@ -219,17 +247,27 @@ export function hardVerify(
         title: c.title,
         source: c.source,
         priceValue: c.priceValue ?? undefined,
-        priceMode: opts.priceMode,
+        priceMode: opts.skipLuxury ? "karma" : opts.priceMode,
         poolFamily,
         relaxLevel: opts.relaxLevel ?? 1,
       })
     ) {
       reason =
-        typeof c.priceValue === "number" && c.priceValue > 0 && c.priceValue < QUALITY_CONFIG.minPriceTry
+        intent.family === "watch" &&
+        typeof c.priceValue === "number" &&
+        c.priceValue > 0 &&
+        c.priceValue < QUALITY_CONFIG.minPriceByFamily.watch
           ? "cheap"
-          : "quality";
+          : typeof c.priceValue === "number" && c.priceValue > 0 && c.priceValue < QUALITY_CONFIG.minPriceTry
+            ? "cheap"
+            : "quality";
     } else if (isReplica(c.title)) reason = "replica";
-    else if (!luxuryOk(c.title, c.source, opts.priceMode)) reason = "luxury_leak";
+    else if (
+      !opts.skipLuxury &&
+      !luxuryOk(c.title, c.source, opts.priceMode, intent, c.priceValue)
+    ) {
+      reason = "luxury_leak";
+    }
 
     if (reason) {
       bump(reason);

@@ -30,6 +30,7 @@ export interface OrchestratePieceInput {
   affiliateTag?: string;
   excludeTitles?: string[];
   occasion?: Occasion | null;
+  outfitPieceCount?: number;
   /** One Lens request is shared by every piece in the same photo. */
   sharedLensPromise?: Promise<ProductCandidate[]>;
 }
@@ -143,7 +144,7 @@ export async function orchestratePiece(
         searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
       : Promise.resolve([]);
 
-  const maxAttempts = 2;
+  const maxAttempts = (input.page || 0) === 0 && (input.outfitPieceCount || 1) >= 4 ? 1 : 2;
   const startIdx = plan.all_variants.findIndex((v) => v.q === plan.text_queries[0]?.q);
   const from = startIdx >= 0 ? startIdx : 0;
   const typeVariant = plan.all_variants.find((v) => v.kind === "type");
@@ -216,16 +217,42 @@ export async function orchestratePiece(
     }
     kept = verified.kept;
     stats = verified.stats;
+    if (kept.length === 0 && input.priceMode === "luks" && merged.length > 0) {
+      const luxuryFallback = hardVerify(merged, input.intent, {
+        priceMode: input.priceMode,
+        gender: input.gender,
+        sizes: input.sizes,
+        occasion: input.occasion,
+        relaxLevel: 1,
+        brandGate: "off",
+        skipLuxury: true,
+      });
+      // #region agent log
+      dbg("H-luks", "orchestrate.ts:luxury-fallback", "luxury gate emptied piece; price/karma fallback", {
+        label: input.intent.label_tr,
+        family: input.intent.family,
+        merged: merged.length,
+        luxuryLeak: verified.stats.rejects.luxury_leak || 0,
+        quality: verified.stats.rejects.quality || 0,
+        fallbackKept: luxuryFallback.stats.kept,
+      });
+      // #endregion
+      if (luxuryFallback.kept.length > 0) {
+        verified = luxuryFallback;
+        kept = verified.kept;
+        stats = verified.stats;
+      }
+    }
 
     if (kept.length === 0) continue;
 
     ranked = await rerankCandidates({
-      apiKey: page === 0 && attempt === 0 ? input.openAiKey : undefined,
+      apiKey: page === 0 && attempt === 0 && (input.outfitPieceCount || 1) < 4 ? input.openAiKey : undefined,
       intent: input.intent,
       candidates: kept,
       referenceImageUrl: input.photoUrl,
       limit: 24,
-      timeoutMs: page === 0 && attempt === 0 ? 2000 : 0,
+      timeoutMs: page === 0 && attempt === 0 && (input.outfitPieceCount || 1) < 4 ? 2000 : 0,
     });
     piecePage = pickPage(ranked, session, 3);
     if (piecePage.products.length > 0) break;
@@ -285,6 +312,9 @@ export async function orchestratePiece(
   dbg("H10", "orchestrate.ts:quality", "brand+occasion gate", {
     unknownSeller: stats.rejects.unknown_seller || 0,
     junk: stats.rejects.junk || 0,
+    luxuryLeak: stats.rejects.luxury_leak || 0,
+    schoolUniform: stats.rejects.school_uniform || 0,
+    cheapRejects: stats.rejects.cheap || 0,
     occasionRejects: stats.rejects.occasion_conflict || 0,
     kept: stats.kept,
     attempts: tried.length,
@@ -328,16 +358,16 @@ export async function orchestrateOutfit(opts: {
   metrics: OrchestratePieceResult["metrics"][];
   version: string;
 }> {
-  const searchable =
-    opts.intent.pieces.filter((p) => !p.low_confidence).length > 0
-      ? opts.intent.pieces.filter((p) => !p.low_confidence)
-      : opts.intent.pieces;
+  const searchable = opts.intent.pieces.filter(
+    (p) => p.visibility !== "edge" || !p.low_confidence
+  );
+  const toSearch = searchable.length > 0 ? searchable : opts.intent.pieces;
   const sharedLensPromise = searchGoogleLens({
     apiKey: opts.serpApiKey,
     imageUrl: opts.photoUrl,
   });
   const results = await Promise.all(
-    searchable.map((piece) =>
+    toSearch.map((piece) =>
       orchestratePiece({
         intent: piece,
         photoUrl: opts.photoUrl,
@@ -348,6 +378,7 @@ export async function orchestrateOutfit(opts: {
         sizes: opts.sizes,
         affiliateTag: opts.affiliateTag,
         occasion: opts.occasion,
+        outfitPieceCount: toSearch.length,
         sharedLensPromise,
       }).catch((err) => {
         console.warn("[search-v2] piece fail", piece.label_tr, err);
@@ -372,6 +403,19 @@ export async function orchestrateOutfit(opts: {
     piece_sessions[r.label] = r.session_id;
     metrics.push(r.metrics);
   }
+
+  // #region agent log
+  dbg("H12", "orchestrate.ts:outfit", "multi-piece outcome", {
+    intentPieces: opts.intent.pieces.length,
+    searched: toSearch.length,
+    families: opts.intent.pieces.map((p) => p.family),
+    lowConfidence: opts.intent.pieces.filter((p) => p.low_confidence).length,
+    returned: pieces.length,
+    emptyDropped: results.filter((r) => r && !r.results.recommended).length,
+    failed: results.filter((r) => !r).length,
+    priceMode: opts.priceMode,
+  });
+  // #endregion
 
   return { pieces, piece_sessions, metrics, version: SEARCH_V2_VERSION };
 }
