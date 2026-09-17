@@ -116,6 +116,10 @@ function isKnownOrBoutique(title: string, source: string, store: string): boolea
   return textHasTrustedStore(hay);
 }
 
+function isBackpackTitle(title: string): boolean {
+  return /sırt\s*çant|sirt\s*cant|backpack|okul çantası|okul cantasi/.test(lower(title));
+}
+
 function isSchoolUniform(title: string): boolean {
   const t = lower(title);
   if (/okul\s*(üniforma|uniforma|kıyafet|kiyafet|forması|formasi|önlüğü|onlugu)|öğrenci kıyafet|ogrenci kiyafet|school uniform/.test(t)) {
@@ -236,7 +240,13 @@ export function hardVerify(
     else if (occasionConflict(c.title, opts.occasion, intent.family)) reason = "occasion_conflict";
     else if (subtypeConflict(c.title, spec)) reason = "subtype_conflict";
     else if (isSchoolUniform(c.title)) reason = "school_uniform";
-    else if (isJunkListing(c.title, c.source)) reason = "junk";
+    else if (
+      opts.gender === "men" &&
+      isBackpackTitle(c.title) &&
+      intent.family !== "bag"
+    ) {
+      reason = "mens_backpack";
+    } else if (isJunkListing(c.title, c.source)) reason = "junk";
     else if (
       (opts.brandGate ?? "known") === "known" &&
       !isKnownOrBoutique(c.title, c.source, c.store || "")

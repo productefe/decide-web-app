@@ -61,14 +61,17 @@ function collectTitles(results: Results): string[] {
   );
 }
 
+const MORE_EMPTY = "Yeni alternatifler bulunamadı. Biraz sonra tekrar dene.";
+
 function isV2VisionContent(content: string): boolean {
   try {
     const parsed = JSON.parse(content) as {
       extractor_version?: unknown;
       pieces?: { family?: unknown; layer?: unknown }[];
     };
+    const version = String(parsed.extractor_version || "");
     return (
-      parsed.extractor_version === "search-v2-vision-1" &&
+      version.startsWith("search-v2") &&
       Array.isArray(parsed.pieces) &&
       parsed.pieces.some(
         (piece) =>
@@ -228,10 +231,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!visionContent) {
-      return NextResponse.json(
-        { error: "Fotoğrafı okuyamadık. Net, iyi aydınlatılmış bir kıyafet fotoğrafı dene." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: MORE_EMPTY }, { status: 404 });
     }
 
     const occasion = resolveDecideOccasion(requestedOccasion, visionContent);
@@ -241,6 +241,35 @@ export async function POST(req: NextRequest) {
     if (requestedOccasion && requestedOccasion !== occasion) {
       setCachedVision(visionCacheKey(user.id, storage_path, requestedOccasion), visionContent);
     }
+
+    // #region agent log
+    try {
+      const parsedVer = JSON.parse(visionContent) as { extractor_version?: unknown };
+      fetch("http://127.0.0.1:7612/ingest/dcbec1f8-f218-4dc2-b274-e76ed38526b3", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "ea0199",
+        },
+        body: JSON.stringify({
+          sessionId: "ea0199",
+          runId: "post-fix",
+          hypothesisId: "H13",
+          location: "more/route.ts:v2-gate",
+          message: "show-more vision gate",
+          data: {
+            v2: isV2VisionContent(visionContent),
+            extractor: parsedVer.extractor_version || null,
+            pieceLabel: pieceLabel || "",
+            visionSource,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+    // #endregion
 
     // Search V2 show-more: session cursor + unique products (never 404 on exhausted)
     if (isSearchV2Enabled(user.id) && isV2VisionContent(visionContent)) {
@@ -278,16 +307,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (more.exhausted && !more.piece.results.recommended) {
-        return timer.json(
-          {
-            piece: more.piece,
-            exclude_titles: [...excludeTitles, ...more.exclude_titles],
-            exhausted: true,
-            session_id: more.session_id,
-            search_version: "search-v2.1",
-          },
-          snap
-        );
+        return timer.json({ error: MORE_EMPTY, exhausted: true }, snap, { status: 404 });
       }
 
       return timer.json(
@@ -304,29 +324,19 @@ export async function POST(req: NextRequest) {
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);
     const needle = (pieceLabel || "").trim().toLocaleLowerCase("tr-TR");
-    let target = visionPieces[0];
-    if (needle) {
-      const match =
-        visionPieces.find((p) => p.label.toLocaleLowerCase("tr-TR") === needle) ||
-        visionPieces.find(
-          (p) =>
-            (p.profile.subcategory_tr || "").toLocaleLowerCase("tr-TR") === needle ||
-            (p.profile.category_tr || "").toLocaleLowerCase("tr-TR") === needle
-        ) ||
-        visionPieces.find(
-          (p) =>
-            p.label.toLocaleLowerCase("tr-TR").includes(needle) ||
-            needle.includes(p.label.toLocaleLowerCase("tr-TR"))
-        );
-      if (match) target = match;
+    const exact = needle
+      ? visionPieces.filter((p) => p.label.toLocaleLowerCase("tr-TR") === needle)
+      : visionPieces.length === 1
+        ? visionPieces
+        : [];
+    const target = exact.length === 1 ? exact[0] : null;
+    if (!target) {
+      return NextResponse.json({ error: MORE_EMPTY }, { status: 404 });
     }
 
     const profile = applyUserGender(target.profile, userGender);
     if (profile.low_confidence) {
-      return NextResponse.json(
-        { error: "Bu parçayı yeterince net okuyamadık. Daha net bir fotoğraf dene." },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: MORE_EMPTY }, { status: 404 });
     }
 
     const piece = await timer.span("search", () =>
@@ -337,10 +347,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (!piece) {
-      return NextResponse.json(
-        { error: "Şu an yeni bir alternatif çıkmadı. Biraz sonra tekrar dene." },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: MORE_EMPTY }, { status: 404 });
     }
 
     const labeled: PieceResult = {
@@ -363,8 +370,13 @@ export async function POST(req: NextRequest) {
       snap
     );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Analiz tamamlanamadı. Lütfen tekrar dene.";
+    const message = err instanceof Error ? err.message : MORE_EMPTY;
     console.error("/api/decide/more:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const friendly = /okuyamadık|okuyamadik|aydınlatılmış|net bir fotoğraf|JSON|parse/i.test(message)
+      ? MORE_EMPTY
+      : /timed out|timeout|FUNCTION_INVOCATION/i.test(message)
+        ? MORE_EMPTY
+        : message || MORE_EMPTY;
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }

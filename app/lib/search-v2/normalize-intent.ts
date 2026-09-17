@@ -307,10 +307,14 @@ function normalizePiece(raw: Record<string, unknown>, index: number): ProductInt
 /** Invariants: keep visible outer/mid/jewelry; drop empty garbage. */
 export function enforceIntentInvariants(pieces: ProductIntent[]): ProductIntent[] {
   const kept = pieces.filter((p) => !p.low_confidence || p.visibility !== "edge");
-  // Prefer outer over duplicate family when both claim same slot
+  // Prefer outer over duplicate family when both claim same slot AND same bbox bucket.
   const byKey = new Map<string, ProductIntent>();
   for (const p of kept) {
-    const key = `${p.layer}:${p.family}:${p.body_color}`;
+    const box = p.bounding_box;
+    const boxKey = box
+      ? `${Math.round(box.x * 6)}_${Math.round(box.y * 6)}`
+      : asLower(`${p.label_tr}|${p.subtype}`);
+    const key = `${p.layer}:${p.family}:${p.body_color}:${boxKey}`;
     const prev = byKey.get(key);
     if (!prev) {
       byKey.set(key, p);
@@ -332,7 +336,22 @@ export function enforceIntentInvariants(pieces: ProductIntent[]): ProductIntent[
     accessory: 6,
   };
   out.sort((a, b) => order[a.layer] - order[b.layer]);
-  return out.map((p, i) => ({ ...p, id: `piece-${i}` }));
+  const used = new Set<string>();
+  return out.map((p, i) => {
+    let label = p.label_tr.trim() || defaultCategoryTr(p.family, p.subtype);
+    const color = p.body_color && p.body_color !== "bilinmeyen" ? p.body_color : "";
+    if (color && !asLower(label).includes(asLower(color))) {
+      const withColor = `${color} ${label}`;
+      if (!used.has(asLower(withColor))) label = withColor;
+    }
+    if (used.has(asLower(label))) {
+      let n = 2;
+      while (used.has(asLower(`${p.label_tr} ${n}`))) n++;
+      label = `${p.label_tr} ${n}`;
+    }
+    used.add(asLower(label));
+    return { ...p, id: `piece-${i}`, label_tr: label };
+  });
 }
 
 export function normalizeOutfitIntent(raw: unknown): OutfitIntent {

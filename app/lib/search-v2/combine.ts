@@ -103,10 +103,22 @@ function slotTypeToken(ci: CombineIntent): string {
   if (ci.context === "work" && ci.slot === "bottom" && ci.gender === "women") type = "klasik etek";
   if (ci.context === "evening" && ci.slot === "shoes" && ci.gender === "women") type = "topuklu ayakkabı";
   if (ci.context === "sport" && ci.slot === "bottom" && ci.gender === "men") type = "spor şort";
+  if (ci.gender === "men" && ci.slot === "accessory") {
+    if (ci.context === "sport") type = "şapka";
+    else if (ci.context === "evening") type = "saat";
+    else if (ci.context === "beach") type = "şapka";
+    else type = "kemer";
+  }
+  if (ci.gender === "women" && ci.slot === "top" && ci.context === "evening") type = "saten bluz";
   return type;
 }
 
 function slotFamilyFor(ci: CombineIntent): PieceFamily {
+  if (ci.slot === "accessory" && ci.gender === "men") {
+    if (ci.context === "sport" || ci.context === "beach") return "hat";
+    if (ci.context === "evening") return "watch";
+    return "belt";
+  }
   if (ci.context === "sport") {
     if (ci.slot === "top") return "tee";
     if (ci.slot === "bottom") return ci.gender === "men" ? "shorts" : "pants";

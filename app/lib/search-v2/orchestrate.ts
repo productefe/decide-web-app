@@ -314,6 +314,7 @@ export async function orchestratePiece(
     junk: stats.rejects.junk || 0,
     luxuryLeak: stats.rejects.luxury_leak || 0,
     schoolUniform: stats.rejects.school_uniform || 0,
+    mensBackpack: stats.rejects.mens_backpack || 0,
     cheapRejects: stats.rejects.cheap || 0,
     occasionRejects: stats.rejects.occasion_conflict || 0,
     kept: stats.kept,
@@ -342,6 +343,12 @@ export async function orchestratePiece(
   };
 }
 
+function isMensBackpackPiece(p: ProductIntent, gender: UserGender | null): boolean {
+  if (gender !== "men") return false;
+  const blob = `${p.label_tr} ${p.subtype} ${p.category_tr}`.toLocaleLowerCase("tr-TR");
+  return p.family === "bag" && /sırt|sirt|backpack|okul çant/.test(blob);
+}
+
 export async function orchestrateOutfit(opts: {
   intent: OutfitIntent;
   photoUrl: string;
@@ -359,9 +366,20 @@ export async function orchestrateOutfit(opts: {
   version: string;
 }> {
   const searchable = opts.intent.pieces.filter(
-    (p) => p.visibility !== "edge" || !p.low_confidence
+    (p) =>
+      (p.visibility !== "edge" || !p.low_confidence) &&
+      !isMensBackpackPiece(p, opts.gender)
   );
-  const toSearch = searchable.length > 0 ? searchable : opts.intent.pieces;
+  const toSearch = searchable.length > 0 ? searchable : opts.intent.pieces.filter(
+    (p) => !isMensBackpackPiece(p, opts.gender)
+  );
+  // #region agent log
+  dbg("H14", "orchestrate.ts:backpack", "mens backpack skip", {
+    gender: opts.gender,
+    skipped: opts.intent.pieces.filter((p) => isMensBackpackPiece(p, opts.gender)).map((p) => p.label_tr),
+    searched: toSearch.map((p) => ({ family: p.family, label: p.label_tr })),
+  });
+  // #endregion
   const sharedLensPromise = searchGoogleLens({
     apiKey: opts.serpApiKey,
     imageUrl: opts.photoUrl,

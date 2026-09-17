@@ -6,6 +6,7 @@ import {
   orchestratePiece,
   type ProductIntent,
 } from "@/lib/search-v2";
+import { dbg } from "@/lib/search-v2/debug-log";
 
 function collectTitles(results: Results): string[] {
   return [results.recommended?.title, results.cheaper?.title, results.style?.title].filter(
@@ -13,14 +14,41 @@ function collectTitles(results: Results): string[] {
   );
 }
 
+function lower(s: string): string {
+  return s.toLocaleLowerCase("tr-TR");
+}
+
+/** Match exactly one photographed piece — never fall back to another shirt/gömlek. */
 function findIntent(rawVision: string, pieceLabel: string): ProductIntent | null {
   try {
     const intent = normalizeOutfitIntent(JSON.parse(rawVision));
-    return (
-      intent.pieces.find(
-        (p) => p.label_tr === pieceLabel || p.category_tr === pieceLabel || p.id === pieceLabel
-      ) || intent.pieces[0] || null
+    const pieces = intent.pieces;
+    if (pieces.length === 0) return null;
+    const needle = (pieceLabel || "").trim().toLocaleLowerCase("tr-TR");
+    if (!needle) return pieces.length === 1 ? pieces[0] : null;
+
+    const exact = pieces.filter(
+      (p) => lower(p.label_tr) === needle || lower(p.id) === needle
     );
+    if (exact.length === 1) return exact[0];
+
+    const scored = pieces
+      .map((p) => {
+        const color = p.body_color && p.body_color !== "bilinmeyen" ? lower(p.body_color) : "";
+        const blob = lower(`${p.label_tr} ${color} ${p.subtype} ${p.category_tr}`);
+        let score = 0;
+        if (blob === needle) score += 8;
+        if (lower(p.label_tr) && needle === lower(p.label_tr)) score += 6;
+        if (color && needle.includes(color) && needle.includes(lower(p.label_tr))) score += 5;
+        if (color && needle.includes(color) && needle.includes(lower(p.category_tr))) score += 4;
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 1) return scored[0].p;
+    if (scored.length > 1 && scored[0].score > scored[1].score) return scored[0].p;
+    return null;
   } catch {
     return null;
   }
@@ -51,6 +79,21 @@ export async function runMoreV2(opts: {
   exclude_titles: string[];
 }> {
   const intent = findIntent(opts.visionContent, opts.pieceLabel);
+  const sameFamily = (() => {
+    try {
+      const all = normalizeOutfitIntent(JSON.parse(opts.visionContent)).pieces;
+      return intent ? all.filter((p) => p.family === intent.family).length : all.length;
+    } catch {
+      return 0;
+    }
+  })();
+  // #region agent log
+  dbg("H13", "more-v2.ts:findIntent", "show-more piece match", {
+    pieceLabel: opts.pieceLabel,
+    matched: intent ? { id: intent.id, family: intent.family, label: intent.label_tr, color: intent.body_color } : null,
+    sameFamilyCount: sameFamily,
+  });
+  // #endregion
   if (!intent) {
     return {
       piece: {
@@ -80,6 +123,7 @@ export async function runMoreV2(opts: {
       ...(opts.existingResults ? collectTitles(opts.existingResults) : []),
     ],
     occasion: opts.occasion,
+    outfitPieceCount: 1,
   });
 
   // Merge: append new cards onto existing when partial; never wipe old on failure
