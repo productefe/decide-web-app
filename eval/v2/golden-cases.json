@@ -1,0 +1,3579 @@
+{
+  "version": "search-v2-eval-1",
+  "thresholds": {
+    "visible_main_piece_recall": 0.95,
+    "apparel_jewelry_recall": 0.9,
+    "subtype_accuracy": 0.9,
+    "wrong_color_top3_max": 0.05,
+    "luxury_leakage": 0,
+    "empty_piece_max": 0.02,
+    "unique_at_12_min": 9,
+    "p50_ms_max": 10000,
+    "p95_ms_max": 15000
+  },
+  "cases": [
+    {
+      "id": "g01-jersey-siyah",
+      "tags": [
+        "jersey",
+        "extraction",
+        "jersey"
+      ],
+      "expect": {
+        "families": [
+          "jersey"
+        ],
+        "layers": [
+          "outer"
+        ],
+        "body_color": "siyah",
+        "category_tr": "forma"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "forma",
+            "family": "jersey",
+            "subtype": "jersey",
+            "category_tr": "forma",
+            "layer": "outer",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [
+              {
+                "type": "logo",
+                "colors": [
+                  "beyaz"
+                ],
+                "placement": "göğüs",
+                "text": "10"
+              }
+            ],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "Galatasaray",
+              "number": "10",
+              "sport": "football"
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-1",
+          "title": "Zara siyah forma erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/1a.jpg",
+          "link": "https://zara.com/1",
+          "product_id": "p1a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-1",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/1b.jpg",
+          "link": "https://koton.com/1b",
+          "product_id": "p1b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-1",
+          "title": "Gucci forma",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/1c.jpg",
+          "link": "https://beymen.com/1",
+          "product_id": "p1c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g02-sweatshirt-gri",
+      "tags": [
+        "sweat",
+        "extraction",
+        "sweatshirt"
+      ],
+      "expect": {
+        "families": [
+          "sweatshirt"
+        ],
+        "layers": [
+          "mid"
+        ],
+        "body_color": "gri",
+        "category_tr": "sweatshirt"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "sweatshirt",
+            "family": "sweatshirt",
+            "subtype": "sweatshirt",
+            "category_tr": "sweatshirt",
+            "layer": "mid",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "gri",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-2",
+          "title": "Zara gri sweatshirt erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/2a.jpg",
+          "link": "https://zara.com/2",
+          "product_id": "p2a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-2",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/2b.jpg",
+          "link": "https://koton.com/2b",
+          "product_id": "p2b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-2",
+          "title": "Gucci sweatshirt",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/2c.jpg",
+          "link": "https://beymen.com/2",
+          "product_id": "p2c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g03-tee-beyaz",
+      "tags": [
+        "layer",
+        "extraction",
+        "tee"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "layers": [
+          "inner"
+        ],
+        "body_color": "beyaz",
+        "category_tr": "tişört"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "beyaz",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-3",
+          "title": "Zara beyaz tişört erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/3a.jpg",
+          "link": "https://zara.com/3",
+          "product_id": "p3a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-3",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/3b.jpg",
+          "link": "https://koton.com/3b",
+          "product_id": "p3b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-3",
+          "title": "Gucci tişört",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/3c.jpg",
+          "link": "https://beymen.com/3",
+          "product_id": "p3c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g04-shirt-mavi",
+      "tags": [
+        "layer",
+        "extraction",
+        "shirt"
+      ],
+      "expect": {
+        "families": [
+          "shirt"
+        ],
+        "layers": [
+          "inner"
+        ],
+        "body_color": "mavi",
+        "category_tr": "gömlek"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "gömlek",
+            "family": "shirt",
+            "subtype": "shirt",
+            "category_tr": "gömlek",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "mavi",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-4",
+          "title": "Zara mavi gömlek erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/4a.jpg",
+          "link": "https://zara.com/4",
+          "product_id": "p4a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-4",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/4b.jpg",
+          "link": "https://koton.com/4b",
+          "product_id": "p4b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-4",
+          "title": "Gucci gömlek",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/4c.jpg",
+          "link": "https://beymen.com/4",
+          "product_id": "p4c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g05-blazer-siyah",
+      "tags": [
+        "layer",
+        "extraction",
+        "blazer"
+      ],
+      "expect": {
+        "families": [
+          "blazer"
+        ],
+        "layers": [
+          "outer"
+        ],
+        "body_color": "siyah",
+        "category_tr": "blazer"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "blazer",
+            "family": "blazer",
+            "subtype": "blazer",
+            "category_tr": "blazer",
+            "layer": "outer",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-5",
+          "title": "Zara siyah blazer erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/5a.jpg",
+          "link": "https://zara.com/5",
+          "product_id": "p5a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-5",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/5b.jpg",
+          "link": "https://koton.com/5b",
+          "product_id": "p5b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-5",
+          "title": "Gucci blazer",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/5c.jpg",
+          "link": "https://beymen.com/5",
+          "product_id": "p5c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g06-hoodie-siyah",
+      "tags": [
+        "hood",
+        "extraction",
+        "hoodie"
+      ],
+      "expect": {
+        "families": [
+          "hoodie"
+        ],
+        "layers": [
+          "mid"
+        ],
+        "body_color": "siyah",
+        "category_tr": "hoodie"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "hoodie",
+            "family": "hoodie",
+            "subtype": "hoodie",
+            "category_tr": "hoodie",
+            "layer": "mid",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-6",
+          "title": "Zara siyah hoodie erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/6a.jpg",
+          "link": "https://zara.com/6",
+          "product_id": "p6a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-6",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/6b.jpg",
+          "link": "https://koton.com/6b",
+          "product_id": "p6b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-6",
+          "title": "Gucci hoodie",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/6c.jpg",
+          "link": "https://beymen.com/6",
+          "product_id": "p6c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g07-pants-bej",
+      "tags": [
+        "bottom",
+        "extraction",
+        "pants"
+      ],
+      "expect": {
+        "families": [
+          "pants"
+        ],
+        "layers": [
+          "bottom"
+        ],
+        "body_color": "bej",
+        "category_tr": "pantolon"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "pantolon",
+            "family": "pants",
+            "subtype": "pants",
+            "category_tr": "pantolon",
+            "layer": "bottom",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "bej",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-7",
+          "title": "Zara bej pantolon erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/7a.jpg",
+          "link": "https://zara.com/7",
+          "product_id": "p7a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-7",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/7b.jpg",
+          "link": "https://koton.com/7b",
+          "product_id": "p7b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-7",
+          "title": "Gucci pantolon",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/7c.jpg",
+          "link": "https://beymen.com/7",
+          "product_id": "p7c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g08-jeans-mavi",
+      "tags": [
+        "bottom",
+        "extraction",
+        "jeans"
+      ],
+      "expect": {
+        "families": [
+          "jeans"
+        ],
+        "layers": [
+          "bottom"
+        ],
+        "body_color": "mavi",
+        "category_tr": "jean"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "jean",
+            "family": "jeans",
+            "subtype": "jeans",
+            "category_tr": "jean",
+            "layer": "bottom",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "mavi",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-8",
+          "title": "Zara mavi jean erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/8a.jpg",
+          "link": "https://zara.com/8",
+          "product_id": "p8a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-8",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/8b.jpg",
+          "link": "https://koton.com/8b",
+          "product_id": "p8b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-8",
+          "title": "Gucci jean",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/8c.jpg",
+          "link": "https://beymen.com/8",
+          "product_id": "p8c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g09-skirt-siyah",
+      "tags": [
+        "bottom",
+        "extraction",
+        "skirt"
+      ],
+      "expect": {
+        "families": [
+          "skirt"
+        ],
+        "layers": [
+          "bottom"
+        ],
+        "body_color": "siyah",
+        "category_tr": "etek"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "etek",
+            "family": "skirt",
+            "subtype": "skirt",
+            "category_tr": "etek",
+            "layer": "bottom",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-9",
+          "title": "Zara siyah etek erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/9a.jpg",
+          "link": "https://zara.com/9",
+          "product_id": "p9a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-9",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/9b.jpg",
+          "link": "https://koton.com/9b",
+          "product_id": "p9b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-9",
+          "title": "Gucci etek",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/9c.jpg",
+          "link": "https://beymen.com/9",
+          "product_id": "p9c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g10-dress-kırmızı",
+      "tags": [
+        "dress",
+        "extraction",
+        "dress"
+      ],
+      "expect": {
+        "families": [
+          "dress"
+        ],
+        "layers": [
+          "mid"
+        ],
+        "body_color": "kırmızı",
+        "category_tr": "elbise"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "elbise",
+            "family": "dress",
+            "subtype": "dress",
+            "category_tr": "elbise",
+            "layer": "mid",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "kırmızı",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-10",
+          "title": "Zara kırmızı elbise erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/10a.jpg",
+          "link": "https://zara.com/10",
+          "product_id": "p10a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-10",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/10b.jpg",
+          "link": "https://koton.com/10b",
+          "product_id": "p10b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-10",
+          "title": "Gucci elbise",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/10c.jpg",
+          "link": "https://beymen.com/10",
+          "product_id": "p10c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g11-sneakers-beyaz",
+      "tags": [
+        "shoes",
+        "extraction",
+        "sneakers"
+      ],
+      "expect": {
+        "families": [
+          "sneakers"
+        ],
+        "layers": [
+          "footwear"
+        ],
+        "body_color": "beyaz",
+        "category_tr": "sneaker"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "sneaker",
+            "family": "sneakers",
+            "subtype": "sneakers",
+            "category_tr": "sneaker",
+            "layer": "footwear",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "beyaz",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-11",
+          "title": "Zara beyaz sneaker erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/11a.jpg",
+          "link": "https://zara.com/11",
+          "product_id": "p11a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-11",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/11b.jpg",
+          "link": "https://koton.com/11b",
+          "product_id": "p11b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-11",
+          "title": "Gucci sneaker",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/11c.jpg",
+          "link": "https://beymen.com/11",
+          "product_id": "p11c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g12-boots-kahverengi",
+      "tags": [
+        "shoes",
+        "extraction",
+        "boots"
+      ],
+      "expect": {
+        "families": [
+          "boots"
+        ],
+        "layers": [
+          "footwear"
+        ],
+        "body_color": "kahverengi",
+        "category_tr": "bot"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "bot",
+            "family": "boots",
+            "subtype": "boots",
+            "category_tr": "bot",
+            "layer": "footwear",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "kahverengi",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-12",
+          "title": "Zara kahverengi bot erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/12a.jpg",
+          "link": "https://zara.com/12",
+          "product_id": "p12a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-12",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/12b.jpg",
+          "link": "https://koton.com/12b",
+          "product_id": "p12b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-12",
+          "title": "Gucci bot",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/12c.jpg",
+          "link": "https://beymen.com/12",
+          "product_id": "p12c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g13-necklace-altın",
+      "tags": [
+        "jewelry",
+        "extraction",
+        "necklace"
+      ],
+      "expect": {
+        "families": [
+          "necklace"
+        ],
+        "layers": [
+          "jewelry"
+        ],
+        "body_color": "altın",
+        "category_tr": "kolye"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "kolye",
+            "family": "necklace",
+            "subtype": "necklace",
+            "category_tr": "kolye",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "altın",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-13",
+          "title": "Zara altın kolye erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/13a.jpg",
+          "link": "https://zara.com/13",
+          "product_id": "p13a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-13",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/13b.jpg",
+          "link": "https://koton.com/13b",
+          "product_id": "p13b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-13",
+          "title": "Gucci kolye",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/13c.jpg",
+          "link": "https://beymen.com/13",
+          "product_id": "p13c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g14-earrings-gümüş",
+      "tags": [
+        "jewelry",
+        "extraction",
+        "earrings"
+      ],
+      "expect": {
+        "families": [
+          "earrings"
+        ],
+        "layers": [
+          "jewelry"
+        ],
+        "body_color": "gümüş",
+        "category_tr": "küpe"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "küpe",
+            "family": "earrings",
+            "subtype": "earrings",
+            "category_tr": "küpe",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "gümüş",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-14",
+          "title": "Zara gümüş küpe erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/14a.jpg",
+          "link": "https://zara.com/14",
+          "product_id": "p14a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-14",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/14b.jpg",
+          "link": "https://koton.com/14b",
+          "product_id": "p14b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-14",
+          "title": "Gucci küpe",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/14c.jpg",
+          "link": "https://beymen.com/14",
+          "product_id": "p14c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g15-bracelet-siyah",
+      "tags": [
+        "jewelry",
+        "extraction",
+        "bracelet"
+      ],
+      "expect": {
+        "families": [
+          "bracelet"
+        ],
+        "layers": [
+          "jewelry"
+        ],
+        "body_color": "siyah",
+        "category_tr": "bileklik"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "bileklik",
+            "family": "bracelet",
+            "subtype": "bracelet",
+            "category_tr": "bileklik",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-15",
+          "title": "Zara siyah bileklik erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/15a.jpg",
+          "link": "https://zara.com/15",
+          "product_id": "p15a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-15",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/15b.jpg",
+          "link": "https://koton.com/15b",
+          "product_id": "p15b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-15",
+          "title": "Gucci bileklik",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/15c.jpg",
+          "link": "https://beymen.com/15",
+          "product_id": "p15c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g16-watch-gümüş",
+      "tags": [
+        "jewelry",
+        "extraction",
+        "watch"
+      ],
+      "expect": {
+        "families": [
+          "watch"
+        ],
+        "layers": [
+          "jewelry"
+        ],
+        "body_color": "gümüş",
+        "category_tr": "saat"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "saat",
+            "family": "watch",
+            "subtype": "watch",
+            "category_tr": "saat",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "gümüş",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-16",
+          "title": "Zara gümüş saat erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/16a.jpg",
+          "link": "https://zara.com/16",
+          "product_id": "p16a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-16",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/16b.jpg",
+          "link": "https://koton.com/16b",
+          "product_id": "p16b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-16",
+          "title": "Gucci saat",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/16c.jpg",
+          "link": "https://beymen.com/16",
+          "product_id": "p16c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g17-bag-siyah",
+      "tags": [
+        "acc",
+        "extraction",
+        "bag"
+      ],
+      "expect": {
+        "families": [
+          "bag"
+        ],
+        "layers": [
+          "accessory"
+        ],
+        "body_color": "siyah",
+        "category_tr": "çanta"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "çanta",
+            "family": "bag",
+            "subtype": "bag",
+            "category_tr": "çanta",
+            "layer": "accessory",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-17",
+          "title": "Zara siyah çanta erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/17a.jpg",
+          "link": "https://zara.com/17",
+          "product_id": "p17a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-17",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/17b.jpg",
+          "link": "https://koton.com/17b",
+          "product_id": "p17b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-17",
+          "title": "Gucci çanta",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/17c.jpg",
+          "link": "https://beymen.com/17",
+          "product_id": "p17c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g18-sunglasses-siyah",
+      "tags": [
+        "acc",
+        "extraction",
+        "sunglasses"
+      ],
+      "expect": {
+        "families": [
+          "sunglasses"
+        ],
+        "layers": [
+          "accessory"
+        ],
+        "body_color": "siyah",
+        "category_tr": "gözlük"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "gözlük",
+            "family": "sunglasses",
+            "subtype": "sunglasses",
+            "category_tr": "gözlük",
+            "layer": "accessory",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.5,
+              "h": 0.6
+            },
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "ok-18",
+          "title": "Zara siyah gözlük erkek",
+          "price": "899 TL",
+          "priceValue": 899,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/18a.jpg",
+          "link": "https://zara.com/18",
+          "product_id": "p18a",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad-type-18",
+          "title": "Koton pembe terlik kadın",
+          "price": "199 TL",
+          "priceValue": 199,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/18b.jpg",
+          "link": "https://koton.com/18b",
+          "product_id": "p18b",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "lux-18",
+          "title": "Gucci gözlük",
+          "price": "12000 TL",
+          "priceValue": 12000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/18c.jpg",
+          "link": "https://beymen.com/18",
+          "product_id": "p18c",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g19-layer-sweat-tee",
+      "tags": [
+        "layer",
+        "extraction",
+        "sweatshirt",
+        "tee"
+      ],
+      "expect": {
+        "families": [
+          "sweatshirt",
+          "tee"
+        ],
+        "layers": [
+          "mid",
+          "inner"
+        ],
+        "body_color": "gri"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Sweatshirt",
+            "family": "sweatshirt",
+            "subtype": "sweatshirt",
+            "category_tr": "Sweatshirt",
+            "layer": "mid",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.2,
+              "y": 0.15,
+              "w": 0.55,
+              "h": 0.5
+            },
+            "body_color": "gri",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "oversized",
+            "material": "pamuk",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          },
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "partial",
+            "bounding_box": {
+              "x": 0.25,
+              "y": 0.35,
+              "w": 0.4,
+              "h": 0.25
+            },
+            "body_color": "beyaz",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "regular",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "sw1",
+          "title": "Mavi gri sweatshirt erkek",
+          "price": "799 TL",
+          "priceValue": 799,
+          "source": "Mavi",
+          "store": "Mavi",
+          "image": "https://img/sw1.jpg",
+          "link": "https://mavi.com/sw1",
+          "product_id": "sw1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "tee1",
+          "title": "Zara beyaz tişört erkek",
+          "price": "399 TL",
+          "priceValue": 399,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/tee1.jpg",
+          "link": "https://zara.com/tee1",
+          "product_id": "tee1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "bad",
+          "title": "Tudors terlik",
+          "price": "249 TL",
+          "priceValue": 249,
+          "source": "Tudors",
+          "store": "Tudors",
+          "image": "https://img/bad.jpg",
+          "link": "https://tudors.com/t",
+          "product_id": "bad",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "L"
+      ]
+    },
+    {
+      "id": "g20-layer-blazer-shirt",
+      "tags": [
+        "layer",
+        "blazer",
+        "shirt"
+      ],
+      "expect": {
+        "families": [
+          "blazer",
+          "shirt"
+        ],
+        "layers": [
+          "outer",
+          "inner"
+        ],
+        "body_color": "lacivert"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Blazer",
+            "family": "blazer",
+            "subtype": "blazer",
+            "category_tr": "Blazer",
+            "layer": "outer",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.15,
+              "y": 0.1,
+              "w": 0.6,
+              "h": 0.55
+            },
+            "body_color": "lacivert",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "slim",
+            "material": "",
+            "gender": "women",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          },
+          {
+            "label_tr": "Gömlek",
+            "family": "shirt",
+            "subtype": "shirt",
+            "category_tr": "Gömlek",
+            "layer": "inner",
+            "visibility": "partial",
+            "bounding_box": {
+              "x": 0.25,
+              "y": 0.25,
+              "w": 0.4,
+              "h": 0.3
+            },
+            "body_color": "beyaz",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "women",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "is",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "bl1",
+          "title": "Network lacivert blazer kadın",
+          "price": "4500 TL",
+          "priceValue": 4500,
+          "source": "Network",
+          "store": "Network",
+          "image": "https://img/bl1.jpg",
+          "link": "https://n.com/1",
+          "product_id": "bl1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "sh1",
+          "title": "Massimo Dutti beyaz gömlek kadın",
+          "price": "1200 TL",
+          "priceValue": 1200,
+          "source": "Massimo Dutti",
+          "store": "Massimo Dutti",
+          "image": "https://img/sh1.jpg",
+          "link": "https://md.com/1",
+          "product_id": "sh1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "women",
+      "sizes": [
+        "S"
+      ]
+    },
+    {
+      "id": "g21-jewelry-necklace-earrings",
+      "tags": [
+        "jewelry"
+      ],
+      "expect": {
+        "families": [
+          "necklace",
+          "earrings"
+        ],
+        "layers": [
+          "jewelry"
+        ],
+        "body_color": "altın"
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Kolye",
+            "family": "necklace",
+            "subtype": "necklace",
+            "category_tr": "Kolye",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.4,
+              "y": 0.3,
+              "w": 0.2,
+              "h": 0.15
+            },
+            "body_color": "altın",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "women",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          },
+          {
+            "label_tr": "Küpe",
+            "family": "earrings",
+            "subtype": "earrings",
+            "category_tr": "Küpe",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": {
+              "x": 0.15,
+              "y": 0.2,
+              "w": 0.1,
+              "h": 0.1
+            },
+            "body_color": "altın",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "women",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "aksam",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "n1",
+          "title": "Atasay altın kolye",
+          "price": "3200 TL",
+          "priceValue": 3200,
+          "source": "Atasay",
+          "store": "Atasay",
+          "image": "https://img/n1.jpg",
+          "link": "https://a.com/n1",
+          "product_id": "n1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "e1",
+          "title": "Altın küpe kadın",
+          "price": "1800 TL",
+          "priceValue": 1800,
+          "source": "Atasay",
+          "store": "Atasay",
+          "image": "https://img/e1.jpg",
+          "link": "https://a.com/e1",
+          "product_id": "e1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "women",
+      "sizes": []
+    },
+    {
+      "id": "g22-luxury-no-leak",
+      "tags": [
+        "luxury"
+      ],
+      "expect": {
+        "families": [
+          "blazer"
+        ],
+        "layers": [
+          "outer"
+        ],
+        "body_color": "siyah",
+        "luxury_leak_max": 0
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Blazer",
+            "family": "blazer",
+            "subtype": "blazer",
+            "category_tr": "Blazer",
+            "layer": "outer",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "aksam",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "luxok",
+          "title": "Hugo Boss siyah blazer erkek",
+          "price": "15000 TL",
+          "priceValue": 15000,
+          "source": "Beymen",
+          "store": "Beymen",
+          "image": "https://img/l1.jpg",
+          "link": "https://b.com/1",
+          "product_id": "luxok",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "leak",
+          "title": "LC Waikiki siyah ceket erkek",
+          "price": "599 TL",
+          "priceValue": 599,
+          "source": "LC Waikiki",
+          "store": "LC Waikiki",
+          "image": "https://img/l2.jpg",
+          "link": "https://lcw.com/1",
+          "product_id": "leak",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "luks",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g23-color-gate",
+      "tags": [
+        "color"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "body_color": "kırmızı",
+        "wrong_color_top3_max": 0
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "kırmızı",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "spor",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "c1",
+          "title": "Nike kırmızı tişört erkek",
+          "price": "699 TL",
+          "priceValue": 699,
+          "source": "Nike",
+          "store": "Nike",
+          "image": "https://img/c1.jpg",
+          "link": "https://n.com/c1",
+          "product_id": "c1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "c2",
+          "title": "Adidas yeşil tişört erkek",
+          "price": "599 TL",
+          "priceValue": 599,
+          "source": "Adidas",
+          "store": "Adidas",
+          "image": "https://img/c2.jpg",
+          "link": "https://a.com/c2",
+          "product_id": "c2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "L"
+      ]
+    },
+    {
+      "id": "g24-jersey-no-tee-fallback",
+      "tags": [
+        "jersey"
+      ],
+      "expect": {
+        "families": [
+          "jersey"
+        ],
+        "no_tee_fallback": true
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Forma",
+            "family": "jersey",
+            "subtype": "football-jersey",
+            "category_tr": "Forma",
+            "layer": "mid",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "sarı",
+            "secondary_colors": [
+              "kırmızı"
+            ],
+            "motifs": [
+              {
+                "type": "numara",
+                "colors": [
+                  "siyah"
+                ],
+                "placement": "sırt",
+                "text": "7"
+              }
+            ],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [
+              "kulüp"
+            ],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "Galatasaray",
+              "number": "7",
+              "sport": "football"
+            }
+          }
+        ],
+        "occasion_hint": "spor",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "j1",
+          "title": "Galatasaray sarı forma 7",
+          "price": "2499 TL",
+          "priceValue": 2499,
+          "source": "GS Store",
+          "store": "GS Store",
+          "image": "https://img/j1.jpg",
+          "link": "https://gs.com/1",
+          "product_id": "j1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "j2",
+          "title": "Sarı tişört erkek basic",
+          "price": "299 TL",
+          "priceValue": 299,
+          "source": "Koton",
+          "store": "Koton",
+          "image": "https://img/j2.jpg",
+          "link": "https://k.com/j2",
+          "product_id": "j2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g25-size-in-query",
+      "tags": [
+        "size"
+      ],
+      "expect": {
+        "families": [
+          "pants"
+        ],
+        "sizes_in_query": [
+          "L"
+        ]
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Pantolon",
+            "family": "pants",
+            "subtype": "pants",
+            "category_tr": "Pantolon",
+            "layer": "bottom",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "slim",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "is",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "p1",
+          "title": "Mavi siyah pantolon erkek L",
+          "price": "999 TL",
+          "priceValue": 999,
+          "source": "Mavi",
+          "store": "Mavi",
+          "image": "https://img/p1.jpg",
+          "link": "https://m.com/p1",
+          "product_id": "p1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "L"
+      ]
+    },
+    {
+      "id": "g26-uniqueness-page",
+      "tags": [
+        "pagination",
+        "uniqueness"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "unique_at_12_min": 9
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "u1-0",
+          "title": "Zara siyah tişört erkek v0",
+          "price": "400 TL",
+          "priceValue": 400,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-0.jpg",
+          "link": "https://zara.com/u1-0",
+          "product_id": "u1-0",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-1",
+          "title": "Zara siyah tişört erkek v1",
+          "price": "410 TL",
+          "priceValue": 410,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-1.jpg",
+          "link": "https://zara.com/u1-1",
+          "product_id": "u1-1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-2",
+          "title": "Zara siyah tişört erkek v2",
+          "price": "420 TL",
+          "priceValue": 420,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-2.jpg",
+          "link": "https://zara.com/u1-2",
+          "product_id": "u1-2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-3",
+          "title": "Zara siyah tişört erkek v3",
+          "price": "430 TL",
+          "priceValue": 430,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-3.jpg",
+          "link": "https://zara.com/u1-3",
+          "product_id": "u1-3",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-4",
+          "title": "Zara siyah tişört erkek v4",
+          "price": "440 TL",
+          "priceValue": 440,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-4.jpg",
+          "link": "https://zara.com/u1-4",
+          "product_id": "u1-4",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-5",
+          "title": "Zara siyah tişört erkek v5",
+          "price": "450 TL",
+          "priceValue": 450,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-5.jpg",
+          "link": "https://zara.com/u1-5",
+          "product_id": "u1-5",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-6",
+          "title": "Zara siyah tişört erkek v6",
+          "price": "460 TL",
+          "priceValue": 460,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-6.jpg",
+          "link": "https://zara.com/u1-6",
+          "product_id": "u1-6",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-7",
+          "title": "Zara siyah tişört erkek v7",
+          "price": "470 TL",
+          "priceValue": 470,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-7.jpg",
+          "link": "https://zara.com/u1-7",
+          "product_id": "u1-7",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-8",
+          "title": "Zara siyah tişört erkek v8",
+          "price": "480 TL",
+          "priceValue": 480,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-8.jpg",
+          "link": "https://zara.com/u1-8",
+          "product_id": "u1-8",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-9",
+          "title": "Zara siyah tişört erkek v9",
+          "price": "490 TL",
+          "priceValue": 490,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-9.jpg",
+          "link": "https://zara.com/u1-9",
+          "product_id": "u1-9",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-10",
+          "title": "Zara siyah tişört erkek v10",
+          "price": "500 TL",
+          "priceValue": 500,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-10.jpg",
+          "link": "https://zara.com/u1-10",
+          "product_id": "u1-10",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u1-11",
+          "title": "Zara siyah tişört erkek v11",
+          "price": "510 TL",
+          "priceValue": 510,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u1-11.jpg",
+          "link": "https://zara.com/u1-11",
+          "product_id": "u1-11",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g27-uniqueness-page",
+      "tags": [
+        "pagination",
+        "uniqueness"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "unique_at_12_min": 9
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "u2-0",
+          "title": "Zara siyah tişört erkek v0",
+          "price": "400 TL",
+          "priceValue": 400,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-0.jpg",
+          "link": "https://zara.com/u2-0",
+          "product_id": "u2-0",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-1",
+          "title": "Zara siyah tişört erkek v1",
+          "price": "410 TL",
+          "priceValue": 410,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-1.jpg",
+          "link": "https://zara.com/u2-1",
+          "product_id": "u2-1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-2",
+          "title": "Zara siyah tişört erkek v2",
+          "price": "420 TL",
+          "priceValue": 420,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-2.jpg",
+          "link": "https://zara.com/u2-2",
+          "product_id": "u2-2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-3",
+          "title": "Zara siyah tişört erkek v3",
+          "price": "430 TL",
+          "priceValue": 430,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-3.jpg",
+          "link": "https://zara.com/u2-3",
+          "product_id": "u2-3",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-4",
+          "title": "Zara siyah tişört erkek v4",
+          "price": "440 TL",
+          "priceValue": 440,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-4.jpg",
+          "link": "https://zara.com/u2-4",
+          "product_id": "u2-4",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-5",
+          "title": "Zara siyah tişört erkek v5",
+          "price": "450 TL",
+          "priceValue": 450,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-5.jpg",
+          "link": "https://zara.com/u2-5",
+          "product_id": "u2-5",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-6",
+          "title": "Zara siyah tişört erkek v6",
+          "price": "460 TL",
+          "priceValue": 460,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-6.jpg",
+          "link": "https://zara.com/u2-6",
+          "product_id": "u2-6",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-7",
+          "title": "Zara siyah tişört erkek v7",
+          "price": "470 TL",
+          "priceValue": 470,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-7.jpg",
+          "link": "https://zara.com/u2-7",
+          "product_id": "u2-7",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-8",
+          "title": "Zara siyah tişört erkek v8",
+          "price": "480 TL",
+          "priceValue": 480,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-8.jpg",
+          "link": "https://zara.com/u2-8",
+          "product_id": "u2-8",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-9",
+          "title": "Zara siyah tişört erkek v9",
+          "price": "490 TL",
+          "priceValue": 490,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-9.jpg",
+          "link": "https://zara.com/u2-9",
+          "product_id": "u2-9",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-10",
+          "title": "Zara siyah tişört erkek v10",
+          "price": "500 TL",
+          "priceValue": 500,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-10.jpg",
+          "link": "https://zara.com/u2-10",
+          "product_id": "u2-10",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u2-11",
+          "title": "Zara siyah tişört erkek v11",
+          "price": "510 TL",
+          "priceValue": 510,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u2-11.jpg",
+          "link": "https://zara.com/u2-11",
+          "product_id": "u2-11",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g28-uniqueness-page",
+      "tags": [
+        "pagination",
+        "uniqueness"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "unique_at_12_min": 9
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "u3-0",
+          "title": "Zara siyah tişört erkek v0",
+          "price": "400 TL",
+          "priceValue": 400,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-0.jpg",
+          "link": "https://zara.com/u3-0",
+          "product_id": "u3-0",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-1",
+          "title": "Zara siyah tişört erkek v1",
+          "price": "410 TL",
+          "priceValue": 410,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-1.jpg",
+          "link": "https://zara.com/u3-1",
+          "product_id": "u3-1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-2",
+          "title": "Zara siyah tişört erkek v2",
+          "price": "420 TL",
+          "priceValue": 420,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-2.jpg",
+          "link": "https://zara.com/u3-2",
+          "product_id": "u3-2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-3",
+          "title": "Zara siyah tişört erkek v3",
+          "price": "430 TL",
+          "priceValue": 430,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-3.jpg",
+          "link": "https://zara.com/u3-3",
+          "product_id": "u3-3",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-4",
+          "title": "Zara siyah tişört erkek v4",
+          "price": "440 TL",
+          "priceValue": 440,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-4.jpg",
+          "link": "https://zara.com/u3-4",
+          "product_id": "u3-4",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-5",
+          "title": "Zara siyah tişört erkek v5",
+          "price": "450 TL",
+          "priceValue": 450,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-5.jpg",
+          "link": "https://zara.com/u3-5",
+          "product_id": "u3-5",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-6",
+          "title": "Zara siyah tişört erkek v6",
+          "price": "460 TL",
+          "priceValue": 460,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-6.jpg",
+          "link": "https://zara.com/u3-6",
+          "product_id": "u3-6",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-7",
+          "title": "Zara siyah tişört erkek v7",
+          "price": "470 TL",
+          "priceValue": 470,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-7.jpg",
+          "link": "https://zara.com/u3-7",
+          "product_id": "u3-7",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-8",
+          "title": "Zara siyah tişört erkek v8",
+          "price": "480 TL",
+          "priceValue": 480,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-8.jpg",
+          "link": "https://zara.com/u3-8",
+          "product_id": "u3-8",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-9",
+          "title": "Zara siyah tişört erkek v9",
+          "price": "490 TL",
+          "priceValue": 490,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-9.jpg",
+          "link": "https://zara.com/u3-9",
+          "product_id": "u3-9",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-10",
+          "title": "Zara siyah tişört erkek v10",
+          "price": "500 TL",
+          "priceValue": 500,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-10.jpg",
+          "link": "https://zara.com/u3-10",
+          "product_id": "u3-10",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u3-11",
+          "title": "Zara siyah tişört erkek v11",
+          "price": "510 TL",
+          "priceValue": 510,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u3-11.jpg",
+          "link": "https://zara.com/u3-11",
+          "product_id": "u3-11",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g29-uniqueness-page",
+      "tags": [
+        "pagination",
+        "uniqueness"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "unique_at_12_min": 9
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "u4-0",
+          "title": "Zara siyah tişört erkek v0",
+          "price": "400 TL",
+          "priceValue": 400,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-0.jpg",
+          "link": "https://zara.com/u4-0",
+          "product_id": "u4-0",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-1",
+          "title": "Zara siyah tişört erkek v1",
+          "price": "410 TL",
+          "priceValue": 410,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-1.jpg",
+          "link": "https://zara.com/u4-1",
+          "product_id": "u4-1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-2",
+          "title": "Zara siyah tişört erkek v2",
+          "price": "420 TL",
+          "priceValue": 420,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-2.jpg",
+          "link": "https://zara.com/u4-2",
+          "product_id": "u4-2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-3",
+          "title": "Zara siyah tişört erkek v3",
+          "price": "430 TL",
+          "priceValue": 430,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-3.jpg",
+          "link": "https://zara.com/u4-3",
+          "product_id": "u4-3",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-4",
+          "title": "Zara siyah tişört erkek v4",
+          "price": "440 TL",
+          "priceValue": 440,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-4.jpg",
+          "link": "https://zara.com/u4-4",
+          "product_id": "u4-4",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-5",
+          "title": "Zara siyah tişört erkek v5",
+          "price": "450 TL",
+          "priceValue": 450,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-5.jpg",
+          "link": "https://zara.com/u4-5",
+          "product_id": "u4-5",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-6",
+          "title": "Zara siyah tişört erkek v6",
+          "price": "460 TL",
+          "priceValue": 460,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-6.jpg",
+          "link": "https://zara.com/u4-6",
+          "product_id": "u4-6",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-7",
+          "title": "Zara siyah tişört erkek v7",
+          "price": "470 TL",
+          "priceValue": 470,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-7.jpg",
+          "link": "https://zara.com/u4-7",
+          "product_id": "u4-7",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-8",
+          "title": "Zara siyah tişört erkek v8",
+          "price": "480 TL",
+          "priceValue": 480,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-8.jpg",
+          "link": "https://zara.com/u4-8",
+          "product_id": "u4-8",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-9",
+          "title": "Zara siyah tişört erkek v9",
+          "price": "490 TL",
+          "priceValue": 490,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-9.jpg",
+          "link": "https://zara.com/u4-9",
+          "product_id": "u4-9",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-10",
+          "title": "Zara siyah tişört erkek v10",
+          "price": "500 TL",
+          "priceValue": 500,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-10.jpg",
+          "link": "https://zara.com/u4-10",
+          "product_id": "u4-10",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u4-11",
+          "title": "Zara siyah tişört erkek v11",
+          "price": "510 TL",
+          "priceValue": 510,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u4-11.jpg",
+          "link": "https://zara.com/u4-11",
+          "product_id": "u4-11",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g30-uniqueness-page",
+      "tags": [
+        "pagination",
+        "uniqueness"
+      ],
+      "expect": {
+        "families": [
+          "tee"
+        ],
+        "unique_at_12_min": 9
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Tişört",
+            "family": "tee",
+            "subtype": "tee",
+            "category_tr": "Tişört",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "siyah",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "u5-0",
+          "title": "Zara siyah tişört erkek v0",
+          "price": "400 TL",
+          "priceValue": 400,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-0.jpg",
+          "link": "https://zara.com/u5-0",
+          "product_id": "u5-0",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-1",
+          "title": "Zara siyah tişört erkek v1",
+          "price": "410 TL",
+          "priceValue": 410,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-1.jpg",
+          "link": "https://zara.com/u5-1",
+          "product_id": "u5-1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-2",
+          "title": "Zara siyah tişört erkek v2",
+          "price": "420 TL",
+          "priceValue": 420,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-2.jpg",
+          "link": "https://zara.com/u5-2",
+          "product_id": "u5-2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-3",
+          "title": "Zara siyah tişört erkek v3",
+          "price": "430 TL",
+          "priceValue": 430,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-3.jpg",
+          "link": "https://zara.com/u5-3",
+          "product_id": "u5-3",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-4",
+          "title": "Zara siyah tişört erkek v4",
+          "price": "440 TL",
+          "priceValue": 440,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-4.jpg",
+          "link": "https://zara.com/u5-4",
+          "product_id": "u5-4",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-5",
+          "title": "Zara siyah tişört erkek v5",
+          "price": "450 TL",
+          "priceValue": 450,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-5.jpg",
+          "link": "https://zara.com/u5-5",
+          "product_id": "u5-5",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-6",
+          "title": "Zara siyah tişört erkek v6",
+          "price": "460 TL",
+          "priceValue": 460,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-6.jpg",
+          "link": "https://zara.com/u5-6",
+          "product_id": "u5-6",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-7",
+          "title": "Zara siyah tişört erkek v7",
+          "price": "470 TL",
+          "priceValue": 470,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-7.jpg",
+          "link": "https://zara.com/u5-7",
+          "product_id": "u5-7",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-8",
+          "title": "Zara siyah tişört erkek v8",
+          "price": "480 TL",
+          "priceValue": 480,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-8.jpg",
+          "link": "https://zara.com/u5-8",
+          "product_id": "u5-8",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-9",
+          "title": "Zara siyah tişört erkek v9",
+          "price": "490 TL",
+          "priceValue": 490,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-9.jpg",
+          "link": "https://zara.com/u5-9",
+          "product_id": "u5-9",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-10",
+          "title": "Zara siyah tişört erkek v10",
+          "price": "500 TL",
+          "priceValue": 500,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-10.jpg",
+          "link": "https://zara.com/u5-10",
+          "product_id": "u5-10",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "u5-11",
+          "title": "Zara siyah tişört erkek v11",
+          "price": "510 TL",
+          "priceValue": 510,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/u5-11.jpg",
+          "link": "https://zara.com/u5-11",
+          "product_id": "u5-11",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": [
+        "M"
+      ]
+    },
+    {
+      "id": "g31-replica-reject",
+      "tags": [
+        "quality"
+      ],
+      "expect": {
+        "families": [
+          "watch"
+        ],
+        "reject_replica": true
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Saat",
+            "family": "watch",
+            "subtype": "watch",
+            "category_tr": "Saat",
+            "layer": "jewelry",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "gümüş",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "men",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "aksam",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "w1",
+          "title": "Casio gümüş saat erkek",
+          "price": "2200 TL",
+          "priceValue": 2200,
+          "source": "Casio",
+          "store": "Casio",
+          "image": "https://img/w1.jpg",
+          "link": "https://c.com/w1",
+          "product_id": "w1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "w2",
+          "title": "Rolex replika saat",
+          "price": "499 TL",
+          "priceValue": 499,
+          "source": "Sanal Çadır",
+          "store": "Sanal Çadır",
+          "image": "https://img/w2.jpg",
+          "link": "https://s.com/w2",
+          "product_id": "w2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "men",
+      "sizes": []
+    },
+    {
+      "id": "g32-gender-conflict",
+      "tags": [
+        "gender"
+      ],
+      "expect": {
+        "families": [
+          "blouse"
+        ],
+        "reject_gender": true
+      },
+      "vision_fixture": {
+        "pieces": [
+          {
+            "label_tr": "Bluz",
+            "family": "blouse",
+            "subtype": "blouse",
+            "category_tr": "Bluz",
+            "layer": "inner",
+            "visibility": "full",
+            "bounding_box": null,
+            "body_color": "pembe",
+            "secondary_colors": [],
+            "motifs": [],
+            "fit": "",
+            "material": "",
+            "gender": "women",
+            "distinctive_details": [],
+            "low_confidence": false,
+            "jersey_signals": {
+              "club": "",
+              "number": "",
+              "sport": ""
+            }
+          }
+        ],
+        "occasion_hint": "gundelik",
+        "notes": ""
+      },
+      "candidates": [
+        {
+          "id": "b1",
+          "title": "Zara pembe bluz kadın",
+          "price": "599 TL",
+          "priceValue": 599,
+          "source": "Zara",
+          "store": "Zara",
+          "image": "https://img/b1.jpg",
+          "link": "https://z.com/b1",
+          "product_id": "b1",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        },
+        {
+          "id": "b2",
+          "title": "Erkek pembe bluz regular fit",
+          "price": "499 TL",
+          "priceValue": 499,
+          "source": "Mavi",
+          "store": "Mavi",
+          "image": "https://img/b2.jpg",
+          "link": "https://m.com/b2",
+          "product_id": "b2",
+          "serpapi_immersive_product_api": null,
+          "provider": "shopping"
+        }
+      ],
+      "price_mode": "karma",
+      "gender": "women",
+      "sizes": [
+        "S"
+      ]
+    }
+  ]
+}

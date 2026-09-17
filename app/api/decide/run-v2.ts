@@ -1,0 +1,149 @@
+import { randomUUID } from "crypto";
+import type { Occasion, PriceMode, UserGender } from "@/lib/preferences";
+import type { PieceResult, StoredResults } from "@/components/analyze/types";
+import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
+import { resolveDecideOccasion } from "@/lib/occasion-guide";
+import {
+  EXTRACTOR_VERSION,
+  SEARCH_V2_VERSION,
+  extractOutfitIntent,
+  orchestrateOutfit,
+  logSearchV2Metrics,
+  type SearchV2RequestMetrics,
+} from "@/lib/search-v2";
+import type { Results } from "@/components/analyze/types";
+
+function collectTitles(results: Results): string[] {
+  return [results.recommended?.title, results.cheaper?.title, results.style?.title].filter(
+    (t): t is string => Boolean(t)
+  );
+}
+
+export interface RunSearchV2Input {
+  openAiKey: string;
+  serpApiKey: string;
+  affiliateTag: string;
+  userId: string;
+  photoUrl: string;
+  visionImageUrl: string;
+  sizes: string[];
+  priceMode: PriceMode;
+  gender: UserGender | null;
+  requestedOccasion: Occasion | null;
+  anonymous: boolean;
+  /** Optional supabase insert helper */
+  persistHistory?: (row: {
+    id: string;
+    user_id: string;
+    photo_url: string;
+    results: StoredResults;
+    context: string;
+  }) => Promise<void>;
+}
+
+export async function runSearchV2(input: RunSearchV2Input) {
+  const tVision = Date.now();
+  const { intent, image_hash, cached, raw } = await extractOutfitIntent({
+    apiKey: input.openAiKey,
+    imageDataUrl: input.visionImageUrl,
+    userId: input.userId,
+  });
+  const vision_ms = Date.now() - tVision;
+
+  // Map occasion hint through existing resolver when possible
+  const occasion =
+    resolveDecideOccasion(input.requestedOccasion, JSON.stringify({ occasion_hint: intent.occasion_hint })) ||
+    input.requestedOccasion ||
+    "gundelik";
+
+  // Apply user gender onto intents
+  const gendered = {
+    ...intent,
+    pieces: intent.pieces.map((p) => ({
+      ...p,
+      gender: (input.gender || p.gender || "") as typeof p.gender,
+    })),
+  };
+
+  const { pieces, piece_sessions, metrics, version } = await orchestrateOutfit({
+    intent: gendered,
+    photoUrl: input.photoUrl,
+    serpApiKey: input.serpApiKey,
+    openAiKey: input.openAiKey,
+    priceMode: input.priceMode,
+    gender: input.gender,
+    sizes: input.sizes,
+    affiliateTag: input.affiliateTag,
+  });
+
+  const empty_piece_rate =
+    gendered.pieces.length === 0
+      ? 1
+      : Math.max(0, gendered.pieces.length - pieces.length) / gendered.pieces.length;
+
+  const metricsPayload: SearchV2RequestMetrics = {
+    extractor_version: EXTRACTOR_VERSION,
+    search_version: version || SEARCH_V2_VERSION,
+    vision_ms,
+    vision_cached: cached,
+    empty_piece_rate,
+    pieces: pieces.map((p, i) => ({
+      label: p.label,
+      candidates: metrics[i]?.candidates || 0,
+      kept: metrics[i]?.kept || 0,
+      rejects: metrics[i]?.rejects || {},
+      provider_ms: metrics[i]?.provider_ms || 0,
+      rerank_ms: metrics[i]?.rerank_ms || 0,
+      selected_score: undefined,
+      size_status: "unknown",
+    })),
+  };
+  logSearchV2Metrics("/api/decide", metricsPayload);
+
+  if (pieces.length === 0) {
+    return {
+      ok: false as const,
+      error: "Bu fotoğraf için sonuç bulunamadı.",
+      pieces: [] as PieceResult[],
+      metrics: metricsPayload,
+      image_hash,
+      intent_raw: raw,
+      occasion,
+    };
+  }
+
+  const stored: StoredResults = {
+    pieces,
+    vision_content: raw,
+  };
+  const context = OCCASION_TO_CONTEXT[occasion];
+  const history_id = !input.anonymous ? randomUUID() : null;
+  if (history_id && input.persistHistory) {
+    await input.persistHistory({
+      id: history_id,
+      user_id: input.userId,
+      photo_url: input.photoUrl,
+      results: stored,
+      context,
+    });
+  }
+
+  return {
+    ok: true as const,
+    user_id: input.userId,
+    photo_url: input.photoUrl,
+    pieces,
+    results: pieces[0].results,
+    exclude_titles: pieces.flatMap((p) => collectTitles(p.results)),
+    occasion,
+    context,
+    history_id,
+    price_mode: input.priceMode,
+    search_version: SEARCH_V2_VERSION,
+    extractor_version: EXTRACTOR_VERSION,
+    piece_sessions,
+    image_hash,
+    intent_raw: raw,
+    metrics: metricsPayload,
+  };
+}

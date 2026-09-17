@@ -12,7 +12,9 @@
     "cap:sync": "npx cap sync",
     "cap:ios": "npx cap open ios",
     "generate:splash": "node scripts/generate-splash.mjs",
-    "eval": "node scripts/eval-extraction.mjs"
+    "eval": "node scripts/eval-extraction.mjs",
+    "eval:v2": "node scripts/eval-search-v2.mjs",
+    "eval:ci": "node scripts/eval-search-v2.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",

@@ -23,6 +23,8 @@ import {
 } from "@/lib/api-security";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
 import { RequestTimer } from "@/lib/timing";
+import { isSearchV2Enabled } from "@/lib/search-v2/flag";
+import { runMoreV2 } from "../more-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -219,6 +221,64 @@ export async function POST(req: NextRequest) {
     setCachedVision(visionCacheKey(user.id, storage_path, occasion), visionContent);
     if (requestedOccasion && requestedOccasion !== occasion) {
       setCachedVision(visionCacheKey(user.id, storage_path, requestedOccasion), visionContent);
+    }
+
+    // Search V2 show-more: session cursor + unique products (never 404 on exhausted)
+    if (isSearchV2Enabled(user.id)) {
+      const sessionId =
+        typeof body?.session_id === "string"
+          ? body.session_id
+          : typeof body?.piece_sessions?.[pieceLabel || ""] === "string"
+            ? body.piece_sessions[pieceLabel || ""]
+            : null;
+      const page = typeof body?.page === "number" ? body.page : Math.max(1, Math.ceil(excludeTitles.size / 3));
+      const more = await timer.span("search_v2_more", () =>
+        runMoreV2({
+          openAiKey: OPENAI_API_KEY,
+          serpApiKey: SERPAPI_KEY,
+          photoUrl: photo_url,
+          visionContent,
+          pieceLabel: pieceLabel || "",
+          sessionId,
+          page,
+          priceMode: price_mode,
+          gender: userGender,
+          sizes,
+        })
+      );
+
+      const snap = timer.snapshot({
+        route: "/api/decide/more",
+        vision_source: visionSource,
+        occasion,
+        piece_label: more.piece.label,
+        search_version: "v2",
+        exhausted: more.exhausted,
+      });
+
+      if (more.exhausted && !more.piece.results.recommended) {
+        return timer.json(
+          {
+            piece: more.piece,
+            exclude_titles: [...excludeTitles, ...more.exclude_titles],
+            exhausted: true,
+            session_id: more.session_id,
+            search_version: "search-v2.1",
+          },
+          snap
+        );
+      }
+
+      return timer.json(
+        {
+          piece: more.piece,
+          exclude_titles: [...excludeTitles, ...more.exclude_titles],
+          exhausted: more.exhausted,
+          session_id: more.session_id,
+          search_version: "search-v2.1",
+        },
+        snap
+      );
     }
 
     const visionPieces = parseVisionOutfit(visionContent, ctx);

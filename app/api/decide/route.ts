@@ -26,6 +26,8 @@ import {
 import { OCCASION_TO_CONTEXT } from "@/lib/combine-rules";
 import { resolveDecideOccasion } from "@/lib/occasion-guide";
 import { RequestTimer } from "@/lib/timing";
+import { isSearchV2Enabled, isSearchV2Shadow } from "@/lib/search-v2/flag";
+import { runSearchV2 } from "./run-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -187,6 +189,74 @@ export async function POST(req: NextRequest) {
     };
     const ctx: RequestContext = { photo_url, user_id: user.id, user_profile };
 
+    const useV2 = isSearchV2Enabled(user.id);
+    const shadow = isSearchV2Shadow();
+
+    if (useV2 && !shadow) {
+      const v2 = await timer.span("search_v2", () =>
+        runSearchV2({
+          openAiKey: OPENAI_API_KEY,
+          serpApiKey: SERPAPI_KEY,
+          affiliateTag: AFFILIATE_TAG,
+          userId: user.id,
+          photoUrl: photo_url,
+          visionImageUrl,
+          sizes,
+          priceMode: price_mode,
+          gender: userGender,
+          requestedOccasion,
+          anonymous: anonymous,
+          persistHistory: async (row) => {
+            const { error: insertError } = await supabase.from("search_history").insert(row);
+            if (insertError) console.error("search_history insert:", insertError.message);
+          },
+        })
+      );
+
+      if (!v2.ok) {
+        const snap = timer.snapshot({ route: "/api/decide", pieces: 0, search_version: "v2" });
+        timer.log("/api/decide", snap);
+        return NextResponse.json({
+          user_id: user.id,
+          photo_url,
+          pieces: [],
+          results: null,
+          error: v2.error,
+          _timing: snap,
+          search_version: "search-v2.1",
+        });
+      }
+
+      if (storage_path && v2.intent_raw) {
+        setCachedVision(visionCacheKey(user.id, storage_path, v2.occasion), v2.intent_raw);
+      }
+
+      const snap = timer.snapshot({
+        route: "/api/decide",
+        pieces: v2.pieces.length,
+        occasion: v2.occasion,
+        price_mode,
+        search_version: "v2",
+      });
+      return timer.json(
+        {
+          user_id: v2.user_id,
+          photo_url: v2.photo_url,
+          pieces: v2.pieces,
+          results: v2.results,
+          exclude_titles: v2.exclude_titles,
+          occasion: v2.occasion,
+          context: v2.context,
+          history_id: v2.history_id,
+          price_mode: v2.price_mode,
+          search_version: v2.search_version,
+          extractor_version: v2.extractor_version,
+          piece_sessions: v2.piece_sessions,
+        },
+        snap
+      );
+    }
+
     const visionContent = await timer.span("vision", () =>
       openAIContent(OPENAI_API_KEY, {
         model: "gpt-4o",
@@ -203,6 +273,28 @@ export async function POST(req: NextRequest) {
         response_format: { type: "json_object" },
       })
     );
+
+    // Shadow mode: fire-and-forget V2 for metrics without affecting response
+    if (shadow) {
+      void runSearchV2({
+        openAiKey: OPENAI_API_KEY,
+        serpApiKey: SERPAPI_KEY,
+        affiliateTag: AFFILIATE_TAG,
+        userId: user.id,
+        photoUrl: photo_url,
+        visionImageUrl,
+        sizes,
+        priceMode: price_mode,
+        gender: userGender,
+        requestedOccasion,
+        anonymous: true,
+      }).then((r) => {
+        if (r.metrics) {
+          r.metrics.shadow = true;
+          console.log("[search-v2-shadow]", r.ok ? "ok" : "empty", r.pieces?.length || 0);
+        }
+      }).catch((err) => console.warn("[search-v2-shadow]", err));
+    }
 
     const occasion = resolveDecideOccasion(requestedOccasion, visionContent);
     user_profile.occasion = occasion;

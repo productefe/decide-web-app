@@ -1,0 +1,29 @@
+name: Search V2 Eval
+
+on:
+  push:
+    paths:
+      - "app/lib/search-v2/**"
+      - "eval/v2/**"
+      - "scripts/eval-search-v2.mjs"
+      - "app/api/decide/**"
+      - "app/api/combine/**"
+  pull_request:
+    paths:
+      - "app/lib/search-v2/**"
+      - "eval/v2/**"
+      - "scripts/eval-search-v2.mjs"
+
+jobs:
+  eval-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Run Search V2 golden eval
+        run: node scripts/eval-search-v2.mjs
+      - name: Typecheck
+        run: npx tsc --noEmit

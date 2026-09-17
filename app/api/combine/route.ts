@@ -24,6 +24,8 @@ import {
 import type { PieceResult, Results, StoredResults } from "@/components/analyze/types";
 import type { UserProfile } from "@/api/decide/pipeline";
 import { RequestTimer } from "@/lib/timing";
+import { isSearchV2Enabled } from "@/lib/search-v2/flag";
+import { runCombineV2 } from "./run-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -312,6 +314,93 @@ export async function POST(req: NextRequest) {
         context,
         outfit_slot: onlySlot,
       });
+    }
+
+    if (isSearchV2Enabled(user.id)) {
+      const sessionIds =
+        body?.slot_sessions && typeof body.slot_sessions === "object"
+          ? (body.slot_sessions as Partial<Record<CombineOutfitSlot, string>>)
+          : undefined;
+      const page = typeof body?.page === "number" ? body.page : isShowMore ? 1 : 0;
+      const v2 = await timer.span("combine_v2", () =>
+        runCombineV2({
+          openAiKey: OPENAI_API_KEY,
+          serpApiKey: SERPAPI_KEY,
+          context,
+          gender: userGender,
+          priceMode: price_mode,
+          sizes,
+          pieceSummary: `${attributes.label} ${attributes.category_tr} ${attributes.color_tr || ""}`,
+          colorHint: attributes.color_tr || undefined,
+          onlySlot: onlySlot || null,
+          sessionIds,
+          page,
+        })
+      );
+
+      const exclude_titles = [
+        ...excludeTitles,
+        ...v2.slots.flatMap((s) => collectTitles(s.piece.results)),
+      ];
+
+      if (isShowMore) {
+        const found = v2.slots.some(
+          (s) =>
+            Boolean(s.piece.results.recommended) ||
+            Boolean(s.piece.results.cheaper) ||
+            Boolean(s.piece.results.style)
+        );
+        if (!found) {
+          return NextResponse.json(
+            {
+              history_id: historyId || null,
+              context,
+              piece_label: pieceLabel,
+              piece_category: pieceCategory,
+              slots: v2.slots,
+              exclude_titles,
+              exhausted: true,
+              search_version: "search-v2.1",
+            },
+            { status: 200 }
+          );
+        }
+      }
+
+      if (!isShowMore) {
+        void trackAnalyticsEvent(supabase, user.id, "combine_result_viewed", {
+          piece_category: pieceCategory,
+          context,
+          slot_count: v2.slots.length,
+        });
+      }
+
+      const snap = timer.snapshot({
+        route: "/api/combine",
+        slots: v2.slots.length,
+        context,
+        show_more: isShowMore,
+        search_version: "v2",
+      });
+      return timer.json(
+        {
+          history_id: historyId || null,
+          context,
+          piece_label: pieceLabel,
+          piece_category: pieceCategory,
+          source: {
+            label: attributes.label,
+            category_tr: attributes.category_tr,
+            color_tr: attributes.color_tr || null,
+            photo_url: photoUrl,
+          },
+          slots: v2.slots,
+          exclude_titles,
+          slot_sessions: Object.fromEntries(v2.slots.map((s) => [s.slot, s.session_id])),
+          search_version: "search-v2.1",
+        },
+        snap
+      );
     }
 
     const result = await timer.span("combine", () =>
