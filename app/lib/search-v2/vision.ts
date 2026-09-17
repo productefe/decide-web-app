@@ -66,18 +66,27 @@ async function callResponsesApi(
     },
   };
 
-  const res = await fetchWithTimeout(
-    RESPONSES_URL,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      RESPONSES_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    },
-    VISION_TIMEOUT_MS
-  );
+      VISION_TIMEOUT_MS
+    );
+  } catch (error) {
+    console.warn(
+      "[search-v2] Responses vision unavailable; using chat fallback",
+      error instanceof Error ? error.message : String(error)
+    );
+    return callChatFallback(apiKey, imageDataUrl, repairHint);
+  }
 
   const data = (await res.json()) as {
     output_text?: string;

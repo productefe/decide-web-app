@@ -245,15 +245,45 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        console.warn("[search-v2] empty result; falling back to V1", {
+        console.warn("[search-v2] empty result; returning retryable error", {
           user_id: user.id,
           image_hash: v2.image_hash,
         });
+        const snap = timer.snapshot({
+          route: "/api/decide",
+          pieces: 0,
+          search_version: "v2",
+          retryable: true,
+        });
+        return timer.json(
+          {
+            error: "Ürün arama servisi şu an yanıt vermiyor. Lütfen biraz sonra tekrar dene.",
+            retryable: true,
+            search_version: "search-v2.1",
+          },
+          snap,
+          { status: 503 }
+        );
       } catch (v2Error) {
-        console.error("[search-v2] failed; falling back to V1", {
+        console.error("[search-v2] failed; returning retryable error", {
           user_id: user.id,
           error: v2Error instanceof Error ? v2Error.message : String(v2Error),
         });
+        const snap = timer.snapshot({
+          route: "/api/decide",
+          pieces: 0,
+          search_version: "v2",
+          retryable: true,
+        });
+        return timer.json(
+          {
+            error: "Analiz servisi şu an yanıt vermiyor. Lütfen biraz sonra tekrar dene.",
+            retryable: true,
+            search_version: "search-v2.1",
+          },
+          snap,
+          { status: 503 }
+        );
       }
     }
 
