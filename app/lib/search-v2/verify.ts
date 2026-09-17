@@ -1,11 +1,12 @@
 import type { Occasion, PriceMode, UserGender } from "@/lib/preferences";
 import { LUXURY_POOL_BRANDS, textHasPoolBrand } from "@/constants/brandPool";
-import { QUALITY_CONFIG } from "@/lib/qualityFilter";
+import { QUALITY_CONFIG, failsQualityFilter } from "@/lib/qualityFilter";
 import {
   FAMILY_CONFLICTS,
   canonColor,
   familyTitleTokens,
 } from "./normalize-intent";
+import { subtypeConflict, typeSpec } from "./type-cues";
 import type {
   PieceFamily,
   ProductCandidate,
@@ -161,6 +162,7 @@ export function hardVerify(
     gender: UserGender | null;
     sizes: string[];
     occasion?: Occasion | null;
+    relaxLevel?: 0 | 1 | 2;
   }
 ): { kept: VerifiedCandidate[]; rejected: VerifiedCandidate[]; stats: VerifyStats } {
   const rejects: Record<string, number> = {};
@@ -172,6 +174,17 @@ export function hardVerify(
 
   const seen = new Set<string>();
   const extras = extraFamilyTokens(intent);
+  const spec = typeSpec(intent);
+  const poolFamily =
+    intent.layer === "footwear"
+      ? intent.family === "sneakers"
+        ? "sneakers"
+        : "shoes_classic"
+      : intent.layer === "jewelry" || intent.layer === "accessory"
+        ? "accessory"
+        : ["blazer", "jacket", "coat"].includes(intent.family)
+          ? "outerwear"
+          : "tops";
 
   for (const c of candidates) {
     const canonUrl = (c.link || "").split("?")[0];
@@ -202,7 +215,22 @@ export function hardVerify(
     } else if (colorConflict(c.title, intent.body_color)) reason = "color_conflict";
     else if (genderConflict(c.title, opts.gender, intent.gender)) reason = "gender_conflict";
     else if (occasionConflict(c.title, opts.occasion, intent.family)) reason = "occasion_conflict";
-    else if (isReplica(c.title)) reason = "replica";
+    else if (subtypeConflict(c.title, spec)) reason = "subtype_conflict";
+    else if (
+      failsQualityFilter({
+        title: c.title,
+        source: c.source,
+        priceValue: c.priceValue ?? undefined,
+        priceMode: opts.priceMode,
+        poolFamily,
+        relaxLevel: opts.relaxLevel ?? 0,
+      })
+    ) {
+      reason =
+        typeof c.priceValue === "number" && c.priceValue > 0 && c.priceValue < QUALITY_CONFIG.minPriceTry
+          ? "cheap"
+          : "quality";
+    } else if (isReplica(c.title)) reason = "replica";
     else if (!luxuryOk(c.title, c.source, opts.priceMode)) reason = "luxury_leak";
 
     if (reason) {

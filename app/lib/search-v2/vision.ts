@@ -3,14 +3,15 @@ import { EXTRACTOR_VERSION, PRODUCT_INTENT_JSON_SCHEMA, type OutfitIntent } from
 import { normalizeOutfitIntent, parseOutfitIntentJson } from "./normalize-intent";
 import { fetchWithTimeout } from "./providers/http";
 import { getPersistentVision, setPersistentVision } from "./cache";
+import { dbg } from "./debug-log";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VISION_MODEL = process.env.SEARCH_V2_VISION_MODEL || "gpt-4o";
-const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 4500);
+const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 15000);
 const FALLBACK_VISION_MODEL =
   process.env.SEARCH_V2_VISION_FALLBACK_MODEL || "gpt-4o-mini";
 const FALLBACK_VISION_TIMEOUT_MS = Number(
-  process.env.SEARCH_V2_VISION_FALLBACK_TIMEOUT_MS || 8000
+  process.env.SEARCH_V2_VISION_FALLBACK_TIMEOUT_MS || 15000
 );
 
 const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
@@ -20,6 +21,8 @@ Kurallar:
 - Sweatshirt ≠ tişört ≠ gömlek ≠ blazer; her biri kendi family
 - Üst katman (blazer/ceket/mont) ile altındaki tişört/gömlek ayrı parçalar
 - Kolye, küpe, bileklik, yüzük, saat görünürse jewelry layer ile ekle
+- Ayakkabı alt tipi subtype'a yaz: terlik / sneaker / bot / sandalet / loafer
+- Görünür özelleştirme distinctive_details'e yaz: fermuar, kapüşon, taş cinsi (inci/altın/gümüş), yaka
 - body_color ana gövde rengi; motifler ayrı
 - bounding_box 0-1 normalize; emin değilsen null
 - low_confidence yalnız gerçekten belirsiz parçalar için true
@@ -41,6 +44,12 @@ function needsRepair(intent: OutfitIntent): boolean {
   return !hasOuterOrMid;
 }
 
+function imageDetail(imageDataUrl: string): "low" | "high" {
+  const payload = imageDataUrl.includes(",") ? imageDataUrl.split(",")[1] : imageDataUrl;
+  // Large phone photos time out on detail=high; low is enough for garment type.
+  return payload.length > 800_000 ? "low" : "high";
+}
+
 async function callResponsesApi(
   apiKey: string,
   imageDataUrl: string,
@@ -57,7 +66,7 @@ async function callResponsesApi(
         role: "user",
         content: [
           { type: "input_text", text: `${SYSTEM_PROMPT}\n\n${userText}` },
-          { type: "input_image", image_url: imageDataUrl, detail: "high" },
+          { type: "input_image", image_url: imageDataUrl, detail: imageDetail(imageDataUrl) },
         ],
       },
     ],
@@ -138,15 +147,12 @@ async function callChatFallback(
                 type: "text",
                 text: `${SYSTEM_PROMPT}\n${repairHint || ""}\nYanıtı yalnızca JSON object olarak ver.`,
               },
-              { type: "image_url", image_url: { url: imageDataUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: imageDataUrl, detail: imageDetail(imageDataUrl) } },
             ],
           },
         ],
         max_tokens: 4000,
-        response_format: {
-          type: "json_schema",
-          json_schema: PRODUCT_INTENT_JSON_SCHEMA,
-        },
+        response_format: { type: "json_object" },
       }),
     },
     FALLBACK_VISION_TIMEOUT_MS
@@ -184,8 +190,17 @@ export async function extractOutfitIntent(opts: {
   if (!opts.skipCache) {
     const hit = await getPersistentVision(image_hash, EXTRACTOR_VERSION);
     if (hit) {
+      const intent = normalizeOutfitIntent(JSON.parse(hit));
+      // #region agent log
+      dbg("H6", "vision.ts:cache", "vision cache hit", {
+        cached: true,
+        pieces: intent.pieces.length,
+        families: intent.pieces.map((p) => p.family),
+        subtypes: intent.pieces.map((p) => p.subtype),
+      });
+      // #endregion
       return {
-        intent: normalizeOutfitIntent(JSON.parse(hit)),
+        intent,
         image_hash,
         cached: true,
         raw: hit,
@@ -193,6 +208,9 @@ export async function extractOutfitIntent(opts: {
     }
   }
 
+  const t0 = Date.now();
+  const payloadLen = (opts.imageDataUrl.split(",")[1] || opts.imageDataUrl).length;
+  try {
   let raw = await callResponsesApi(opts.apiKey, opts.imageDataUrl);
   let intent = parseOutfitIntentJson(raw);
 
@@ -215,5 +233,29 @@ export async function extractOutfitIntent(opts: {
   });
   await setPersistentVision(image_hash, EXTRACTOR_VERSION, persist);
 
+  // #region agent log
+  dbg("H6", "vision.ts:ok", "vision extract ok", {
+    cached: false,
+    payloadLen,
+    detail: imageDetail(opts.imageDataUrl),
+    ms: Date.now() - t0,
+    pieces: intent.pieces.length,
+    families: intent.pieces.map((p) => p.family),
+    subtypes: intent.pieces.map((p) => p.subtype),
+    lowConfidence: intent.pieces.filter((p) => p.low_confidence).length,
+  });
+  // #endregion
+
   return { intent: { ...intent, extractor_version: EXTRACTOR_VERSION }, image_hash, cached: false, raw: persist };
+  } catch (err) {
+    // #region agent log
+    dbg("H6", "vision.ts:fail", "vision extract fail", {
+      payloadLen,
+      detail: imageDetail(opts.imageDataUrl),
+      ms: Date.now() - t0,
+      error: err instanceof Error ? err.message.slice(0, 180) : String(err),
+    });
+    // #endregion
+    throw err;
+  }
 }

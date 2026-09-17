@@ -262,6 +262,7 @@ export async function searchCombineSlot(opts: {
       gender: opts.intent.gender,
       sizes: opts.intent.sizes,
       occasion,
+      relaxLevel: 2,
     });
     const ranked = await rerankCandidates({
       intent: pieceIntent,

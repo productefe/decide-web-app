@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import type { ProductIntent, VerifiedCandidate } from "./schema";
 import { canonColor, familyTitleTokens } from "./normalize-intent";
+import { preferScore, typeSpec } from "./type-cues";
 import { fetchWithTimeout } from "./providers/http";
 import { textHasPoolBrand, textHasTrustedStore } from "@/constants/brandPool";
 
@@ -13,6 +14,8 @@ function metaScore(c: VerifiedCandidate, intent: ProductIntent): number {
   const t = lower(c.title);
   const tokens = familyTitleTokens(intent.family);
   if (tokens.some((tok) => t.includes(lower(tok)))) s += 3;
+  const spec = typeSpec(intent);
+  s += preferScore(c.title, spec);
   const color = canonColor(intent.body_color);
   if (color && color !== "bilinmeyen") {
     if (t.includes(color)) s += 8;
@@ -27,6 +30,7 @@ function metaScore(c: VerifiedCandidate, intent: ProductIntent): number {
   if (c.provider === "lens") s += 1;
   if (c.size_status === "likely") s += 0.5;
   if (c.priceValue && c.priceValue >= 200) s += 0.3;
+  if (c.priceValue && c.priceValue < 250) s -= 4;
   return s;
 }
 

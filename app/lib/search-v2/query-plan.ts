@@ -5,7 +5,7 @@ import {
   WEAK_SHOPPING_BRANDS,
 } from "@/constants/brandPool";
 import type { PieceFamily, ProductIntent } from "./schema";
-import { familyTitleTokens } from "./normalize-intent";
+import { typeSpec } from "./type-cues";
 
 export interface QueryVariant {
   id: string;
@@ -30,12 +30,7 @@ function genderToken(g: UserGender | null | undefined, intentGender: string): st
 }
 
 function typeToken(intent: ProductIntent): string {
-  const tokens = familyTitleTokens(intent.family);
-  if (intent.family === "jersey") {
-    const club = intent.jersey_signals?.club;
-    return club ? `${club} forma` : "futbol forması";
-  }
-  return tokens[0] || intent.category_tr || intent.subtype || "giyim";
+  return typeSpec(intent).queryType;
 }
 
 function motifToken(intent: ProductIntent): string {

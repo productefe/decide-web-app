@@ -13,6 +13,7 @@ import { searchGoogleLens } from "./providers/google-lens";
 import { hardVerify } from "./verify";
 import { rerankCandidates } from "./rank";
 import { ensureSession, pickPage, seedSessionExcludes } from "./paginate";
+import { typeSpec, canonicalTitle } from "./type-cues";
 import { SEARCH_V2_VERSION } from "./flag";
 import { dbg } from "./debug-log";
 
@@ -189,6 +190,7 @@ export async function orchestratePiece(
       gender: input.gender,
       sizes: input.sizes,
       occasion: input.occasion,
+      relaxLevel: 2,
     });
     kept = verified.kept;
     stats = verified.stats;
@@ -241,6 +243,22 @@ export async function orchestratePiece(
     ).length,
   });
   // #endregion
+  // #region agent log
+  const spec = typeSpec(input.intent);
+  dbg("H7", "orchestrate.ts:type", "subtype+price page pick", {
+    family: input.intent.family,
+    subtype: input.intent.subtype,
+    details: input.intent.distinctive_details.slice(0, 4),
+    queryType: spec.queryType,
+    requiredAny: spec.requiredAny,
+    prefer: spec.prefer,
+    subtypeRejects: stats.rejects.subtype_conflict || 0,
+    cheapRejects: stats.rejects.cheap || 0,
+    qualityRejects: stats.rejects.quality || 0,
+    pickedCanon: piecePage.products.map((p) => canonicalTitle(p.title).slice(0, 60)),
+    pickedPrices: piecePage.products.map((p) => p.priceValue),
+  });
+  // #endregion
 
   const rerank_ms = 0;
 
@@ -278,7 +296,10 @@ export async function orchestrateOutfit(opts: {
   metrics: OrchestratePieceResult["metrics"][];
   version: string;
 }> {
-  const searchable = opts.intent.pieces.filter((p) => !p.low_confidence);
+  const searchable =
+    opts.intent.pieces.filter((p) => !p.low_confidence).length > 0
+      ? opts.intent.pieces.filter((p) => !p.low_confidence)
+      : opts.intent.pieces;
   const sharedLensPromise = searchGoogleLens({
     apiKey: opts.serpApiKey,
     imageUrl: opts.photoUrl,

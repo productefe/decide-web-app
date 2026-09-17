@@ -6,6 +6,7 @@ import {
   markSeen,
   type SearchSession,
 } from "./sessions";
+import { canonicalTitle } from "./type-cues";
 
 function normTitle(title: string): string {
   return title.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim();
@@ -13,16 +14,23 @@ function normTitle(title: string): string {
 
 export function seedSessionExcludes(session: SearchSession, titles: string[]): void {
   for (const title of titles) {
-    if (title) session.seen_titles.add(normTitle(title));
+    if (!title) continue;
+    session.seen_titles.add(normTitle(title));
+    const canon = canonicalTitle(title);
+    if (canon) session.seen_titles.add(canon);
   }
 }
 
 function titleAlreadySeen(title: string, session: SearchSession): boolean {
   const n = normTitle(title);
+  const canon = canonicalTitle(title);
   if (!n) return false;
-  if (session.seen_titles.has(n)) return true;
+  if (session.seen_titles.has(n) || (canon && session.seen_titles.has(canon))) return true;
   for (const seen of session.seen_titles) {
     if (seen.length >= 18 && n.length >= 18 && (n.includes(seen) || seen.includes(n))) {
+      return true;
+    }
+    if (canon && seen.length >= 16 && canon.length >= 16 && (canon === seen || canon.includes(seen) || seen.includes(canon))) {
       return true;
     }
   }
@@ -35,20 +43,29 @@ export function pickPage(
   pageSize = 3
 ): PiecePage {
   const out: VerifiedCandidate[] = [];
+  const pageCanon = new Set<string>();
   for (const c of ranked) {
     if (session.seen_product_ids.has(c.id) || session.seen_product_ids.has(c.product_id || "")) {
       continue;
     }
     if (c.title && titleAlreadySeen(c.title, session)) continue;
+    const canon = c.title ? canonicalTitle(c.title) : "";
+    if (canon && pageCanon.has(canon)) continue;
     const imgHash = imageFingerprint(c.image);
     if (session.seen_image_hashes.has(imgHash)) continue;
-    const canon = (c.link || "").split("?")[0];
-    if (canon && session.seen_urls.has(canon)) continue;
+    const url = (c.link || "").split("?")[0];
+    if (url && session.seen_urls.has(url)) continue;
+    if (typeof c.priceValue === "number" && c.priceValue > 0 && c.priceValue < 200) continue;
     out.push(c);
+    if (canon) pageCanon.add(canon);
     if (out.length >= pageSize) break;
   }
 
   markSeen(session, out);
+  for (const p of out) {
+    const canon = canonicalTitle(p.title);
+    if (canon) session.seen_titles.add(canon);
+  }
   session.page += 1;
 
   return {
