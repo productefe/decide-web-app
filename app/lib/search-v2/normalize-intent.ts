@@ -134,15 +134,33 @@ function clamp01(n: number): number {
 
 export function canonColor(raw: string): string {
   const k = asLower(raw).replace(/\s+/g, "");
-  return COLOR_CANON[k] || asLower(raw);
+  if (COLOR_CANON[k]) return COLOR_CANON[k];
+  const words = asLower(raw).split(/\s+/).filter(Boolean);
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (COLOR_CANON[words[i]]) return COLOR_CANON[words[i]];
+  }
+  return asLower(raw);
+}
+
+function jewelryFamilyFromText(text: string): PieceFamily | null {
+  const t = asLower(text);
+  if (/küpe|kupe|earring/.test(t)) return "earrings";
+  if (/kolye|necklace/.test(t)) return "necklace";
+  if (/bileklik|bracelet/.test(t)) return "bracelet";
+  if (/yüzük|yuzuk/.test(t) || /\bring\b/.test(t)) return "ring";
+  if (/saat|watch/.test(t)) return "watch";
+  return null;
 }
 
 export function canonFamily(...parts: string[]): PieceFamily {
+  const jewelry = jewelryFamilyFromText(parts.join(" "));
+  if (jewelry) return jewelry;
   for (const p of parts) {
     const key = asLower(p).replace(/\s+/g, "");
     if (FAMILY_ALIASES[key]) return FAMILY_ALIASES[key];
     for (const [alias, fam] of Object.entries(FAMILY_ALIASES)) {
-      if (key.includes(alias) || alias.includes(key)) return fam;
+      if (alias.length < 3) continue;
+      if (key.includes(alias)) return fam;
     }
   }
   return "other";
@@ -207,12 +225,14 @@ function normalizeBox(raw: unknown): ProductIntent["bounding_box"] {
 }
 
 function normalizePiece(raw: Record<string, unknown>, index: number): ProductIntent | null {
-  const family = canonFamily(
-    asText(raw.family),
-    asText(raw.subtype),
-    asText(raw.category_tr),
-    asText(raw.label_tr)
-  );
+  const family =
+    jewelryFamilyFromText(`${asText(raw.label_tr)} ${asText(raw.category_tr)}`) ||
+    canonFamily(
+      asText(raw.family),
+      asText(raw.subtype),
+      asText(raw.category_tr),
+      asText(raw.label_tr)
+    );
   const subtype = asLower(raw.subtype) || family;
   const body = canonColor(asText(raw.body_color));
   if (!body && family === "other") return null;
@@ -378,4 +398,9 @@ export const FAMILY_CONFLICTS: Partial<Record<PieceFamily, PieceFamily[]>> = {
   tee: ["jersey", "sweatshirt", "hoodie", "shirt", "blazer"],
   shirt: ["jersey", "tee", "sweatshirt"],
   blazer: ["jersey", "sweatshirt", "hoodie", "tee"],
+  watch: ["jersey", "tee", "shirt", "sweatshirt", "hoodie"],
+  earrings: ["jersey", "tee", "shirt", "sweatshirt"],
+  necklace: ["jersey", "tee", "shirt"],
+  bracelet: ["jersey", "tee", "shirt"],
+  ring: ["jersey", "tee", "shirt"],
 };

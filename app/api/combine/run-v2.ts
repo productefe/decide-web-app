@@ -1,6 +1,10 @@
 import type { PriceMode, UserGender } from "@/lib/preferences";
 import type { AnalysisContext, CombineOutfitSlot } from "@/lib/combine-rules";
-import { COMBINE_OUTFIT_SLOTS } from "@/lib/combine-rules";
+import {
+  COMBINE_OUTFIT_SLOTS,
+  resolveCombineSlots,
+  type CombinePieceCategory,
+} from "@/lib/combine-rules";
 import type { PieceResult, Results, Product } from "@/components/analyze/types";
 import {
   makeCombineIntent,
@@ -9,6 +13,7 @@ import {
   type CombineIntent,
 } from "@/lib/search-v2/combine";
 import type { VerifiedCandidate } from "@/lib/search-v2/schema";
+import { canonColor } from "@/lib/search-v2/normalize-intent";
 
 function toProduct(c: VerifiedCandidate, label: string, reason: string): Product {
   return {
@@ -45,6 +50,7 @@ export async function runCombineV2(opts: {
   sizes: string[];
   pieceSummary: string;
   colorHint?: string;
+  sourceCategory?: CombinePieceCategory | null;
   onlySlot?: CombineOutfitSlot | null;
   sessionIds?: Partial<Record<CombineOutfitSlot, string>>;
   page?: number;
@@ -63,20 +69,23 @@ export async function runCombineV2(opts: {
   }[];
   intents: CombineIntent[];
 }> {
-  const prefs = await suggestCombinePrefs({
-    apiKey: opts.openAiKey,
-    context: opts.context,
-    pieceSummary: opts.pieceSummary,
-  });
-  const color = opts.colorHint || prefs.color_pref;
+  const prefs = opts.colorHint
+    ? { color_pref: canonColor(opts.colorHint), style_pref: "" }
+    : await suggestCombinePrefs({
+        apiKey: opts.openAiKey,
+        context: opts.context,
+        pieceSummary: opts.pieceSummary,
+      });
+  const color = canonColor(opts.colorHint || prefs.color_pref || "");
   const style = prefs.style_pref;
 
   const slotsToRun: CombineOutfitSlot[] = opts.onlySlot
     ? [opts.onlySlot]
-    : // Load core slots first; accessory can follow
-      (["top", "bottom", "shoes", "outerwear", "accessory"] as CombineOutfitSlot[]).filter((s) =>
-        (COMBINE_OUTFIT_SLOTS as readonly string[]).includes(s)
-      );
+    : opts.sourceCategory
+      ? [...resolveCombineSlots(opts.sourceCategory)]
+      : (["bottom", "shoes", "accessory"] as CombineOutfitSlot[]).filter((s) =>
+          (COMBINE_OUTFIT_SLOTS as readonly string[]).includes(s)
+        );
 
   const page = opts.page || 0;
   const settled = await Promise.all(

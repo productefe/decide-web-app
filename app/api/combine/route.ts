@@ -332,6 +332,7 @@ export async function POST(req: NextRequest) {
           sizes,
           pieceSummary: `${attributes.label} ${attributes.category_tr} ${attributes.color_tr || ""}`,
           colorHint: attributes.color_tr || undefined,
+          sourceCategory: pieceCategory,
           onlySlot: onlySlot || null,
           sessionIds,
           page,

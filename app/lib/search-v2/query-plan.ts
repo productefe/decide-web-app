@@ -151,21 +151,20 @@ export function buildQueryPlan(
   const byId = new Map(filtered.map((variant) => [variant.id, variant]));
   let text_queries: QueryVariant[];
   if (page === 0) {
-    // One reliable type+color query. Brand/Lens variants wait for show-more.
-    text_queries = [byId.get("type") || byId.get("broad")].filter(
+    // Color + motif first. Never start with a colorless broad query.
+    text_queries = [byId.get("motif") || byId.get("type") || byId.get("broad")].filter(
       (variant): variant is QueryVariant => Boolean(variant)
     );
   } else if (page === 1) {
-    text_queries = [byId.get("motif") || byId.get("brand1"), byId.get("broad")]
-      .filter((variant): variant is QueryVariant => Boolean(variant));
+    text_queries = [byId.get("type"), byId.get("brand0")]
+      .filter((variant): variant is QueryVariant => Boolean(variant))
+      .filter((variant, i, arr) => arr.findIndex((x) => x.q === variant.q) === i)
+      .slice(0, 1);
   } else {
-    // Deterministically rotate remaining brand variants on later pages.
-    const brands = filtered.filter((variant) => variant.kind === "brand");
-    const start = Math.max(0, (page - 2) * 2);
-    text_queries = brands.slice(start, start + 2);
-    if (text_queries.length === 0 && byId.get("broad")) {
-      text_queries = [byId.get("broad")!];
-    }
+    const rest = [byId.get("brand1"), byId.get("broad")].filter(
+      (variant): variant is QueryVariant => Boolean(variant)
+    );
+    text_queries = rest.slice(0, 1);
   }
 
   return {

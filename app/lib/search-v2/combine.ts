@@ -13,6 +13,7 @@ import { rerankCandidates } from "./rank";
 import { ensureSession, pickPage } from "./paginate";
 import { createHash } from "crypto";
 import type { ProductIntent, PieceFamily } from "./schema";
+import { canonColor } from "./normalize-intent";
 
 export interface CombineIntent {
   slot: CombineOutfitSlot;
@@ -27,11 +28,11 @@ export interface CombineIntent {
 }
 
 const SLOT_FAMILY: Record<CombineOutfitSlot, PieceFamily> = {
-  top: "tee",
+  top: "shirt",
   bottom: "pants",
-  shoes: "sneakers",
+  shoes: "shoes",
   outerwear: "blazer",
-  accessory: "bag",
+  accessory: "belt",
 };
 
 const SLOT_CATEGORY_TR: Record<CombineOutfitSlot, string> = {
@@ -51,6 +52,30 @@ const CONTEXT_STYLE: Record<AnalysisContext, string> = {
   beach: "yazlık",
 };
 
+function slotTypeToken(ci: CombineIntent): string {
+  if (ci.context === "sport") {
+    if (ci.slot === "top") return "tişört";
+    if (ci.slot === "bottom") return "eşofman alt";
+    if (ci.slot === "shoes") return "sneaker";
+    if (ci.slot === "outerwear") return "hoodie";
+    return "çanta";
+  }
+  if (ci.slot === "top") return ci.context === "evening" || ci.context === "work" ? "gömlek" : "gömlek";
+  if (ci.slot === "bottom") return "pantolon";
+  if (ci.slot === "shoes") return ci.context === "evening" || ci.context === "work" ? "klasik ayakkabı" : "ayakkabı";
+  if (ci.slot === "outerwear") return ci.context === "work" ? "blazer" : "ceket";
+  return "kemer";
+}
+
+function slotFamilyFor(ci: CombineIntent): PieceFamily {
+  if (ci.context === "sport") {
+    if (ci.slot === "top") return "tee";
+    if (ci.slot === "shoes") return "sneakers";
+    if (ci.slot === "outerwear") return "hoodie";
+    if (ci.slot === "accessory") return "bag";
+  }
+  return SLOT_FAMILY[ci.slot];
+}
 function slotToIntent(ci: CombineIntent): ProductIntent {
   return {
     id: `combine-${ci.slot}`,
@@ -81,28 +106,27 @@ function slotToIntent(ci: CombineIntent): ProductIntent {
   };
 }
 
-/** Deterministic query ladder: colored brand → colorless brand → type+brand */
+/** Color + type first. Brands only on later pages — they often return zero. */
 export function buildCombineQueries(ci: CombineIntent, page = 0): string[] {
   const g = ci.gender === "men" ? "erkek" : ci.gender === "women" ? "kadın" : "";
-  const type =
-    ci.slot === "top"
-      ? "tişört"
-      : ci.slot === "bottom"
-        ? "pantolon"
-        : ci.slot === "shoes"
-          ? "sneaker"
-          : ci.slot === "outerwear"
-            ? "blazer"
-            : "çanta";
-  const style = ci.style_pref || CONTEXT_STYLE[ci.context] || "";
-  const color = ci.color_pref && ci.color_pref !== "bilinmeyen" ? ci.color_pref : "";
+  const type = slotTypeToken(ci);
+  const color =
+    ci.color_pref && ci.color_pref !== "bilinmeyen" ? canonColor(ci.color_pref) : "";
+  if (page === 0) {
+    return [[g, color, type].filter(Boolean).join(" ")];
+  }
+  if (page === 1) {
+    return [[g, type].filter(Boolean).join(" ")];
+  }
   const brands = pickDecidePoolBrands(
     {
       category:
         ci.slot === "shoes"
-          ? "sneakers"
+          ? ci.context === "sport"
+            ? "sneakers"
+            : "shoes_classic"
           : ci.slot === "accessory"
-            ? "bag"
+            ? "accessory"
             : ci.slot === "bottom"
               ? "bottoms"
               : ci.slot === "outerwear"
@@ -115,16 +139,8 @@ export function buildCombineQueries(ci: CombineIntent, page = 0): string[] {
     4,
     `${ci.slot}-${ci.context}`
   );
-
-  const ladder: string[] = [];
-  for (const b of brands) {
-    ladder.push([g, b, color, type, style].filter(Boolean).join(" "));
-    ladder.push([g, b, type].filter(Boolean).join(" "));
-  }
-  ladder.push([g, type, style].filter(Boolean).join(" "));
-
-  const start = Math.min(page * 2, Math.max(0, ladder.length - 2));
-  return ladder.slice(start, start + 2);
+  const brand = brands[(page - 2) % Math.max(brands.length, 1)];
+  return [[g, brand, type].filter(Boolean).join(" ")];
 }
 
 export function makeCombineIntent(opts: {
@@ -137,16 +153,20 @@ export function makeCombineIntent(opts: {
   stylePref?: string;
   familyOverride?: PieceFamily;
 }): CombineIntent {
-  return {
+  const draft = {
     slot: opts.slot,
     family: opts.familyOverride || SLOT_FAMILY[opts.slot],
     category_tr: SLOT_CATEGORY_TR[opts.slot],
-    color_pref: opts.colorPref || "",
+    color_pref: opts.colorPref ? canonColor(opts.colorPref) : "",
     style_pref: opts.stylePref || CONTEXT_STYLE[opts.context] || "",
     context: opts.context,
     gender: opts.gender,
     price_mode: opts.priceMode,
     sizes: opts.sizes,
+  };
+  return {
+    ...draft,
+    family: opts.familyOverride || slotFamilyFor(draft),
   };
 }
 
@@ -175,11 +195,10 @@ export async function searchCombineSlot(opts: {
     sizes: opts.intent.sizes,
   });
   const ranked = await rerankCandidates({
-    apiKey: opts.openAiKey,
     intent: pieceIntent,
     candidates: kept,
-    limit: 24,
-    timeoutMs: 1500,
+    limit: 12,
+    timeoutMs: 0,
   });
 
   const hash = createHash("sha1")

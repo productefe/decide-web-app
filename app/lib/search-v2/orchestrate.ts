@@ -135,9 +135,20 @@ export async function orchestratePiece(
   );
 
   const [lens, ...texts] = await Promise.all([lensPromise, ...textPromises]);
+  let merged = [...lens, ...texts.flat()];
+  if (merged.length === 0 && page === 0) {
+    const g = input.gender === "men" ? "erkek" : input.gender === "women" ? "kadın" : "";
+    const typeTok = input.intent.category_tr || input.intent.family;
+    const fallbackQ = [g, typeTok].filter(Boolean).join(" ");
+    if (fallbackQ && fallbackQ !== plan.text_queries[0]?.q) {
+      const extra = await searchGoogleShopping({
+        apiKey: input.serpApiKey,
+        query: fallbackQ,
+      });
+      merged = extra;
+    }
+  }
   const provider_ms = Date.now() - t0;
-
-  const merged = [...lens, ...texts.flat()];
   const { kept, stats } = hardVerify(merged, input.intent, {
     priceMode: input.priceMode,
     gender: input.gender,
@@ -160,12 +171,12 @@ export async function orchestratePiece(
 
   const t1 = Date.now();
   const ranked = await rerankCandidates({
-    apiKey: input.openAiKey,
+    apiKey: page === 0 ? input.openAiKey : undefined,
     intent: input.intent,
     candidates: kept,
     referenceImageUrl: input.photoUrl,
     limit: 24,
-    timeoutMs: 2000,
+    timeoutMs: page === 0 ? 2000 : 0,
   });
   const rerank_ms = Date.now() - t1;
 

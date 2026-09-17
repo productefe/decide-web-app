@@ -14,10 +14,13 @@ function metaScore(c: VerifiedCandidate, intent: ProductIntent): number {
   const tokens = familyTitleTokens(intent.family);
   if (tokens.some((tok) => t.includes(lower(tok)))) s += 3;
   const color = canonColor(intent.body_color);
-  if (color && color !== "bilinmeyen" && t.includes(color)) s += 2;
+  if (color && color !== "bilinmeyen") {
+    if (t.includes(color)) s += 8;
+    else s -= 3;
+  }
   for (const m of intent.motifs) {
-    if (m.type && t.includes(lower(m.type))) s += 1.5;
-    if (m.text && t.includes(lower(m.text))) s += 2;
+    if (m.type && t.includes(lower(m.type))) s += 6;
+    if (m.text && t.includes(lower(m.text))) s += 6;
   }
   if (textHasPoolBrand(`${c.title} ${c.source}`)) s += 1.5;
   if (c.provider === "lens") s += 1;
