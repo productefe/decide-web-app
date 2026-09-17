@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { PriceMode, UserGender } from "@/lib/preferences";
+import type { PriceMode, UserGender, Occasion } from "@/lib/preferences";
 import type { PieceResult, Results } from "@/components/analyze/types";
 import {
   normalizeOutfitIntent,
@@ -42,6 +42,8 @@ export async function runMoreV2(opts: {
   gender: UserGender | null;
   sizes: string[];
   existingResults?: Results | null;
+  excludeTitles?: string[];
+  occasion?: Occasion | null;
 }): Promise<{
   piece: PieceResult;
   exhausted: boolean;
@@ -73,6 +75,11 @@ export async function runMoreV2(opts: {
     sizes: opts.sizes,
     sessionId: opts.sessionId,
     page,
+    excludeTitles: [
+      ...(opts.excludeTitles || []),
+      ...(opts.existingResults ? collectTitles(opts.existingResults) : []),
+    ],
+    occasion: opts.occasion,
   });
 
   // Merge: append new cards onto existing when partial; never wipe old on failure

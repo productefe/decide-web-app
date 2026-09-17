@@ -364,7 +364,7 @@ export function familyTitleTokens(family: PieceFamily): string[] {
     tee: ["tişört", "tisort", "t-shirt", "tshirt", "tee"],
     shirt: ["gömlek", "gomlek", "shirt"],
     blouse: ["bluz", "blouse"],
-    blazer: ["blazer", "cekket"],
+    blazer: ["blazer", "ceket", "cekket"],
     jacket: ["ceket", "jacket", "bomber"],
     coat: ["mont", "kaban", "coat", "pardösü"],
     pants: ["pantolon", "pants", "chino"],

@@ -121,7 +121,6 @@ export async function runCombineV2(opts: {
             slot,
             color,
             styleDescriptor: style,
-            // Deterministic — same intent drives UI label and search
             searchQuery: found.queries[0] || "",
           },
           piece,
@@ -131,29 +130,18 @@ export async function runCombineV2(opts: {
         };
       } catch (err) {
         console.warn("[combine-v2] slot fail", slot, err);
-        return {
-          slot,
-          suggestion: {
-            slot,
-            color,
-            styleDescriptor: style,
-            searchQuery: "",
-          },
-          piece: {
-            label: intent.category_tr,
-            category_tr: intent.category_tr,
-            results: { recommended: null, cheaper: null, style: null },
-          },
-          exhausted: true,
-          session_id: opts.sessionIds?.[slot] || "",
-          intent,
-        };
+        return null;
       }
     })
   );
 
+  const filled = settled.filter(
+    (s): s is NonNullable<(typeof settled)[number]> =>
+      Boolean(s?.piece.results.recommended)
+  );
+
   return {
-    slots: settled.map(({ intent: _i, ...rest }) => rest),
-    intents: settled.map((s) => s.intent),
+    slots: filled.map(({ intent: _i, ...rest }) => rest),
+    intents: filled.map((s) => s.intent),
   };
 }

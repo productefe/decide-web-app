@@ -10,6 +10,7 @@ export interface SearchSession {
   seen_product_ids: Set<string>;
   seen_image_hashes: Set<string>;
   seen_urls: Set<string>;
+  seen_titles: Set<string>;
   provider_cursors: Record<string, number>;
   created_at: number;
 }
@@ -34,6 +35,7 @@ export function createSession(intentHash: string, pieceKey: string): SearchSessi
     seen_product_ids: new Set(),
     seen_image_hashes: new Set(),
     seen_urls: new Set(),
+    seen_titles: new Set(),
     provider_cursors: {},
     created_at: Date.now(),
   };
@@ -51,6 +53,7 @@ export function markSeen(session: SearchSession, products: VerifiedCandidate[]):
     session.seen_product_ids.add(p.id);
     if (p.product_id) session.seen_product_ids.add(p.product_id);
     if (p.image) session.seen_image_hashes.add(imageFingerprint(p.image));
+    if (p.title) session.seen_titles.add(p.title.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim());
     const canon = (p.link || "").split("?")[0];
     if (canon) session.seen_urls.add(canon);
   }
@@ -66,6 +69,7 @@ export function serializeSession(session: SearchSession) {
     seen_product_ids: Array.from(session.seen_product_ids),
     seen_image_hashes: Array.from(session.seen_image_hashes),
     seen_urls: Array.from(session.seen_urls),
+    seen_titles: Array.from(session.seen_titles),
     provider_cursors: session.provider_cursors,
   };
 }

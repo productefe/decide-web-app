@@ -263,6 +263,8 @@ export async function POST(req: NextRequest) {
           priceMode: price_mode,
           gender: userGender,
           sizes,
+          excludeTitles: [...excludeTitles],
+          occasion: requestedOccasion,
         })
       );
 

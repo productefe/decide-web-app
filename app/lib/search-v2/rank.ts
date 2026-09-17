@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import type { ProductIntent, VerifiedCandidate } from "./schema";
 import { canonColor, familyTitleTokens } from "./normalize-intent";
 import { fetchWithTimeout } from "./providers/http";
-import { textHasPoolBrand } from "@/constants/brandPool";
+import { textHasPoolBrand, textHasTrustedStore } from "@/constants/brandPool";
 
 function lower(s: string): string {
   return s.toLocaleLowerCase("tr-TR");
@@ -23,6 +23,7 @@ function metaScore(c: VerifiedCandidate, intent: ProductIntent): number {
     if (m.text && t.includes(lower(m.text))) s += 6;
   }
   if (textHasPoolBrand(`${c.title} ${c.source}`)) s += 1.5;
+  if (textHasTrustedStore(`${c.title} ${c.source} ${c.store || ""}`)) s += 5;
   if (c.provider === "lens") s += 1;
   if (c.size_status === "likely") s += 0.5;
   if (c.priceValue && c.priceValue >= 200) s += 0.3;

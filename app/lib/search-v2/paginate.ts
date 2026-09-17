@@ -7,6 +7,28 @@ import {
   type SearchSession,
 } from "./sessions";
 
+function normTitle(title: string): string {
+  return title.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim();
+}
+
+export function seedSessionExcludes(session: SearchSession, titles: string[]): void {
+  for (const title of titles) {
+    if (title) session.seen_titles.add(normTitle(title));
+  }
+}
+
+function titleAlreadySeen(title: string, session: SearchSession): boolean {
+  const n = normTitle(title);
+  if (!n) return false;
+  if (session.seen_titles.has(n)) return true;
+  for (const seen of session.seen_titles) {
+    if (seen.length >= 18 && n.length >= 18 && (n.includes(seen) || seen.includes(n))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function pickPage(
   ranked: VerifiedCandidate[],
   session: SearchSession,
@@ -17,6 +39,7 @@ export function pickPage(
     if (session.seen_product_ids.has(c.id) || session.seen_product_ids.has(c.product_id || "")) {
       continue;
     }
+    if (c.title && titleAlreadySeen(c.title, session)) continue;
     const imgHash = imageFingerprint(c.image);
     if (session.seen_image_hashes.has(imgHash)) continue;
     const canon = (c.link || "").split("?")[0];

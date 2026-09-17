@@ -42,6 +42,37 @@ export const WOMEN_TREND_PRIORITY_BRANDS = [
   "H&M",
 ];
 
+/** Stores/brands that should lead ranking and show-more rotation. */
+export const TRUSTED_SEARCH_STORES = [
+  "Zara",
+  "Mavi",
+  "H&M",
+  "Koton",
+  "Bershka",
+  "Pull&Bear",
+  "Stradivarius",
+  "Mango",
+  "Trendyol",
+  "Boyner",
+  "Jack & Jones",
+  "GAP",
+  "Levi's",
+  "Nike",
+  "Adidas",
+];
+
+/** Brand-first Google Shopping TR queries that often return 0 hits. */
+export const WEAK_SHOPPING_BRANDS = ["Beymen Club", "Massimo Dutti", "DKNY", "Timberland"];
+
+export function textHasTrustedStore(text: unknown): boolean {
+  const t = asLower(text);
+  if (!t) return false;
+  return TRUSTED_SEARCH_STORES.some((name) => {
+    const n = asLower(name);
+    return n.length >= 2 && t.includes(n);
+  });
+}
+
 const WOMEN_TREND_CATEGORIES: BrandPoolCategory[] = ["tops", "crop", "bottoms", "dress", "accessory"];
 
 export const BRAND_POOL: BrandPoolEntry[] = [

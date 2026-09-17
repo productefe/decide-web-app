@@ -1,4 +1,4 @@
-import type { PriceMode, UserGender } from "@/lib/preferences";
+import type { Occasion, PriceMode, UserGender } from "@/lib/preferences";
 import { LUXURY_POOL_BRANDS, textHasPoolBrand } from "@/constants/brandPool";
 import { QUALITY_CONFIG } from "@/lib/qualityFilter";
 import {
@@ -31,26 +31,61 @@ const CHILD_TOKENS = ["çocuk", "cocuk", "kids", "bebek", "infant", "junior"];
 const MEN_TOKENS = ["erkek", "men", "male", "man "];
 const WOMEN_TOKENS = ["kadın", "kadin", "women", "female", "woman", "bayan"];
 
-function titleHasFamily(title: string, family: PieceFamily): boolean {
+function extraFamilyTokens(intent: ProductIntent): string[] {
+  return [intent.subtype, intent.category_tr, ...intent.distinctive_details]
+    .flatMap((s) => (s || "").split(/[\s,/+-]+/))
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 4);
+}
+
+function titleHasFamily(title: string, family: PieceFamily, extras: string[] = []): boolean {
   const t = lower(title);
-  const tokens = familyTitleTokens(family);
+  const tokens = [...familyTitleTokens(family), ...extras];
   if (tokens.length === 0) return true;
   return tokens.some((tok) => t.includes(lower(tok)));
 }
 
-function titleHasConflictFamily(title: string, family: PieceFamily): boolean {
+function titleHasConflictFamily(title: string, family: PieceFamily, extras: string[] = []): boolean {
   const conflicts = FAMILY_CONFLICTS[family] || [];
   const t = lower(title);
   for (const c of conflicts) {
     // Only conflict if conflict family tokens present AND target family tokens absent
     const cTokens = familyTitleTokens(c);
-    if (cTokens.some((tok) => t.includes(lower(tok))) && !titleHasFamily(title, family)) {
+    if (cTokens.some((tok) => t.includes(lower(tok))) && !titleHasFamily(title, family, extras)) {
       return true;
     }
   }
   // Jersey hard: tee tokens without forma
   if (family === "jersey") {
     if (/\b(tişört|tisort|t-shirt|tshirt)\b/i.test(title) && !/forma|jersey/i.test(title)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const FORMAL_LEAK =
+  /takım elbise|takim elbise|smokin|damatlık|damatlik|oxford|derby|rugan|klasik ayakkabı|klasik ayakkabi|resmi ayakkabı|resmi ayakkabi/;
+const SPORT_AVOID =
+  /takım elbise|takim elbise|smokin|blazer|klasik ayakkabı|klasik ayakkabi|oxford|derby|loafer|topuk|stiletto|gömlek|gomlek/;
+const WORK_AVOID = /sneaker|eşofman|esofman|hoodie|kapüşon|kapuson|terlik|şort|sort|mayo|forma|koşu|kosu/;
+const HOME_AVOID =
+  /takım elbise|takim elbise|smokin|blazer|klasik ayakkabı|klasik ayakkabi|oxford|derby|topuk|stiletto/;
+
+/** Strict for sport/work/home. Casual only blocks formalwear leak. Auto/evening/beach stay loose. */
+export function occasionConflict(
+  title: string,
+  occasion: Occasion | null | undefined,
+  family?: PieceFamily
+): boolean {
+  if (!occasion) return false;
+  const t = lower(title);
+  if (occasion === "spor") return SPORT_AVOID.test(t);
+  if (occasion === "is") return WORK_AVOID.test(t);
+  if (occasion === "ev") return HOME_AVOID.test(t);
+  if (occasion === "gundelik") {
+    if (FORMAL_LEAK.test(t)) return true;
+    if ((family === "jacket" || family === "tee" || family === "sweatshirt") && /takım|takim/.test(t)) {
       return true;
     }
   }
@@ -125,6 +160,7 @@ export function hardVerify(
     priceMode: PriceMode;
     gender: UserGender | null;
     sizes: string[];
+    occasion?: Occasion | null;
   }
 ): { kept: VerifiedCandidate[]; rejected: VerifiedCandidate[]; stats: VerifyStats } {
   const rejects: Record<string, number> = {};
@@ -135,6 +171,7 @@ export function hardVerify(
   };
 
   const seen = new Set<string>();
+  const extras = extraFamilyTokens(intent);
 
   for (const c of candidates) {
     const canonUrl = (c.link || "").split("?")[0];
@@ -154,16 +191,17 @@ export function hardVerify(
     seen.add(dedupeKey);
 
     let reason: string | null = null;
-    if (titleHasConflictFamily(c.title, intent.family)) reason = "family_conflict";
+    if (titleHasConflictFamily(c.title, intent.family, extras)) reason = "family_conflict";
     else if (
       intent.family !== "other" &&
-      !titleHasFamily(c.title, intent.family) &&
-      c.provider === "shopping"
+      !titleHasFamily(c.title, intent.family, extras) &&
+      c.provider !== "lens"
     ) {
-      // Lens can lack type tokens — shopping must match type
+      // Lens can lack type tokens — shopping/combine must match type
       reason = "family_mismatch";
     } else if (colorConflict(c.title, intent.body_color)) reason = "color_conflict";
     else if (genderConflict(c.title, opts.gender, intent.gender)) reason = "gender_conflict";
+    else if (occasionConflict(c.title, opts.occasion, intent.family)) reason = "occasion_conflict";
     else if (isReplica(c.title)) reason = "replica";
     else if (!luxuryOk(c.title, c.source, opts.priceMode)) reason = "luxury_leak";
 

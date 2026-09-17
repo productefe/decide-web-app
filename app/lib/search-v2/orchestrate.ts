@@ -1,4 +1,4 @@
-import type { PriceMode, UserGender } from "@/lib/preferences";
+import type { Occasion, PriceMode, UserGender } from "@/lib/preferences";
 import type { Product, Results, PieceResult } from "@/components/analyze/types";
 import { createHash } from "crypto";
 import type {
@@ -12,7 +12,7 @@ import { searchGoogleShopping } from "./providers/google-shopping";
 import { searchGoogleLens } from "./providers/google-lens";
 import { hardVerify } from "./verify";
 import { rerankCandidates } from "./rank";
-import { ensureSession, pickPage } from "./paginate";
+import { ensureSession, pickPage, seedSessionExcludes } from "./paginate";
 import { SEARCH_V2_VERSION } from "./flag";
 import { dbg } from "./debug-log";
 
@@ -27,6 +27,8 @@ export interface OrchestratePieceInput {
   sessionId?: string | null;
   page?: number;
   affiliateTag?: string;
+  excludeTitles?: string[];
+  occasion?: Occasion | null;
   /** One Lens request is shared by every piece in the same photo. */
   sharedLensPromise?: Promise<ProductCandidate[]>;
 }
@@ -124,43 +126,96 @@ export async function orchestratePiece(
     page,
   });
 
+  const session = ensureSession({
+    sessionId: input.sessionId,
+    intentHash: intentHash(input.intent),
+    pieceKey: input.intent.id,
+  });
+  if (input.excludeTitles?.length) {
+    seedSessionExcludes(session, input.excludeTitles);
+  }
+
   const t0 = Date.now();
   const lensPromise =
     plan.lens && page === 0
       ? input.sharedLensPromise ||
         searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
       : Promise.resolve([]);
-  const textPromises = plan.text_queries.map((q) =>
-    searchGoogleShopping({ apiKey: input.serpApiKey, query: q.q })
-  );
 
-  const [lens, ...texts] = await Promise.all([lensPromise, ...textPromises]);
-  let merged = [...lens, ...texts.flat()];
-  if (merged.length === 0 && page === 0) {
-    const g = input.gender === "men" ? "erkek" : input.gender === "women" ? "kadın" : "";
-    const typeTok = input.intent.category_tr || input.intent.family;
-    const fallbackQ = [g, typeTok].filter(Boolean).join(" ");
-    if (fallbackQ && fallbackQ !== plan.text_queries[0]?.q) {
-      const extra = await searchGoogleShopping({
-        apiKey: input.serpApiKey,
-        query: fallbackQ,
-      });
-      merged = extra;
+  const maxAttempts = page === 0 ? 2 : 4;
+  const startIdx = plan.all_variants.findIndex((v) => v.q === plan.text_queries[0]?.q);
+  const from = startIdx >= 0 ? startIdx : 0;
+  const typeVariant = plan.all_variants.find((v) => v.kind === "type");
+  const ordered = [
+    plan.all_variants[from],
+    ...(page > 0 && typeVariant ? [typeVariant] : []),
+    ...plan.all_variants.slice(from + 1),
+    ...(page === 0 ? plan.all_variants.slice(1) : []),
+  ].filter(
+    (v, i, arr): v is NonNullable<(typeof arr)[number]> =>
+      Boolean(v) && arr.findIndex((x) => x?.q === v.q) === i
+  );
+  const tried: { id: string; q: string; count: number }[] = [];
+  let merged: ProductCandidate[] = [];
+  let lens: ProductCandidate[] = [];
+  let kept: VerifiedCandidate[] = [];
+  let stats = { total: 0, kept: 0, rejects: {} as Record<string, number> };
+  let ranked: VerifiedCandidate[] = [];
+  let piecePage = {
+    products: [] as VerifiedCandidate[],
+    exhausted: true,
+    page: session.page,
+    session_id: session.id,
+  };
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const variant = ordered[attempt];
+    if (!variant || tried.some((t) => t.q === variant.q)) {
+      if (!variant) break;
+      continue;
     }
+
+    const fetchLens = attempt === 0 ? lensPromise : Promise.resolve([] as ProductCandidate[]);
+    const [lensBatch, textBatch] = await Promise.all([
+      fetchLens,
+      searchGoogleShopping({ apiKey: input.serpApiKey, query: variant.q, num: 40 }),
+    ]);
+    if (attempt === 0) lens = lensBatch;
+    tried.push({ id: variant.id, q: variant.q, count: textBatch.length });
+    merged = [...lens, ...merged.filter((c) => c.provider !== "lens"), ...textBatch];
+
+    const verified = hardVerify(merged, input.intent, {
+      priceMode: input.priceMode,
+      gender: input.gender,
+      sizes: input.sizes,
+      occasion: input.occasion,
+    });
+    kept = verified.kept;
+    stats = verified.stats;
+
+    if (kept.length === 0) continue;
+
+    ranked = await rerankCandidates({
+      apiKey: page === 0 && attempt === 0 ? input.openAiKey : undefined,
+      intent: input.intent,
+      candidates: kept,
+      referenceImageUrl: input.photoUrl,
+      limit: 24,
+      timeoutMs: page === 0 && attempt === 0 ? 2000 : 0,
+    });
+    piecePage = pickPage(ranked, session, 3);
+    if (piecePage.products.length > 0) break;
+    if (page === 0) break;
   }
+
   const provider_ms = Date.now() - t0;
-  const { kept, stats } = hardVerify(merged, input.intent, {
-    priceMode: input.priceMode,
-    gender: input.gender,
-    sizes: input.sizes,
-  });
   // #region agent log
   dbg("C", "orchestrate.ts:verify", "piece retrieval+verify", {
     label: input.intent.label_tr,
     family: input.intent.family,
     queries: plan.text_queries.map((q) => ({ id: q.id, kind: q.kind, q: q.q.slice(0, 80) })),
     lensCount: lens.length,
-    textCounts: texts.map((t) => t.length),
+    textCounts: tried.map((t) => t.count),
     merged: merged.length,
     kept: stats.kept,
     rejects: stats.rejects,
@@ -168,29 +223,26 @@ export async function orchestratePiece(
     timeoutEnv: process.env.SEARCH_V2_SERP_TIMEOUT_MS || "unset",
   });
   // #endregion
-
-  const t1 = Date.now();
-  const ranked = await rerankCandidates({
-    apiKey: page === 0 ? input.openAiKey : undefined,
-    intent: input.intent,
-    candidates: kept,
-    referenceImageUrl: input.photoUrl,
-    limit: 24,
-    timeoutMs: page === 0 ? 2000 : 0,
+  // #region agent log
+  dbg("H1", "orchestrate.ts:page", "show-more uniqueness+fallback", {
+    page,
+    occasion: input.occasion || null,
+    excludeCount: input.excludeTitles?.length || 0,
+    tried,
+    kept: stats.kept,
+    picked: piecePage.products.map((p) => p.title.slice(0, 80)),
+    pickedStores: piecePage.products.map((p) => p.store || p.source),
+    exhausted: piecePage.exhausted,
+    occasionRejects: stats.rejects.occasion_conflict || 0,
+    trustedPicked: piecePage.products.filter((p) =>
+      /zara|mavi|h&m|koton|bershka|trendyol|boyner|nike|adidas/i.test(
+        `${p.source} ${p.store || ""} ${p.title}`
+      )
+    ).length,
   });
-  const rerank_ms = Date.now() - t1;
+  // #endregion
 
-  const session = ensureSession({
-    sessionId: input.sessionId,
-    intentHash: intentHash(input.intent),
-    pieceKey: input.intent.id,
-  });
-  // On first page session is fresh; for show-more advance cursor via page
-  if (page > 0 && session.page < page) {
-    // Skip already-shown by relying on seen sets from client session id
-  }
-
-  const piecePage = pickPage(ranked, session, 3);
+  const rerank_ms = 0;
 
   return {
     label: input.intent.label_tr,
@@ -219,6 +271,7 @@ export async function orchestrateOutfit(opts: {
   gender: UserGender | null;
   sizes: string[];
   affiliateTag?: string;
+  occasion?: Occasion | null;
 }): Promise<{
   pieces: PieceResult[];
   piece_sessions: Record<string, string>;
@@ -241,6 +294,7 @@ export async function orchestrateOutfit(opts: {
         gender: opts.gender,
         sizes: opts.sizes,
         affiliateTag: opts.affiliateTag,
+        occasion: opts.occasion,
         sharedLensPromise,
       }).catch((err) => {
         console.warn("[search-v2] piece fail", piece.label_tr, err);

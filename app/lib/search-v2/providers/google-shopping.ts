@@ -63,7 +63,7 @@ export async function searchGoogleShopping(opts: {
   query: string;
   num?: number;
 }): Promise<ProductCandidate[]> {
-  const cacheKey = `shop:${opts.query}:${opts.num || 20}`;
+  const cacheKey = `shop:${opts.query}:${opts.num || 40}`;
   const cached = getQueryCache<ProductCandidate[]>(cacheKey);
   if (cached) return cached;
 
@@ -74,7 +74,7 @@ export async function searchGoogleShopping(opts: {
       api_key: opts.apiKey,
       hl: "tr",
       gl: "tr",
-      num: String(opts.num || 20),
+      num: String(opts.num || 40),
     });
     const t0 = Date.now();
     try {

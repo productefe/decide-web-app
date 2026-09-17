@@ -1,5 +1,9 @@
 import type { PriceMode, UserGender } from "@/lib/preferences";
-import { pickDecidePoolBrands } from "@/constants/brandPool";
+import {
+  pickDecidePoolBrands,
+  TRUSTED_SEARCH_STORES,
+  WEAK_SHOPPING_BRANDS,
+} from "@/constants/brandPool";
 import type { PieceFamily, ProductIntent } from "./schema";
 import { familyTitleTokens } from "./normalize-intent";
 
@@ -14,6 +18,7 @@ export interface QueryPlan {
   family: PieceFamily;
   lens: boolean;
   text_queries: QueryVariant[];
+  all_variants: QueryVariant[];
   sizes: string[];
 }
 
@@ -70,7 +75,7 @@ function brandPoolFor(intent: ProductIntent, priceMode: PriceMode, gender: UserG
         price_mode: priceMode,
         gender: gender || intent.gender || undefined,
       },
-      6,
+      8,
       intent.id
     );
   } catch {
@@ -78,9 +83,100 @@ function brandPoolFor(intent: ProductIntent, priceMode: PriceMode, gender: UserG
   }
 }
 
+function trustedStoresFor(intent: ProductIntent, priceMode: PriceMode): string[] {
+  if (priceMode === "luks") return ["Beymen", "Network", "Hugo Boss", "Boyner"];
+  if (intent.layer === "footwear") {
+    return ["Nike", "Adidas", "Puma", "Skechers", "Zara", "Mavi", "Boyner"];
+  }
+  if (intent.family === "watch" || intent.layer === "jewelry") {
+    return ["Mavi", "H&M", "Zara", "Trendyol", "Boyner"];
+  }
+  return TRUSTED_SEARCH_STORES;
+}
+
+function uniqueVariants(variants: QueryVariant[]): QueryVariant[] {
+  const seen = new Set<string>();
+  const out: QueryVariant[] = [];
+  for (const v of variants) {
+    const key = v.q.trim().toLocaleLowerCase("tr-TR");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
+function jerseySafe(intent: ProductIntent, variants: QueryVariant[]): QueryVariant[] {
+  if (intent.family !== "jersey") return variants;
+  return variants.map((v) => ({
+    ...v,
+    q: v.q.replace(/\b(tişört|tisort|t-shirt|tshirt)\b/gi, "forma"),
+  }));
+}
+
 /**
- * Deterministic QueryPlan: Lens + ≤2 text queries for first page.
- * Extra variants reserved for pagination rotation.
+ * Full rotation: color/type first, then trusted stores, then remaining pool brands.
+ * Store names go at the end so Google Shopping TR does not treat them as a failed brand query.
+ */
+export function buildAllQueryVariants(
+  intent: ProductIntent,
+  opts: {
+    priceMode: PriceMode;
+    gender: UserGender | null;
+    sizes: string[];
+  }
+): QueryVariant[] {
+  const g = genderToken(opts.gender, intent.gender);
+  const type = typeToken(intent);
+  const color = intent.body_color && intent.body_color !== "bilinmeyen" ? intent.body_color : "";
+  const motif = motifToken(intent);
+  const luxury = opts.priceMode === "luks" ? "lüks" : "";
+  const weak = new Set(WEAK_SHOPPING_BRANDS.map((b) => b.toLocaleLowerCase("tr-TR")));
+  const stores = trustedStoresFor(intent, opts.priceMode);
+  const brands = brandPoolFor(intent, opts.priceMode, opts.gender).filter(
+    (b) => !weak.has(b.toLocaleLowerCase("tr-TR"))
+  );
+
+  const variants: QueryVariant[] = [];
+  if (motif) {
+    variants.push({
+      id: "motif",
+      kind: "motif",
+      q: [g, color, type, motif].filter(Boolean).join(" "),
+    });
+  }
+  variants.push({
+    id: "type",
+    kind: "type",
+    q: [g, color, type, luxury].filter(Boolean).join(" "),
+  });
+  for (const store of stores) {
+    variants.push({
+      id: `store:${store}`,
+      kind: "brand",
+      q: [g, color, type, store].filter(Boolean).join(" "),
+    });
+  }
+  variants.push({
+    id: "broad",
+    kind: "broad",
+    q: [g, type].filter(Boolean).join(" "),
+  });
+  const used = new Set(stores.map((s) => s.toLocaleLowerCase("tr-TR")));
+  for (const brand of brands) {
+    if (used.has(brand.toLocaleLowerCase("tr-TR"))) continue;
+    variants.push({
+      id: `brand:${brand}`,
+      kind: "brand",
+      q: [g, color, type, brand].filter(Boolean).join(" "),
+    });
+  }
+  return jerseySafe(intent, uniqueVariants(variants));
+}
+
+/**
+ * Deterministic QueryPlan: Lens + 1 text query for the requested page.
+ * Extra variants are used as in-request fallbacks when Shopping returns 0.
  */
 export function buildQueryPlan(
   intent: ProductIntent,
@@ -92,86 +188,17 @@ export function buildQueryPlan(
   }
 ): QueryPlan {
   const page = opts.page || 0;
-  const g = genderToken(opts.gender, intent.gender);
-  const type = typeToken(intent);
-  const color = intent.body_color && intent.body_color !== "bilinmeyen" ? intent.body_color : "";
-  const motif = motifToken(intent);
-  const brands = brandPoolFor(intent, opts.priceMode, opts.gender);
-  const luxury = opts.priceMode === "luks" ? "lüks" : "";
-
-  const variants: QueryVariant[] = [];
-
-  // Never append clothing size letters. Google Shopping TR treats "M"/"L"
-  // as a failed query ("hasn't returned any results"). Gender-first matches
-  // the working V1 queries ("erkek mavi jean").
-  if (brands[0]) {
-    variants.push({
-      id: "brand0",
-      kind: "brand",
-      q: [g, brands[0], color, type].filter(Boolean).join(" "),
-    });
-  }
-  if (brands[1]) {
-    variants.push({
-      id: "brand1",
-      kind: "brand",
-      q: [g, brands[1], color, type].filter(Boolean).join(" "),
-    });
-  }
-
-  if (motif) {
-    variants.push({
-      id: "motif",
-      kind: "motif",
-      q: [g, color, type, motif].filter(Boolean).join(" "),
-    });
-  }
-
-  variants.push({
-    id: "type",
-    kind: "type",
-    q: [g, color, type, luxury].filter(Boolean).join(" "),
-  });
-
-  variants.push({
-    id: "broad",
-    kind: "broad",
-    q: [g, type].filter(Boolean).join(" "),
-  });
-
-  // Jersey never uses generic tee wording
-  const filtered =
-    intent.family === "jersey"
-      ? variants.map((v) => ({
-          ...v,
-          q: v.q.replace(/\b(tişört|tisort|t-shirt|tshirt)\b/gi, "forma"),
-        }))
-      : variants;
-
-  const byId = new Map(filtered.map((variant) => [variant.id, variant]));
-  let text_queries: QueryVariant[];
-  if (page === 0) {
-    // Color + motif first. Never start with a colorless broad query.
-    text_queries = [byId.get("motif") || byId.get("type") || byId.get("broad")].filter(
-      (variant): variant is QueryVariant => Boolean(variant)
-    );
-  } else if (page === 1) {
-    text_queries = [byId.get("type"), byId.get("brand0")]
-      .filter((variant): variant is QueryVariant => Boolean(variant))
-      .filter((variant, i, arr) => arr.findIndex((x) => x.q === variant.q) === i)
-      .slice(0, 1);
-  } else {
-    const rest = [byId.get("brand1"), byId.get("broad")].filter(
-      (variant): variant is QueryVariant => Boolean(variant)
-    );
-    text_queries = rest.slice(0, 1);
-  }
+  const all_variants = buildAllQueryVariants(intent, opts);
+  const idx = Math.min(Math.max(page, 0), Math.max(all_variants.length - 1, 0));
+  const primary = all_variants[idx];
+  const text_queries = primary ? [primary] : [];
 
   return {
     intent_id: intent.id,
     family: intent.family,
     lens: true,
     text_queries,
+    all_variants,
     sizes: opts.sizes,
   };
 }

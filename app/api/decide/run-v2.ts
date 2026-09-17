@@ -74,6 +74,7 @@ export async function runSearchV2(input: RunSearchV2Input) {
     gender: input.gender,
     sizes: input.sizes,
     affiliateTag: input.affiliateTag,
+    occasion: input.requestedOccasion,
   });
 
   const empty_piece_rate =
