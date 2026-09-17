@@ -152,10 +152,10 @@ export function buildQueryPlan(
   const byId = new Map(filtered.map((variant) => [variant.id, variant]));
   let text_queries: QueryVariant[];
   if (page === 0) {
-    // The first page must never depend on a brand existing for the detected
-    // family. A broad type+color query is the primary retrieval channel.
-    text_queries = [byId.get("type"), byId.get("brand0")]
-      .filter((variant): variant is QueryVariant => Boolean(variant));
+    // One reliable type+color query. Brand/Lens variants wait for show-more.
+    text_queries = [byId.get("type") || byId.get("broad")].filter(
+      (variant): variant is QueryVariant => Boolean(variant)
+    );
   } else if (page === 1) {
     text_queries = [byId.get("motif") || byId.get("brand1"), byId.get("broad")]
       .filter((variant): variant is QueryVariant => Boolean(variant));

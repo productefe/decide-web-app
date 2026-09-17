@@ -1,9 +1,25 @@
 import { createHash } from "crypto";
 import type { ProductCandidate } from "../schema";
 import { getQueryCache, setQueryCache } from "../cache";
-import { fetchWithTimeout, withRateLimit } from "./http";
+import { fetchWithTimeout, withSerpSlot } from "./http";
+import { dbg } from "../debug-log";
 
-const SERP_TIMEOUT_MS = Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 6500);
+const SERP_TIMEOUT_MS = Math.max(
+  10000,
+  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 12000) || 12000
+);
+
+function lensUrlUsable(url: string): boolean {
+  if (!url || url.startsWith("data:")) return false;
+  try {
+    const host = new URL(url).hostname;
+    // SerpAPI must fetch this URL itself; private storage hosts time out.
+    if (host.includes("supabase.co") || host.includes("supabase.in")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function candidateId(title: string, link: string, productId: string | null): string {
   return createHash("sha1")
@@ -68,8 +84,12 @@ export async function searchGoogleLens(opts: {
   imageUrl: string;
   num?: number;
 }): Promise<ProductCandidate[]> {
-  if (!opts.imageUrl || opts.imageUrl.startsWith("data:")) {
-    // Lens cannot fetch data URLs; skip silently
+  if (!lensUrlUsable(opts.imageUrl)) {
+    // #region agent log
+    dbg("E", "google-lens.ts:skip", "lens skipped unusable url", {
+      kind: !opts.imageUrl ? "empty" : opts.imageUrl.startsWith("data:") ? "data_url" : "private_host",
+    });
+    // #endregion
     return [];
   }
 
@@ -77,7 +97,7 @@ export async function searchGoogleLens(opts: {
   const cached = getQueryCache<ProductCandidate[]>(cacheKey);
   if (cached) return cached;
 
-  return withRateLimit("serpapi", 8, async () => {
+  return withSerpSlot(async () => {
     const params = new URLSearchParams({
       engine: "google_lens",
       url: opts.imageUrl,
@@ -85,6 +105,7 @@ export async function searchGoogleLens(opts: {
       hl: "tr",
       country: "tr",
     });
+    const t0 = Date.now();
     try {
       const res = await fetchWithTimeout(
         `https://serpapi.com/search.json?${params}`,
@@ -98,6 +119,21 @@ export async function searchGoogleLens(opts: {
         error?: string;
       };
       if (!res.ok || data.error) {
+        // #region agent log
+        dbg("E", "google-lens.ts:error", "lens provider error", {
+          status: res.status,
+          timeoutMs: SERP_TIMEOUT_MS,
+          elapsedMs: Date.now() - t0,
+          error: data.error || null,
+          host: (() => {
+            try {
+              return new URL(opts.imageUrl).host;
+            } catch {
+              return "invalid";
+            }
+          })(),
+        });
+        // #endregion
         console.warn("[search-v2] lens error", data.error || res.status);
         return [];
       }
@@ -115,9 +151,24 @@ export async function searchGoogleLens(opts: {
         out.push(c);
         if (out.length >= (opts.num || 24)) break;
       }
+      // #region agent log
+      dbg("E", "google-lens.ts:ok", "lens response", {
+        timeoutMs: SERP_TIMEOUT_MS,
+        elapsedMs: Date.now() - t0,
+        resultCount: out.length,
+        rawCount: raw.length,
+      });
+      // #endregion
       setQueryCache(cacheKey, out);
       return out;
     } catch (err) {
+      // #region agent log
+      dbg("E", "google-lens.ts:fail", "lens exception", {
+        timeoutMs: SERP_TIMEOUT_MS,
+        elapsedMs: Date.now() - t0,
+        error: err instanceof Error ? err.message.slice(0, 120) : String(err),
+      });
+      // #endregion
       console.warn("[search-v2] lens fail", err instanceof Error ? err.message : err);
       return [];
     }

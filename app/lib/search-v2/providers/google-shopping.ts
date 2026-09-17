@@ -1,9 +1,13 @@
 import { createHash } from "crypto";
 import type { ProductCandidate } from "../schema";
 import { getQueryCache, setQueryCache } from "../cache";
-import { fetchWithTimeout, withRateLimit } from "./http";
+import { fetchWithTimeout, withSerpSlot } from "./http";
+import { dbg } from "../debug-log";
 
-const SERP_TIMEOUT_MS = Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 6500);
+const SERP_TIMEOUT_MS = Math.max(
+  10000,
+  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 12000) || 12000
+);
 
 function candidateId(title: string, link: string, productId: string | null): string {
   return createHash("sha1")
@@ -63,7 +67,7 @@ export async function searchGoogleShopping(opts: {
   const cached = getQueryCache<ProductCandidate[]>(cacheKey);
   if (cached) return cached;
 
-  return withRateLimit("serpapi", 8, async () => {
+  return withSerpSlot(async () => {
     const params = new URLSearchParams({
       engine: "google_shopping",
       q: opts.query,
@@ -72,6 +76,7 @@ export async function searchGoogleShopping(opts: {
       gl: "tr",
       num: String(opts.num || 20),
     });
+    const t0 = Date.now();
     try {
       const res = await fetchWithTimeout(
         `https://serpapi.com/search.json?${params}`,
@@ -82,6 +87,17 @@ export async function searchGoogleShopping(opts: {
         shopping_results?: Record<string, unknown>[];
         error?: string;
       };
+      const n = (data.shopping_results || []).length;
+      // #region agent log
+      dbg("A", "google-shopping.ts:ok", "shopping response", {
+        query: opts.query.slice(0, 80),
+        status: res.status,
+        timeoutMs: SERP_TIMEOUT_MS,
+        elapsedMs: Date.now() - t0,
+        resultCount: n,
+        error: data.error || null,
+      });
+      // #endregion
       if (!res.ok || data.error) {
         console.warn("[search-v2] shopping error", data.error || res.status);
         return [];
@@ -92,6 +108,14 @@ export async function searchGoogleShopping(opts: {
       setQueryCache(cacheKey, out);
       return out;
     } catch (err) {
+      // #region agent log
+      dbg("A", "google-shopping.ts:fail", "shopping exception", {
+        query: opts.query.slice(0, 80),
+        timeoutMs: SERP_TIMEOUT_MS,
+        elapsedMs: Date.now() - t0,
+        error: err instanceof Error ? err.message.slice(0, 120) : String(err),
+      });
+      // #endregion
       console.warn("[search-v2] shopping fail", err instanceof Error ? err.message : err);
       return [];
     }

@@ -14,6 +14,7 @@ import { hardVerify } from "./verify";
 import { rerankCandidates } from "./rank";
 import { ensureSession, pickPage } from "./paginate";
 import { SEARCH_V2_VERSION } from "./flag";
+import { dbg } from "./debug-log";
 
 export interface OrchestratePieceInput {
   intent: ProductIntent;
@@ -142,6 +143,20 @@ export async function orchestratePiece(
     gender: input.gender,
     sizes: input.sizes,
   });
+  // #region agent log
+  dbg("C", "orchestrate.ts:verify", "piece retrieval+verify", {
+    label: input.intent.label_tr,
+    family: input.intent.family,
+    queries: plan.text_queries.map((q) => ({ id: q.id, kind: q.kind, q: q.q.slice(0, 80) })),
+    lensCount: lens.length,
+    textCounts: texts.map((t) => t.length),
+    merged: merged.length,
+    kept: stats.kept,
+    rejects: stats.rejects,
+    providerMs: provider_ms,
+    timeoutEnv: process.env.SEARCH_V2_SERP_TIMEOUT_MS || "unset",
+  });
+  // #endregion
 
   const t1 = Date.now();
   const ranked = await rerankCandidates({

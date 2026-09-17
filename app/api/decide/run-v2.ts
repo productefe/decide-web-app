@@ -100,6 +100,50 @@ export async function runSearchV2(input: RunSearchV2Input) {
   };
   logSearchV2Metrics("/api/decide", metricsPayload);
 
+  // #region agent log
+  fetch("http://127.0.0.1:7612/ingest/dcbec1f8-f218-4dc2-b274-e76ed38526b3", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "ea0199",
+    },
+    body: JSON.stringify({
+      sessionId: "ea0199",
+      runId: "pre-fix",
+      hypothesisId: "D",
+      location: "run-v2.ts:outcome",
+      message: "search v2 outfit outcome",
+      data: {
+        visionMs: vision_ms,
+        visionCached: cached,
+        intentPieces: gendered.pieces.length,
+        resultPieces: pieces.length,
+        emptyPieceRate: empty_piece_rate,
+        families: gendered.pieces.map((p) => p.family),
+        metrics: metrics.map((m, i) => ({
+          label: pieces[i]?.label || gendered.pieces[i]?.label_tr,
+          candidates: m.candidates,
+          kept: m.kept,
+          rejects: m.rejects,
+          providerMs: m.provider_ms,
+        })),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+  console.log(
+    "[search-v2-debug]",
+    "D",
+    "run-v2.ts:outcome",
+    JSON.stringify({
+      visionMs: vision_ms,
+      intentPieces: gendered.pieces.length,
+      resultPieces: pieces.length,
+      emptyPieceRate: empty_piece_rate,
+    })
+  );
+
   if (pieces.length === 0) {
     return {
       ok: false as const,

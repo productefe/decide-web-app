@@ -28,24 +28,20 @@ export async function fetchWithTimeout(
   }
 }
 
-/** Simple per-process rate limiter for provider hosts. */
-const buckets = new Map<string, { tokens: number; at: number }>();
+/** Hard cap on in-flight SerpAPI calls so a 4-piece outfit cannot stampede. */
+const SERP_CONCURRENCY = 3;
+let serpActive = 0;
+const serpWaiters: Array<() => void> = [];
 
-export async function withRateLimit<T>(
-  key: string,
-  rps: number,
-  fn: () => Promise<T>
-): Promise<T> {
-  const now = Date.now();
-  let b = buckets.get(key);
-  if (!b || now - b.at > 1000) {
-    b = { tokens: rps, at: now };
-    buckets.set(key, b);
+export async function withSerpSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (serpActive >= SERP_CONCURRENCY) {
+    await new Promise<void>((resolve) => serpWaiters.push(resolve));
   }
-  if (b.tokens <= 0) {
-    await new Promise((r) => setTimeout(r, 80));
-    return withRateLimit(key, rps, fn);
+  serpActive++;
+  try {
+    return await fn();
+  } finally {
+    serpActive--;
+    serpWaiters.shift()?.();
   }
-  b.tokens -= 1;
-  return fn();
 }
