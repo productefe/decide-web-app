@@ -143,7 +143,7 @@ export async function orchestratePiece(
         searchGoogleLens({ apiKey: input.serpApiKey, imageUrl: input.photoUrl })
       : Promise.resolve([]);
 
-  const maxAttempts = page === 0 ? 2 : 4;
+  const maxAttempts = 2;
   const startIdx = plan.all_variants.findIndex((v) => v.q === plan.text_queries[0]?.q);
   const from = startIdx >= 0 ? startIdx : 0;
   const typeVariant = plan.all_variants.find((v) => v.kind === "type");
@@ -190,7 +190,8 @@ export async function orchestratePiece(
       gender: input.gender,
       sizes: input.sizes,
       occasion: input.occasion,
-      relaxLevel: 2,
+      relaxLevel: 1,
+      brandGate: "known",
     });
     kept = verified.kept;
     stats = verified.stats;
@@ -257,6 +258,16 @@ export async function orchestratePiece(
     qualityRejects: stats.rejects.quality || 0,
     pickedCanon: piecePage.products.map((p) => canonicalTitle(p.title).slice(0, 60)),
     pickedPrices: piecePage.products.map((p) => p.priceValue),
+  });
+  // #endregion
+  // #region agent log
+  dbg("H10", "orchestrate.ts:quality", "brand+occasion gate", {
+    unknownSeller: stats.rejects.unknown_seller || 0,
+    junk: stats.rejects.junk || 0,
+    occasionRejects: stats.rejects.occasion_conflict || 0,
+    kept: stats.kept,
+    attempts: tried.length,
+    providerMs: provider_ms,
   });
   // #endregion
 

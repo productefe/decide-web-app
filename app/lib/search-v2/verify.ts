@@ -1,5 +1,5 @@
 import type { Occasion, PriceMode, UserGender } from "@/lib/preferences";
-import { LUXURY_POOL_BRANDS, textHasPoolBrand } from "@/constants/brandPool";
+import { LUXURY_POOL_BRANDS, textHasPoolBrand, textHasTrustedStore } from "@/constants/brandPool";
 import { QUALITY_CONFIG, failsQualityFilter } from "@/lib/qualityFilter";
 import {
   FAMILY_CONFLICTS,
@@ -7,6 +7,7 @@ import {
   familyTitleTokens,
 } from "./normalize-intent";
 import { subtypeConflict, typeSpec } from "./type-cues";
+import { occasionConflict } from "./occasion-gates";
 import type {
   PieceFamily,
   ProductCandidate,
@@ -65,33 +66,10 @@ function titleHasConflictFamily(title: string, family: PieceFamily, extras: stri
   return false;
 }
 
-const FORMAL_LEAK =
-  /takım elbise|takim elbise|smokin|damatlık|damatlik|oxford|derby|rugan|klasik ayakkabı|klasik ayakkabi|resmi ayakkabı|resmi ayakkabi/;
-const SPORT_AVOID =
-  /takım elbise|takim elbise|smokin|blazer|klasik ayakkabı|klasik ayakkabi|oxford|derby|loafer|topuk|stiletto|gömlek|gomlek/;
-const WORK_AVOID = /sneaker|eşofman|esofman|hoodie|kapüşon|kapuson|terlik|şort|sort|mayo|forma|koşu|kosu/;
-const HOME_AVOID =
-  /takım elbise|takim elbise|smokin|blazer|klasik ayakkabı|klasik ayakkabi|oxford|derby|topuk|stiletto/;
-
-/** Strict for sport/work/home. Casual only blocks formalwear leak. Auto/evening/beach stay loose. */
-export function occasionConflict(
-  title: string,
-  occasion: Occasion | null | undefined,
-  family?: PieceFamily
-): boolean {
-  if (!occasion) return false;
-  const t = lower(title);
-  if (occasion === "spor") return SPORT_AVOID.test(t);
-  if (occasion === "is") return WORK_AVOID.test(t);
-  if (occasion === "ev") return HOME_AVOID.test(t);
-  if (occasion === "gundelik") {
-    if (FORMAL_LEAK.test(t)) return true;
-    if ((family === "jacket" || family === "tee" || family === "sweatshirt") && /takım|takim/.test(t)) {
-      return true;
-    }
-  }
-  return false;
-}
+const JUNK_TITLE =
+  /defolu|2\.\s*el|ikinci el|toptan lot|karışık koli|stok fazlası|eski sezon|imitasyon|muadil|replika/;
+const BOUTIQUE =
+  /butik|boutique|atelier|concept|vakko|beymen|network|twist|ipekyol|machka|sandro|maje/;
 
 function colorConflict(title: string, bodyColor: string): boolean {
   if (!bodyColor || bodyColor === "bilinmeyen") return false;
@@ -123,6 +101,19 @@ function genderConflict(
     return true;
   }
   return false;
+}
+
+function isKnownOrBoutique(title: string, source: string, store: string): boolean {
+  const hay = `${title} ${source} ${store}`;
+  if (textHasPoolBrand(hay)) return true;
+  if (BOUTIQUE.test(lower(hay))) return true;
+  // Marketplaces are not a brand — title still needs a known label.
+  if (/trendyol|hepsiburada|\bn11\b|amazon/.test(lower(source))) return false;
+  return textHasTrustedStore(hay);
+}
+
+function isJunkListing(title: string, source: string): boolean {
+  return JUNK_TITLE.test(lower(`${title} ${source}`));
 }
 
 function isReplica(title: string): boolean {
@@ -163,6 +154,7 @@ export function hardVerify(
     sizes: string[];
     occasion?: Occasion | null;
     relaxLevel?: 0 | 1 | 2;
+    brandGate?: "known" | "off";
   }
 ): { kept: VerifiedCandidate[]; rejected: VerifiedCandidate[]; stats: VerifyStats } {
   const rejects: Record<string, number> = {};
@@ -216,14 +208,20 @@ export function hardVerify(
     else if (genderConflict(c.title, opts.gender, intent.gender)) reason = "gender_conflict";
     else if (occasionConflict(c.title, opts.occasion, intent.family)) reason = "occasion_conflict";
     else if (subtypeConflict(c.title, spec)) reason = "subtype_conflict";
+    else if (isJunkListing(c.title, c.source)) reason = "junk";
     else if (
+      (opts.brandGate ?? "known") === "known" &&
+      !isKnownOrBoutique(c.title, c.source, c.store || "")
+    ) {
+      reason = "unknown_seller";
+    } else if (
       failsQualityFilter({
         title: c.title,
         source: c.source,
         priceValue: c.priceValue ?? undefined,
         priceMode: opts.priceMode,
         poolFamily,
-        relaxLevel: opts.relaxLevel ?? 0,
+        relaxLevel: opts.relaxLevel ?? 1,
       })
     ) {
       reason =

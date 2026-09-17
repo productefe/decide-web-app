@@ -57,14 +57,14 @@ const CONTEXT_STYLE: Record<AnalysisContext, string> = {
 function slotTypeToken(ci: CombineIntent): string {
   const byContext: Record<AnalysisContext, Record<CombineOutfitSlot, string>> = {
     sport: {
-      top: "tişört",
-      bottom: "eşofman alt",
-      shoes: "sneaker",
+      top: "teknik tişört",
+      bottom: "tayt",
+      shoes: "spor ayakkabı",
       outerwear: "hoodie",
       accessory: "spor çanta",
     },
     home: {
-      top: "sweatshirt",
+      top: "oversize tişört",
       bottom: "eşofman alt",
       shoes: "ev terliği",
       outerwear: "hırka",
@@ -80,38 +80,42 @@ function slotTypeToken(ci: CombineIntent): string {
     casual: {
       top: "tişört",
       bottom: "jean",
-      shoes: "günlük ayakkabı",
-      outerwear: "bomber ceket",
+      shoes: "sneaker",
+      outerwear: "hoodie",
       accessory: "kemer",
     },
     evening: {
-      top: "gömlek",
-      bottom: "pantolon",
-      shoes: "ayakkabı",
-      outerwear: "ceket",
-      accessory: "kemer",
+      top: "saten bluz",
+      bottom: "kumaş pantolon",
+      shoes: "klasik ayakkabı",
+      outerwear: "blazer",
+      accessory: "şık çanta",
     },
     beach: {
-      top: "tişört",
+      top: "kaftan",
       bottom: "şort",
       shoes: "sandalet",
-      outerwear: "gömlek",
-      accessory: "güneş gözlüğü",
+      outerwear: "pareo",
+      accessory: "hasır şapka",
     },
   };
-  return byContext[ci.context]?.[ci.slot] || "giyim";
+  let type = byContext[ci.context]?.[ci.slot] || "giyim";
+  if (ci.context === "work" && ci.slot === "bottom" && ci.gender === "women") type = "klasik etek";
+  if (ci.context === "evening" && ci.slot === "shoes" && ci.gender === "women") type = "topuklu ayakkabı";
+  if (ci.context === "sport" && ci.slot === "bottom" && ci.gender === "men") type = "spor şort";
+  return type;
 }
 
 function slotFamilyFor(ci: CombineIntent): PieceFamily {
   if (ci.context === "sport") {
     if (ci.slot === "top") return "tee";
-    if (ci.slot === "bottom") return "pants";
+    if (ci.slot === "bottom") return ci.gender === "men" ? "shorts" : "pants";
     if (ci.slot === "shoes") return "sneakers";
     if (ci.slot === "outerwear") return "hoodie";
     if (ci.slot === "accessory") return "bag";
   }
   if (ci.context === "home") {
-    if (ci.slot === "top") return "sweatshirt";
+    if (ci.slot === "top") return "tee";
     if (ci.slot === "bottom") return "pants";
     if (ci.slot === "shoes") return "shoes";
     if (ci.slot === "outerwear") return "hoodie";
@@ -119,7 +123,7 @@ function slotFamilyFor(ci: CombineIntent): PieceFamily {
   }
   if (ci.context === "work") {
     if (ci.slot === "top") return "shirt";
-    if (ci.slot === "bottom") return "pants";
+    if (ci.slot === "bottom") return ci.gender === "women" ? "skirt" : "pants";
     if (ci.slot === "shoes") return "shoes";
     if (ci.slot === "outerwear") return "blazer";
     return "belt";
@@ -127,15 +131,23 @@ function slotFamilyFor(ci: CombineIntent): PieceFamily {
   if (ci.context === "casual") {
     if (ci.slot === "top") return "tee";
     if (ci.slot === "bottom") return "jeans";
-    if (ci.slot === "shoes") return "shoes";
-    if (ci.slot === "outerwear") return "jacket";
+    if (ci.slot === "shoes") return "sneakers";
+    if (ci.slot === "outerwear") return "hoodie";
     return "belt";
   }
+  if (ci.context === "evening") {
+    if (ci.slot === "top") return "blouse";
+    if (ci.slot === "bottom") return "pants";
+    if (ci.slot === "shoes") return "shoes";
+    if (ci.slot === "outerwear") return "blazer";
+    if (ci.slot === "accessory") return "bag";
+  }
   if (ci.context === "beach") {
-    if (ci.slot === "top") return "tee";
+    if (ci.slot === "top") return "dress";
     if (ci.slot === "bottom") return "shorts";
     if (ci.slot === "shoes") return "shoes";
-    if (ci.slot === "accessory") return "sunglasses";
+    if (ci.slot === "outerwear") return "other";
+    if (ci.slot === "accessory") return "hat";
   }
   return SLOT_FAMILY[ci.slot];
 }
@@ -262,7 +274,8 @@ export async function searchCombineSlot(opts: {
       gender: opts.intent.gender,
       sizes: opts.intent.sizes,
       occasion,
-      relaxLevel: 2,
+      relaxLevel: 1,
+      brandGate: "known",
     });
     const ranked = await rerankCandidates({
       intent: pieceIntent,

@@ -35,13 +35,7 @@ export function imageHashFromDataUrl(dataUrl: string): string {
 }
 
 function needsRepair(intent: OutfitIntent): boolean {
-  if (intent.pieces.length === 0) return true;
-  const layers = new Set(intent.pieces.map((p) => p.layer));
-  // If we only got one mid/inner and no jewelry when notes mention jewelry — soft
-  const hasOuterOrMid = intent.pieces.some((p) =>
-    ["outer", "mid", "inner"].includes(p.layer)
-  );
-  return !hasOuterOrMid;
+  return intent.pieces.length === 0;
 }
 
 function imageDetail(imageDataUrl: string): "low" | "high" {
@@ -210,11 +204,14 @@ export async function extractOutfitIntent(opts: {
 
   const t0 = Date.now();
   const payloadLen = (opts.imageDataUrl.split(",")[1] || opts.imageDataUrl).length;
+  const large = payloadLen > 800_000;
   try {
-  let raw = await callResponsesApi(opts.apiKey, opts.imageDataUrl);
+  let raw = large
+    ? await callChatFallback(opts.apiKey, opts.imageDataUrl)
+    : await callResponsesApi(opts.apiKey, opts.imageDataUrl);
   let intent = parseOutfitIntentJson(raw);
 
-  if (needsRepair(intent)) {
+  if (needsRepair(intent) && !large) {
     try {
       raw = await callResponsesApi(
         opts.apiKey,
@@ -243,6 +240,14 @@ export async function extractOutfitIntent(opts: {
     families: intent.pieces.map((p) => p.family),
     subtypes: intent.pieces.map((p) => p.subtype),
     lowConfidence: intent.pieces.filter((p) => p.low_confidence).length,
+  });
+  // #endregion
+  // #region agent log
+  dbg("H9", "vision.ts:path", "vision path", {
+    large,
+    skippedResponses: large,
+    ms: Date.now() - t0,
+    pieces: intent.pieces.length,
   });
   // #endregion
 
