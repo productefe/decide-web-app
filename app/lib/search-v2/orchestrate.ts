@@ -157,7 +157,7 @@ export async function orchestratePiece(
     return rows;
   });
 
-  const maxAttempts = (input.page || 0) === 0 && (input.outfitPieceCount || 1) >= 4 ? 1 : 2;
+  const maxAttempts = 2;
   const startIdx = plan.all_variants.findIndex((v) => v.q === plan.text_queries[0]?.q);
   const from = startIdx >= 0 ? startIdx : 0;
   const typeVariant = plan.all_variants.find((v) => v.kind === "type");

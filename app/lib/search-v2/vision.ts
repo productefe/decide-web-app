@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { EXTRACTOR_VERSION, PRODUCT_INTENT_JSON_SCHEMA, type OutfitIntent } from "./schema";
+import { EXTRACTOR_VERSION, PRODUCT_INTENT_JSON_SCHEMA, type OutfitIntent, type PieceFamily } from "./schema";
 import { normalizeOutfitIntent, parseOutfitIntentJson } from "./normalize-intent";
 import { fetchWithTimeout } from "./providers/http";
 import { getPersistentVision, setPersistentVision } from "./cache";
@@ -7,18 +7,20 @@ import { dbg } from "./debug-log";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VISION_MODEL = process.env.SEARCH_V2_VISION_MODEL || "gpt-4o";
-const VISION_BUDGET_MS = Number(process.env.SEARCH_V2_VISION_BUDGET_MS || 10000);
-const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 7000);
+const VISION_BUDGET_MS = Number(process.env.SEARCH_V2_VISION_BUDGET_MS || 16000);
+const VISION_TIMEOUT_MS = Number(process.env.SEARCH_V2_VISION_TIMEOUT_MS || 12000);
 const FALLBACK_VISION_MODEL =
   process.env.SEARCH_V2_VISION_FALLBACK_MODEL || "gpt-4o-mini";
 
 const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
-Görseldeki HER görünür giysi ve takı parçasını ayrı listele.
+Görseldeki HER görünür giysi ve takı parçasını ayrı listele. Eksik parça bırakma.
 Kurallar:
 - Kombin / tam boy fotoğrafta asla tek parça dönme. Üst, alt, ayakkabı, dış giyim ve görünür takı ayrı items olsun (hedef ≥3).
+- Sweatshirt / hoodie / kazak / eşofman üst BARİZ ise family=sweatshirt veya hoodie. Tişört sanma, atlama, low_confidence yapma.
+- Üstte hem sweatshirt/hoodie/ceket HEM gömlek/tişört görünüyorsa İKİSİ de ayrı parça.
 - Forma / futbol forması / basketbol forması → family=jersey (asla tee değil). Okul üniforması jersey değil.
-- Sweatshirt ≠ tişört ≠ gömlek ≠ blazer; her biri kendi family
-- Üst katman (blazer/ceket/mont) ile altındaki tişört/gömlek ayrı parçalar
+- Sweatshirt ≠ tişört ≠ gömlek ≠ blazer ≠ hoodie; her biri kendi family
+- Üst katman (blazer/ceket/mont/sweatshirt/hoodie) ile altındaki tişört/gömlek ayrı parçalar
 - Kolye, küpe, bileklik, yüzük, saat görünürse jewelry layer ile ekle
 - Ayakkabı alt tipi subtype'a yaz: terlik / sneaker / bot / sandalet / loafer
 - Görünür özelleştirme distinctive_details'e yaz: fermuar, kapüşon, taş cinsi (inci/altın/gümüş), yaka
@@ -34,13 +36,24 @@ export function imageHashFromDataUrl(dataUrl: string): string {
 }
 
 function needsRepair(intent: OutfitIntent): boolean {
-  return intent.pieces.length < 2;
+  const pieces = intent.pieces;
+  if (pieces.length < 2) return true;
+  const families = new Set(pieces.map((p) => p.family));
+  const has = (...keys: PieceFamily[]) => keys.some((k) => families.has(k));
+  const hasBottom = has("pants", "jeans", "skirt", "shorts");
+  const hasShoes = has("shoes", "sneakers", "boots");
+  const hasKnitOrOuter = has("sweatshirt", "hoodie", "jacket", "blazer", "coat");
+  const hasThinTop = has("tee", "shirt", "blouse");
+  const outfitLike = hasBottom || hasShoes || pieces.length >= 2;
+  if (outfitLike && pieces.length < 3) return true;
+  if (outfitLike && hasThinTop && !hasKnitOrOuter) return true;
+  return false;
 }
 
 function imageDetail(imageDataUrl: string): "low" | "high" {
   const payload = imageDataUrl.includes(",") ? imageDataUrl.split(",")[1] : imageDataUrl;
-  // Large phone photos time out on detail=high; low is enough for garment type.
-  return payload.length > 800_000 ? "low" : "high";
+  // Only the huge phone dumps go low — detail=low was missing sweatshirts on normal shots.
+  return payload.length > 1_800_000 ? "low" : "high";
 }
 
 async function callResponsesApi(
@@ -217,7 +230,7 @@ export async function extractOutfitIntent(opts: {
     intent = null;
   }
 
-  if (!intent && remaining() >= 1500) {
+  if (!intent && remaining() >= 2500) {
     raw = await callChatFallback(opts.apiKey, opts.imageDataUrl, remaining());
     intent = parseOutfitIntentJson(raw);
   }
@@ -226,13 +239,13 @@ export async function extractOutfitIntent(opts: {
     throw new Error("Vision V2 boş yanıt");
   }
 
-  if (needsRepair(intent) && remaining() >= 2000) {
+  if (needsRepair(intent) && remaining() >= 3000) {
     try {
       raw = await callChatFallback(
         opts.apiKey,
         opts.imageDataUrl,
         remaining(),
-        "Tam boy kombinse üst, alt, ayakkabı, dış giyim ve görünür takıyı ayrı parçalar olarak ekle. Hedef en az 3 parça. Okul üniforması ekleme."
+        "Eksik katmanları ekle, doğru parçaları koru. Görünür sweatshirt/hoodie/kazak/ceket ayrı parça olsun; tişörte birleştirme. Tam boy kombinse üst+alt+ayakkabı (hedef ≥3)."
       );
       intent = parseOutfitIntentJson(raw);
     } catch {
@@ -253,6 +266,7 @@ export async function extractOutfitIntent(opts: {
     detail: imageDetail(opts.imageDataUrl),
     ms: Date.now() - t0,
     pieces: intent.pieces.length,
+    stillNeedsRepair: needsRepair(intent),
     families: intent.pieces.map((p) => p.family),
     subtypes: intent.pieces.map((p) => p.subtype),
     lowConfidence: intent.pieces.filter((p) => p.low_confidence).length,

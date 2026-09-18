@@ -6,7 +6,7 @@ import { dbg } from "../debug-log";
 
 const SERP_TIMEOUT_MS = Math.max(
   1000,
-  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 7000) || 7000
+  Number(process.env.SEARCH_V2_SERP_TIMEOUT_MS || 10000) || 10000
 );
 
 function candidateId(title: string, link: string, productId: string | null): string {
