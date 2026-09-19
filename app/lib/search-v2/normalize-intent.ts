@@ -6,6 +6,7 @@ import {
   type ProductIntent,
   type Visibility,
 } from "./schema";
+import { dbg } from "./debug-log";
 
 const FAMILY_ALIASES: Record<string, PieceFamily> = {
   jersey: "jersey",
@@ -255,15 +256,29 @@ function normalizePiece(raw: Record<string, unknown>, index: number): ProductInt
   const labelBlob = `${asText(raw.label_tr)} ${asText(raw.category_tr)} ${asText(raw.subtype)} ${
     Array.isArray(raw.distinctive_details) ? raw.distinctive_details.join(" ") : ""
   } ${asText(raw.material)}`;
+  const declaredFamily = asText(raw.family);
+  const knitOverride = knitFamilyFromText(labelBlob, declaredFamily);
   const family =
     jewelryFamilyFromText(labelBlob) ||
-    knitFamilyFromText(labelBlob, asText(raw.family)) ||
+    knitOverride ||
     canonFamily(
-      asText(raw.family),
+      declaredFamily,
       asText(raw.subtype),
       asText(raw.category_tr),
       asText(raw.label_tr)
     );
+  // #region agent log
+  if (knitOverride || ["tee", "blouse", "shirt", "sweatshirt", "hoodie", "jacket", "blazer", "coat"].includes(family)) {
+    dbg("H-knit", "normalize-intent.ts:family", "layer family resolve", {
+      declared: declaredFamily,
+      knitOverride: knitOverride || null,
+      final: family,
+      label: asText(raw.label_tr).slice(0, 40),
+      layerIn: asText(raw.layer),
+      visIn: asText(raw.visibility),
+    });
+  }
+  // #endregion
   const subtype = asLower(raw.subtype) || family;
   const body = canonColor(asText(raw.body_color));
   if (!body && family === "other") return null;

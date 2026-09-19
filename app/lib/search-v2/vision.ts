@@ -240,7 +240,21 @@ export async function extractOutfitIntent(opts: {
     throw new Error("Vision V2 boş yanıt");
   }
 
-  if (needsRepair(intent) && remaining() >= 3000) {
+  const firstFamilies = intent.pieces.map((p) => p.family);
+  const willRepair = needsRepair(intent) && remaining() >= 3000;
+  // #region agent log
+  dbg("H-layer", "vision.ts:pre-repair", "first extract layer check", {
+    willRepair,
+    needsRepair: needsRepair(intent),
+    remainingMs: remaining(),
+    families: firstFamilies,
+    labels: intent.pieces.map((p) => p.label_tr.slice(0, 40)),
+    layers: intent.pieces.map((p) => p.layer),
+    lowConfidence: intent.pieces.map((p) => p.low_confidence),
+  });
+  // #endregion
+
+  if (willRepair) {
     try {
       raw = await callChatFallback(
         opts.apiKey,
@@ -249,6 +263,13 @@ export async function extractOutfitIntent(opts: {
         "Görünür sweatshirt/kazak/polar/hoodie varsa family=sweatshirt veya hoodie ekle; tişört olarak bırakma. Doğru parçaları koru. Tam boy kombinse üst+alt+ayakkabı."
       );
       intent = parseOutfitIntentJson(raw);
+      // #region agent log
+      dbg("H-repair", "vision.ts:post-repair", "repair extract layer check", {
+        families: intent.pieces.map((p) => p.family),
+        labels: intent.pieces.map((p) => p.label_tr.slice(0, 40)),
+        layers: intent.pieces.map((p) => p.layer),
+      });
+      // #endregion
     } catch {
       /* keep first */
     }

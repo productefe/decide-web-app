@@ -477,14 +477,25 @@ export async function orchestrateOutfit(opts: {
   }
 
   // #region agent log
-  dbg("H12", "orchestrate.ts:outfit", "multi-piece outcome", {
+  dbg("H-drop", "orchestrate.ts:outfit", "multi-piece outcome", {
     intentPieces: opts.intent.pieces.length,
     searched: toSearch.length,
     families: opts.intent.pieces.map((p) => p.family),
+    labels: opts.intent.pieces.map((p) => p.label_tr.slice(0, 40)),
+    layers: opts.intent.pieces.map((p) => p.layer),
     lowConfidence: opts.intent.pieces.filter((p) => p.low_confidence).length,
     returned: pieces.length,
+    returnedFamilies: pieces.map((p) => p.category || p.label),
     emptyDropped: results.filter((r) => r && !r.results.recommended).length,
     failed: results.filter((r) => !r).length,
+    perPiece: results.map((r, i) => ({
+      family: toSearch[i]?.family,
+      label: toSearch[i]?.label_tr?.slice(0, 40),
+      ok: Boolean(r?.results.recommended),
+      kept: r?.metrics.kept || 0,
+      familyMismatch: r?.metrics.rejects.family_mismatch || 0,
+      familyConflict: r?.metrics.rejects.family_conflict || 0,
+    })),
     priceMode: opts.priceMode,
   });
   // #endregion
