@@ -28,6 +28,8 @@ Kurallar:
 - body_color ana gövde rengi; motifler ayrı
 - bounding_box 0-1 normalize; emin değilsen null
 - low_confidence YALNIZ tamamen bulanık veya kadraj dışı kesik parçalar. Kombin içindeki net giysi asla low_confidence=true olmasın.
+- Tişört/bluz ÜSTÜNDE ceket/blazer/sweatshirt/hoodie görünürse onu asla atlama; ayrı parça, family=jacket|blazer|sweatshirt|hoodie
+- occasion_hint zorunlu ve fotoğraftan: spor | gundelik | aksam | ev | is | sahil. Varsayılan gündelik yazma. Blazer/gömlek/loafer → is; eşofman/sneaker antrenman → spor; saten/abiye → aksam; terlik/pijama → ev; mayo/şort plaj → sahil
 - Türkçe label_tr / category_tr kullan
 JSON şemasına birebir uy.`;
 
@@ -255,23 +257,49 @@ export async function extractOutfitIntent(opts: {
   // #endregion
 
   if (willRepair) {
+    const firstIntent = intent;
     try {
       raw = await callChatFallback(
         opts.apiKey,
         opts.imageDataUrl,
         remaining(),
-        "Görünür sweatshirt/kazak/polar/hoodie varsa family=sweatshirt veya hoodie ekle; tişört olarak bırakma. Doğru parçaları koru. Tam boy kombinse üst+alt+ayakkabı."
+        "Görünür ceket/blazer/sweatshirt/hoodie/kazak varsa ayrı parça ekle (family=jacket|blazer|sweatshirt|hoodie). İlk listedeki parçaları silme. Tam boy kombinse üst+alt+ayakkabı."
       );
-      intent = parseOutfitIntentJson(raw);
+      const repaired = parseOutfitIntentJson(raw);
+      const firstFamilies = new Set(firstIntent.pieces.map((p) => p.family));
+      const extras = repaired
+        ? repaired.pieces.filter((p) => !firstFamilies.has(p.family))
+        : [];
+      const layerScore = (pieces: { family: string }[]) =>
+        pieces.filter((p) =>
+          ["sweatshirt", "hoodie", "jacket", "blazer", "coat"].includes(p.family)
+        ).length;
+      if (repaired && repaired.pieces.length > firstIntent.pieces.length) {
+        intent = repaired;
+      } else if (extras.length) {
+        intent = { ...firstIntent, pieces: [...firstIntent.pieces, ...extras] };
+      } else if (
+        repaired &&
+        repaired.pieces.length === firstIntent.pieces.length &&
+        layerScore(repaired.pieces) > layerScore(firstIntent.pieces)
+      ) {
+        intent = repaired;
+      } else {
+        intent = firstIntent;
+      }
       // #region agent log
       dbg("H-repair", "vision.ts:post-repair", "repair extract layer check", {
+        keptFirst: intent === firstIntent,
+        firstCount: firstIntent.pieces.length,
+        repairedCount: repaired?.pieces.length || 0,
+        extras: extras.map((p) => p.family),
         families: intent.pieces.map((p) => p.family),
         labels: intent.pieces.map((p) => p.label_tr.slice(0, 40)),
         layers: intent.pieces.map((p) => p.layer),
       });
       // #endregion
     } catch {
-      /* keep first */
+      intent = firstIntent;
     }
   }
 

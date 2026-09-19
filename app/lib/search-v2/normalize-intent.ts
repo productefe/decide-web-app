@@ -154,19 +154,13 @@ export function canonColor(raw: string): string {
 }
 
 function knitFamilyFromText(text: string, declaredFamily: string): PieceFamily | null {
-  const t = asLower(text);
   const declared = asLower(declaredFamily);
-  if (["jacket", "blazer", "coat"].includes(declared) && !/sweatshirt|kazak|polar|fleece/.test(t)) {
-    return null;
+  if (declared && !["tee", "blouse", "shirt", "other"].includes(declared)) return null;
+  const t = asLower(text);
+  if (/hoodie|kapüşonlu|kapusonlu/.test(t) && !/kazak/.test(t)) return "hoodie";
+  if (/sweatshirt|\bsweat\b|kazak|pullover|jumper|crewneck|sweater|polar|fleece|eşofman üst/.test(t)) {
+    return "sweatshirt";
   }
-  const knitHint =
-    /sweatshirt|\bsweat\b|kazak|pullover|jumper|crewneck|polar|fleece|sweater|eşofman üst|esofman ust/.test(
-      t
-    );
-  const hoodHint = /hoodie|kapüşonlu|kapusonlu/.test(t);
-  if (!knitHint && !hoodHint) return null;
-  if (hoodHint && !/kazak/.test(t)) return "hoodie";
-  if (knitHint) return "sweatshirt";
   return null;
 }
 
@@ -253,9 +247,7 @@ function normalizeBox(raw: unknown): ProductIntent["bounding_box"] {
 }
 
 function normalizePiece(raw: Record<string, unknown>, index: number): ProductIntent | null {
-  const labelBlob = `${asText(raw.label_tr)} ${asText(raw.category_tr)} ${asText(raw.subtype)} ${
-    Array.isArray(raw.distinctive_details) ? raw.distinctive_details.join(" ") : ""
-  } ${asText(raw.material)}`;
+  const labelBlob = `${asText(raw.label_tr)} ${asText(raw.category_tr)} ${asText(raw.subtype)}`;
   const declaredFamily = asText(raw.family);
   const knitOverride = knitFamilyFromText(labelBlob, declaredFamily);
   const family =

@@ -483,11 +483,13 @@ export function parseVisionWearOccasion(visionContent: string): Occasion | null 
     const clean = visionContent.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean) as {
       occasion?: unknown;
+      occasion_hint?: unknown;
       wear_context?: unknown;
       context?: unknown;
       items?: Array<{ style_tags?: unknown }>;
     };
     const direct =
+      parseOccasion(parsed.occasion_hint) ||
       parseOccasion(parsed.occasion) ||
       parseOccasion(parsed.wear_context) ||
       parseOccasion(parsed.context);

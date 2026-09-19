@@ -3,7 +3,7 @@
  * Separate from V1 ProductProfile — maps to V1 response contract at the edge.
  */
 
-export const EXTRACTOR_VERSION = "search-v2-vision-4";
+export const EXTRACTOR_VERSION = "search-v2-vision-5";
 
 export type PieceFamily =
   | "jersey"

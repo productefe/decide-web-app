@@ -11,6 +11,7 @@ import {
   logSearchV2Metrics,
   type SearchV2RequestMetrics,
 } from "@/lib/search-v2";
+import { dbg } from "@/lib/search-v2/debug-log";
 import type { Results } from "@/components/analyze/types";
 
 function collectTitles(results: Results): string[] {
@@ -52,9 +53,19 @@ export async function runSearchV2(input: RunSearchV2Input) {
 
   // Map occasion hint through existing resolver when possible
   const occasion =
-    resolveDecideOccasion(input.requestedOccasion, JSON.stringify({ occasion_hint: intent.occasion_hint })) ||
+    resolveDecideOccasion(
+      input.requestedOccasion,
+      JSON.stringify({ occasion_hint: intent.occasion_hint, occasion: intent.occasion_hint })
+    ) ||
     input.requestedOccasion ||
     "gundelik";
+  // #region agent log
+  dbg("H-occ", "run-v2.ts:occasion", "occasion resolve", {
+    requested: input.requestedOccasion || null,
+    hint: intent.occasion_hint || null,
+    resolved: occasion,
+  });
+  // #endregion
 
   // Apply user gender onto intents
   const gendered = {
@@ -74,7 +85,7 @@ export async function runSearchV2(input: RunSearchV2Input) {
     gender: input.gender,
     sizes: input.sizes,
     affiliateTag: input.affiliateTag,
-    occasion: input.requestedOccasion,
+    occasion,
   });
 
   const empty_piece_rate =
