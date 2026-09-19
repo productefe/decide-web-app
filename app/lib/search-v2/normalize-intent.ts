@@ -15,6 +15,13 @@ const FAMILY_ALIASES: Record<string, PieceFamily> = {
   formasi: "jersey",
   sweatshirt: "sweatshirt",
   sweat: "sweatshirt",
+  kazak: "sweatshirt",
+  pullover: "sweatshirt",
+  jumper: "sweatshirt",
+  crewneck: "sweatshirt",
+  polar: "sweatshirt",
+  fleece: "sweatshirt",
+  sweater: "sweatshirt",
   hoodie: "hoodie",
   kapüşonlu: "hoodie",
   tee: "tee",
@@ -145,6 +152,23 @@ export function canonColor(raw: string): string {
   return asLower(raw);
 }
 
+function knitFamilyFromText(text: string, declaredFamily: string): PieceFamily | null {
+  const t = asLower(text);
+  const declared = asLower(declaredFamily);
+  if (["jacket", "blazer", "coat"].includes(declared) && !/sweatshirt|kazak|polar|fleece/.test(t)) {
+    return null;
+  }
+  const knitHint =
+    /sweatshirt|\bsweat\b|kazak|pullover|jumper|crewneck|polar|fleece|sweater|eşofman üst|esofman ust/.test(
+      t
+    );
+  const hoodHint = /hoodie|kapüşonlu|kapusonlu/.test(t);
+  if (!knitHint && !hoodHint) return null;
+  if (hoodHint && !/kazak/.test(t)) return "hoodie";
+  if (knitHint) return "sweatshirt";
+  return null;
+}
+
 function jewelryFamilyFromText(text: string): PieceFamily | null {
   const t = asLower(text);
   if (/küpe|kupe|earring/.test(t)) return "earrings";
@@ -228,8 +252,12 @@ function normalizeBox(raw: unknown): ProductIntent["bounding_box"] {
 }
 
 function normalizePiece(raw: Record<string, unknown>, index: number): ProductIntent | null {
+  const labelBlob = `${asText(raw.label_tr)} ${asText(raw.category_tr)} ${asText(raw.subtype)} ${
+    Array.isArray(raw.distinctive_details) ? raw.distinctive_details.join(" ") : ""
+  } ${asText(raw.material)}`;
   const family =
-    jewelryFamilyFromText(`${asText(raw.label_tr)} ${asText(raw.category_tr)}`) ||
+    jewelryFamilyFromText(labelBlob) ||
+    knitFamilyFromText(labelBlob, asText(raw.family)) ||
     canonFamily(
       asText(raw.family),
       asText(raw.subtype),
@@ -304,6 +332,13 @@ function normalizePiece(raw: Record<string, unknown>, index: number): ProductInt
   };
 }
 
+function sentenceLabel(s: string): string {
+  const t = s.trim().replace(/\s+/g, " ");
+  if (!t) return t;
+  const lower = t.toLocaleLowerCase("tr-TR");
+  return lower.charAt(0).toLocaleUpperCase("tr-TR") + lower.slice(1);
+}
+
 /** Invariants: keep visible outer/mid/jewelry; drop empty garbage. */
 export function enforceIntentInvariants(pieces: ProductIntent[]): ProductIntent[] {
   const kept = pieces.filter((p) => !p.low_confidence || p.visibility !== "edge");
@@ -350,7 +385,7 @@ export function enforceIntentInvariants(pieces: ProductIntent[]): ProductIntent[
       label = `${p.label_tr} ${n}`;
     }
     used.add(asLower(label));
-    return { ...p, id: `piece-${i}`, label_tr: label };
+    return { ...p, id: `piece-${i}`, label_tr: sentenceLabel(label) };
   });
 }
 
@@ -381,7 +416,7 @@ export function parseOutfitIntentJson(content: string): OutfitIntent {
 export function familyTitleTokens(family: PieceFamily): string[] {
   const map: Record<PieceFamily, string[]> = {
     jersey: ["forma", "jersey", "futbol forması", "maç forması", "halı saha"],
-    sweatshirt: ["sweatshirt", "sweat", "eşofman üst"],
+    sweatshirt: ["sweatshirt", "sweat", "kazak", "polar", "pullover", "eşofman üst"],
     hoodie: ["hoodie", "kapüşonlu", "kapusonlu"],
     tee: ["tişört", "tisort", "t-shirt", "tshirt", "tee"],
     shirt: ["gömlek", "gomlek", "shirt"],

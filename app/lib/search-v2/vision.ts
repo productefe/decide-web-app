@@ -16,7 +16,8 @@ const SYSTEM_PROMPT = `Sen DECIDE Search V2 vision extractor'sın.
 Görseldeki HER görünür giysi ve takı parçasını ayrı listele. Eksik parça bırakma.
 Kurallar:
 - Kombin / tam boy fotoğrafta asla tek parça dönme. Üst, alt, ayakkabı, dış giyim ve görünür takı ayrı items olsun (hedef ≥3).
-- Sweatshirt / hoodie / kazak / eşofman üst BARİZ ise family=sweatshirt veya hoodie. Tişört sanma, atlama, low_confidence yapma.
+- Kalın kumaş, ribana yen, crewneck, polar, kazak veya sweatshirt görüntüsü → family=sweatshirt (asla tee/tişört değil). Kapüşon varsa hoodie.
+- Sweatshirt / hoodie / kazak BARİZ ise atlama, tişört yazma, low_confidence yapma.
 - Üstte hem sweatshirt/hoodie/ceket HEM gömlek/tişört görünüyorsa İKİSİ de ayrı parça.
 - Forma / futbol forması / basketbol forması → family=jersey (asla tee değil). Okul üniforması jersey değil.
 - Sweatshirt ≠ tişört ≠ gömlek ≠ blazer ≠ hoodie; her biri kendi family
@@ -245,7 +246,7 @@ export async function extractOutfitIntent(opts: {
         opts.apiKey,
         opts.imageDataUrl,
         remaining(),
-        "Eksik katmanları ekle, doğru parçaları koru. Görünür sweatshirt/hoodie/kazak/ceket ayrı parça olsun; tişörte birleştirme. Tam boy kombinse üst+alt+ayakkabı (hedef ≥3)."
+        "Görünür sweatshirt/kazak/polar/hoodie varsa family=sweatshirt veya hoodie ekle; tişört olarak bırakma. Doğru parçaları koru. Tam boy kombinse üst+alt+ayakkabı."
       );
       intent = parseOutfitIntentJson(raw);
     } catch {
